@@ -26,6 +26,10 @@ export interface Lieferant {
   kontaktPerson: string;
   email: string;
   telefon: string;
+  strasse?: string;
+  plz?: string;
+  stadt?: string;
+  land?: string;
 }
 
 export interface FilterOption {

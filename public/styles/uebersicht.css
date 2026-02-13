@@ -111,10 +111,22 @@ body::before {
   border: 1px solid rgba(255, 107, 53, 0.25);
 }
 
+.btn--danger {
+  background: #f05d5d;
+  color: #fff;
+  box-shadow: 0 10px 25px rgba(240, 93, 93, 0.25);
+}
+
 .btn--link {
   background: transparent;
   color: var(--accent-dark);
   padding: 0;
+}
+
+.btn--small {
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
 }
 
 .btn:hover {
@@ -193,6 +205,15 @@ body::before {
   gap: 8px;
 }
 
+.order-items {
+  display: none;
+  gap: 8px;
+}
+
+.order-group.is-open .order-items {
+  display: grid;
+}
+
 .list__row {
   display: flex;
   align-items: center;
@@ -200,6 +221,14 @@ body::before {
   padding: 12px 14px;
   border-radius: 14px;
   background: #f7f4f0;
+}
+
+.list__row--clickable {
+  cursor: pointer;
+}
+
+.list__row--clickable:hover {
+  background: #f0ebe5;
 }
 
 .list__row--sub {
@@ -229,6 +258,23 @@ body::before {
 .list__meta {
   color: var(--ink-soft);
   font-size: 0.85rem;
+}
+
+.list__link {
+  color: var(--accent-dark);
+  font-size: 0.85rem;
+  text-decoration: none;
+  display: block;
+  align-items: center;
+  gap: 6px;
+}
+
+.list__link + .list__link {
+  margin-top: 4px;
+}
+
+.list__link:hover {
+  text-decoration: underline;
 }
 
 .pill {
@@ -401,6 +447,44 @@ body::before {
 .form__message {
   font-weight: 600;
   color: #0b6d5c;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.modal.is-open {
+  display: flex;
+}
+
+.modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 21, 21, 0.4);
+}
+
+.modal__content {
+  position: relative;
+  z-index: 1;
+  width: min(720px, calc(100% - 32px));
+  max-height: min(80vh, 680px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 24px 60px rgba(17, 21, 21, 0.25);
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
 @keyframes float-in {

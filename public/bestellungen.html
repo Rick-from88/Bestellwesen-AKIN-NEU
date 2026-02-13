@@ -34,6 +34,49 @@
       </section>
     </div>
 
+    <div class="modal" id="bestellungModal" aria-hidden="true">
+      <div class="modal__backdrop"></div>
+      <div class="modal__content" role="dialog" aria-modal="true">
+        <div class="modal__header">
+          <h2 id="modalTitle">Bestellung bearbeiten</h2>
+          <button class="btn btn--link" type="button" id="modalClose">
+            Schliessen
+          </button>
+        </div>
+        <form id="bestellungEditForm" class="form">
+          <div class="form__row">
+            <label for="editStatus">Status</label>
+            <select id="editStatus" required>
+              <option value="offen">offen</option>
+              <option value="geliefert">geliefert</option>
+              <option value="storniert">storniert</option>
+            </select>
+          </div>
+          <div class="form__row">
+            <label for="editDatum">Bestelldatum</label>
+            <input id="editDatum" type="date" required />
+          </div>
+          <div class="form__row">
+            <label>Positionen</label>
+            <div id="editPositionen" class="position-list"></div>
+            <button class="btn btn--ghost" type="button" id="editAddPosition">
+              Position hinzufuegen
+            </button>
+          </div>
+          <div class="form__actions">
+            <button class="btn btn--primary" type="submit">Speichern</button>
+            <button class="btn btn--danger" type="button" id="editDelete">
+              Loeschen
+            </button>
+            <button class="btn btn--ghost" type="button" id="editCancel">
+              Abbrechen
+            </button>
+          </div>
+          <div id="editMessage" class="form__message" role="status"></div>
+        </form>
+      </div>
+    </div>
+
     <nav class="navbar">
       <a class="navbar__item" href="/uebersicht">Dashboard</a>
       <a class="navbar__item is-active" href="/bestellungen">Bestellungen</a>
@@ -48,6 +91,22 @@
       const bestellungenRefresh = document.getElementById(
         "bestellungenRefresh",
       );
+      const bestellungModal = document.getElementById("bestellungModal");
+      const modalClose = document.getElementById("modalClose");
+      const editForm = document.getElementById("bestellungEditForm");
+      const editStatus = document.getElementById("editStatus");
+      const editDatum = document.getElementById("editDatum");
+      const editPositionen = document.getElementById("editPositionen");
+      const editAddPosition = document.getElementById("editAddPosition");
+      const editCancel = document.getElementById("editCancel");
+      const editDelete = document.getElementById("editDelete");
+      const editMessage = document.getElementById("editMessage");
+      const modalTitle = document.getElementById("modalTitle");
+
+      let bestellungenData = [];
+      let artikelData = [];
+      let lieferantenData = [];
+      let currentBestellungId = null;
 
       const statusClass = (status) => {
         if (status === "geliefert") {
@@ -59,12 +118,128 @@
         return "pill pill--amber";
       };
 
+      const formatCurrency = (value) => {
+        const amount = Number(value);
+        if (!Number.isFinite(amount)) {
+          return "-";
+        }
+        return new Intl.NumberFormat("de-DE", {
+          style: "currency",
+          currency: "EUR",
+        }).format(amount);
+      };
+
       const formatDate = (value) => {
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) {
           return "-";
         }
         return date.toLocaleDateString("de-DE");
+      };
+
+      const toInputDate = (value) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return "";
+        }
+        return date.toISOString().slice(0, 10);
+      };
+
+      const buildSelect = (items, placeholder, selectedId) => {
+        const select = document.createElement("select");
+        select.required = true;
+        select.setAttribute("aria-label", placeholder);
+
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = placeholder;
+        select.appendChild(defaultOption);
+
+        items.forEach((item) => {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = item.name || `#${item.id}`;
+          if (selectedId && Number(selectedId) === Number(item.id)) {
+            option.selected = true;
+          }
+          select.appendChild(option);
+        });
+
+        return select;
+      };
+
+      const createPositionRow = (position = {}) => {
+        const row = document.createElement("div");
+        row.className = "position-row";
+
+        const lieferantSelect = buildSelect(
+          lieferantenData,
+          "Lieferant",
+          position.lieferantId,
+        );
+        const artikelSelect = buildSelect(
+          artikelData,
+          "Artikel",
+          position.artikelId,
+        );
+
+        const mengeInput = document.createElement("input");
+        mengeInput.type = "number";
+        mengeInput.min = "1";
+        mengeInput.step = "1";
+        mengeInput.required = true;
+        mengeInput.placeholder = "Menge";
+        mengeInput.setAttribute("aria-label", "Menge");
+        if (position.menge) {
+          mengeInput.value = position.menge;
+        }
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn btn--link";
+        removeBtn.textContent = "Entfernen";
+        removeBtn.addEventListener("click", () => {
+          row.remove();
+          if (!editPositionen.children.length) {
+            editPositionen.appendChild(createPositionRow());
+          }
+        });
+
+        row.appendChild(lieferantSelect);
+        row.appendChild(artikelSelect);
+        row.appendChild(mengeInput);
+        row.appendChild(removeBtn);
+        return row;
+      };
+
+      const openModal = (bestellung) => {
+        currentBestellungId = bestellung.id;
+        modalTitle.textContent = `Bestellung #${bestellung.id} bearbeiten`;
+        editStatus.value = bestellung.status || "offen";
+        editDatum.value = toInputDate(bestellung.bestellDatum);
+        editPositionen.innerHTML = "";
+
+        const positionen = Array.isArray(bestellung.positionen)
+          ? bestellung.positionen
+          : [];
+
+        if (!positionen.length) {
+          editPositionen.appendChild(createPositionRow());
+        } else {
+          positionen.forEach((position) => {
+            editPositionen.appendChild(createPositionRow(position));
+          });
+        }
+
+        editMessage.textContent = "";
+        bestellungModal.classList.add("is-open");
+        bestellungModal.setAttribute("aria-hidden", "false");
+      };
+
+      const closeModal = () => {
+        bestellungModal.classList.remove("is-open");
+        bestellungModal.setAttribute("aria-hidden", "true");
+        currentBestellungId = null;
       };
 
       const renderBestellungen = (bestellungen, artikelMap, lieferantMap) => {
@@ -84,7 +259,7 @@
           group.className = "order-group";
 
           const headerRow = document.createElement("div");
-          headerRow.className = "list__row";
+          headerRow.className = "list__row list__row--clickable";
 
           const leftDiv = document.createElement("div");
           const title = document.createElement("div");
@@ -94,28 +269,56 @@
           const meta = document.createElement("div");
           meta.className = "list__meta";
           const datum = formatDate(bestellung.bestellDatum);
-          meta.textContent = `Datum: ${datum}`;
+          const positionen = Array.isArray(bestellung.positionen)
+            ? bestellung.positionen
+            : [];
+          const lieferantName = positionen.length
+            ? lieferantMap[positionen[0].lieferantId] ||
+              `Lieferant #${positionen[0].lieferantId}`
+            : "Unbekannt";
+
+          const artikelNamen = positionen.map((position) => {
+            const artikelInfo = artikelMap[position.artikelId];
+            return artikelInfo?.name || `Artikel #${position.artikelId}`;
+          });
+          const artikelSummary = artikelNamen.length
+            ? artikelNamen.slice(0, 3).join(", ") +
+              (artikelNamen.length > 3
+                ? ` +${artikelNamen.length - 3}`
+                : "")
+            : "-";
+
+          meta.textContent =
+            `Datum: ${datum} | Lieferant: ${lieferantName} | Artikel: ${artikelSummary}`;
 
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
 
-          const status = document.createElement("span");
-          status.className = statusClass(bestellung.status);
-          status.textContent = bestellung.status;
-
           headerRow.appendChild(leftDiv);
-          headerRow.appendChild(status);
           group.appendChild(headerRow);
 
-          const positionen = Array.isArray(bestellung.positionen)
-            ? bestellung.positionen
-            : [];
+          let clickTimeout = null;
+          headerRow.addEventListener("click", () => {
+            clickTimeout = setTimeout(() => {
+              group.classList.toggle("is-open");
+            }, 200);
+          });
+
+          headerRow.addEventListener("dblclick", () => {
+            if (clickTimeout) {
+              clearTimeout(clickTimeout);
+            }
+            openModal(bestellung);
+          });
+
+          const itemsContainer = document.createElement("div");
+          itemsContainer.className = "order-items";
 
           if (!positionen.length) {
             const emptyRow = document.createElement("div");
             emptyRow.className = "list__row list__row--sub";
             emptyRow.textContent = "Keine Positionen vorhanden.";
-            group.appendChild(emptyRow);
+            itemsContainer.appendChild(emptyRow);
           } else {
             positionen.forEach((position) => {
               const row = document.createElement("div");
@@ -124,23 +327,25 @@
               const posLeft = document.createElement("div");
               const posTitle = document.createElement("div");
               posTitle.className = "list__title";
-              const artikelName = artikelMap[position.artikelId] ||
+              const artikelInfo = artikelMap[position.artikelId];
+              const artikelName = artikelInfo?.name ||
                 `Artikel #${position.artikelId}`;
               posTitle.textContent = artikelName;
 
               const posMeta = document.createElement("div");
               posMeta.className = "list__meta";
-              const lieferantName = lieferantMap[position.lieferantId] ||
-                `Lieferant #${position.lieferantId}`;
+              const preis = artikelInfo?.preis;
               posMeta.textContent =
-                `${lieferantName} | Menge: ${position.menge}`;
+                `Artikelnummer: ${position.artikelId} | Preis: ${formatCurrency(preis)} | Menge: ${position.menge}`;
 
               posLeft.appendChild(posTitle);
               posLeft.appendChild(posMeta);
               row.appendChild(posLeft);
-              group.appendChild(row);
+              itemsContainer.appendChild(row);
             });
           }
+
+          group.appendChild(itemsContainer);
 
           bestellungenList.appendChild(group);
         });
@@ -154,26 +359,120 @@
             fetch("/api/lieferanten"),
           ]);
 
-          const bestellungen = await bestellungenRes.json();
-          const artikel = await artikelRes.json();
-          const lieferanten = await lieferantenRes.json();
+          bestellungenData = await bestellungenRes.json();
+          const artikelResponse = await artikelRes.json();
+          const lieferantenResponse = await lieferantenRes.json();
+          
+          artikelData = Array.isArray(artikelResponse) ? artikelResponse : (artikelResponse.value || []);
+          lieferantenData = Array.isArray(lieferantenResponse) ? lieferantenResponse : (lieferantenResponse.value || []);
 
-          const artikelMap = artikel.reduce((acc, item) => {
+          const artikelMap = artikelData.reduce((acc, item) => {
+            acc[item.id] = { name: item.name, preis: item.preis };
+            return acc;
+          }, {});
+
+          const lieferantMap = lieferantenData.reduce((acc, item) => {
             acc[item.id] = item.name;
             return acc;
           }, {});
 
-          const lieferantMap = lieferanten.reduce((acc, item) => {
-            acc[item.id] = item.name;
-            return acc;
-          }, {});
-
-          renderBestellungen(bestellungen, artikelMap, lieferantMap);
+          renderBestellungen(bestellungenData, artikelMap, lieferantMap);
         } catch (error) {
           console.error("Fehler beim Laden der Bestellungen:", error);
           bestellungenCount.textContent = "Fehler beim Laden";
         }
       };
+
+      editAddPosition.addEventListener("click", () => {
+        editPositionen.appendChild(createPositionRow());
+      });
+
+      editCancel.addEventListener("click", closeModal);
+      modalClose.addEventListener("click", closeModal);
+      bestellungModal.querySelector(".modal__backdrop").addEventListener(
+        "click",
+        closeModal,
+      );
+
+      editForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        editMessage.textContent = "";
+
+        const positionen = Array.from(editPositionen.children).map((row) => {
+          const selects = row.querySelectorAll("select");
+          const inputs = row.querySelectorAll("input");
+          return {
+            lieferantId: Number(selects[0].value),
+            artikelId: Number(selects[1].value),
+            menge: Number(inputs[0].value),
+          };
+        });
+
+        if (!positionen.length || positionen.some((pos) => !pos.lieferantId || !pos.artikelId || !pos.menge)) {
+          editMessage.textContent = "Bitte alle Positionen ausfuellen.";
+          return;
+        }
+
+        const payload = {
+          status: editStatus.value,
+          bestellDatum: editDatum.value,
+          positionen,
+        };
+
+        try {
+          const response = await fetch(`/api/bestellungen/${currentBestellungId}`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            },
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            editMessage.textContent = `Fehler: ${errorText}`;
+            return;
+          }
+
+          closeModal();
+          loadBestellungen();
+        } catch (error) {
+          console.error("Fehler beim Speichern:", error);
+          editMessage.textContent = "Speichern fehlgeschlagen.";
+        }
+      });
+
+      editDelete.addEventListener("click", async () => {
+        if (!currentBestellungId) {
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Soll diese Bestellung wirklich geloescht werden?",
+        );
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `/api/bestellungen/${currentBestellungId}`,
+            { method: "DELETE" },
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            editMessage.textContent = `Fehler: ${errorText}`;
+            return;
+          }
+
+          closeModal();
+          loadBestellungen();
+        } catch (error) {
+          console.error("Fehler beim Loeschen:", error);
+          editMessage.textContent = "Loeschen fehlgeschlagen.";
+        }
+      });
 
       bestellungenRefresh.addEventListener("click", loadBestellungen);
       loadBestellungen();

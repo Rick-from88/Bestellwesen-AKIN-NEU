@@ -34,6 +34,62 @@
       </section>
     </div>
 
+    <div class="modal" id="lieferantModal" aria-hidden="true">
+      <div class="modal__backdrop"></div>
+      <div class="modal__content" role="dialog" aria-modal="true">
+        <div class="modal__header">
+          <h2 id="lieferantModalTitle">Lieferant bearbeiten</h2>
+          <button class="btn btn--link" type="button" id="lieferantModalClose">
+            Schliessen
+          </button>
+        </div>
+        <form id="lieferantForm" class="form">
+          <div class="form__row">
+            <label for="lieferantNameInput">Name</label>
+            <input id="lieferantNameInput" name="name" type="text" required />
+          </div>
+          <div class="form__row">
+            <label for="lieferantKontaktInput">Kontaktperson</label>
+            <input id="lieferantKontaktInput" name="kontaktPerson" type="text" />
+          </div>
+          <div class="form__row">
+            <label for="lieferantEmailInput">E-Mail</label>
+            <input id="lieferantEmailInput" name="email" type="email" />
+          </div>
+          <div class="form__row">
+            <label for="lieferantTelefonInput">Telefon</label>
+            <input id="lieferantTelefonInput" name="telefon" type="text" />
+          </div>
+          <div class="form__row">
+            <label for="lieferantStrasseInput">Strasse</label>
+            <input id="lieferantStrasseInput" name="strasse" type="text" />
+          </div>
+          <div class="form__row">
+            <label for="lieferantPlzInput">PLZ</label>
+            <input id="lieferantPlzInput" name="plz" type="text" />
+          </div>
+          <div class="form__row">
+            <label for="lieferantStadtInput">Stadt</label>
+            <input id="lieferantStadtInput" name="stadt" type="text" />
+          </div>
+          <div class="form__row">
+            <label for="lieferantLandInput">Land</label>
+            <input id="lieferantLandInput" name="land" type="text" />
+          </div>
+          <div class="form__actions">
+            <button class="btn btn--primary" type="submit">Speichern</button>
+            <button class="btn btn--ghost" type="button" id="lieferantCancel">
+              Abbrechen
+            </button>
+            <button class="btn btn--danger" type="button" id="lieferantDelete">
+              Loeschen
+            </button>
+          </div>
+          <div id="lieferantMessage" class="form__message" role="status"></div>
+        </form>
+      </div>
+    </div>
+
     <nav class="navbar">
       <a class="navbar__item" href="/uebersicht">Dashboard</a>
       <a class="navbar__item" href="/bestellungen">Bestellungen</a>
@@ -47,6 +103,43 @@
       const lieferantenCount = document.getElementById("lieferantenCount");
       const lieferantenRefresh = document.getElementById("lieferantenRefresh");
       const addLieferantBtn = document.getElementById("addLieferantBtn");
+      const lieferantModal = document.getElementById("lieferantModal");
+      const lieferantModalClose = document.getElementById("lieferantModalClose");
+      const lieferantForm = document.getElementById("lieferantForm");
+      const lieferantMessage = document.getElementById("lieferantMessage");
+      const lieferantNameInput = document.getElementById("lieferantNameInput");
+      const lieferantKontaktInput = document.getElementById("lieferantKontaktInput");
+      const lieferantEmailInput = document.getElementById("lieferantEmailInput");
+      const lieferantTelefonInput = document.getElementById("lieferantTelefonInput");
+      const lieferantStrasseInput = document.getElementById("lieferantStrasseInput");
+      const lieferantPlzInput = document.getElementById("lieferantPlzInput");
+      const lieferantStadtInput = document.getElementById("lieferantStadtInput");
+      const lieferantLandInput = document.getElementById("lieferantLandInput");
+      const lieferantCancel = document.getElementById("lieferantCancel");
+      const lieferantDelete = document.getElementById("lieferantDelete");
+
+      let currentLieferantId = null;
+
+      const openModal = (lieferant) => {
+        currentLieferantId = lieferant.id;
+        lieferantMessage.textContent = "";
+        lieferantNameInput.value = lieferant.name || "";
+        lieferantKontaktInput.value = lieferant.kontaktPerson || "";
+        lieferantEmailInput.value = lieferant.email || "";
+        lieferantTelefonInput.value = lieferant.telefon || "";
+        lieferantStrasseInput.value = lieferant.strasse || "";
+        lieferantPlzInput.value = lieferant.plz || "";
+        lieferantStadtInput.value = lieferant.stadt || "";
+        lieferantLandInput.value = lieferant.land || "";
+        lieferantModal.classList.add("is-open");
+        lieferantModal.setAttribute("aria-hidden", "false");
+      };
+
+      const closeModal = () => {
+        lieferantModal.classList.remove("is-open");
+        lieferantModal.setAttribute("aria-hidden", "true");
+        currentLieferantId = null;
+      };
 
       const renderLieferanten = (lieferanten) => {
         lieferantenList.innerHTML = "";
@@ -61,9 +154,8 @@
         }
 
         lieferanten.forEach((lieferant) => {
-          const row = document.createElement("a");
+          const row = document.createElement("div");
           row.className = "list__row";
-          row.href = `/lieferanten/${lieferant.id}`;
 
           const leftDiv = document.createElement("div");
           const title = document.createElement("div");
@@ -72,26 +164,86 @@
 
           const meta = document.createElement("div");
           meta.className = "list__meta";
-          const parts = [];
-          if (lieferant.kontaktPerson) {
-            parts.push(lieferant.kontaktPerson);
-          }
-          if (lieferant.email) {
-            parts.push(lieferant.email);
-          }
-          meta.textContent = parts.length ? parts.join(" • ") : "Keine Kontaktdaten";
+          meta.textContent = lieferant.kontaktPerson || "Keine Kontaktdaten";
 
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
 
+          if (lieferant.email) {
+            const emailLink = document.createElement("a");
+            emailLink.className = "list__link";
+            emailLink.href = `mailto:${lieferant.email}`;
+            emailLink.textContent = lieferant.email;
+            leftDiv.appendChild(emailLink);
+          }
+
+          if (lieferant.telefon) {
+            const telLink = document.createElement("a");
+            telLink.className = "list__link";
+            telLink.href = `tel:${lieferant.telefon.replace(/\s+/g, "")}`;
+            telLink.textContent = lieferant.telefon;
+            leftDiv.appendChild(telLink);
+          }
+
           const rightDiv = document.createElement("div");
           rightDiv.style.textAlign = "right";
-          if (lieferant.telefon) {
-            const telefon = document.createElement("div");
-            telefon.className = "list__meta";
-            telefon.textContent = lieferant.telefon;
-            rightDiv.appendChild(telefon);
-          }
+
+          const actions = document.createElement("div");
+          actions.style.display = "flex";
+          actions.style.gap = "8px";
+          actions.style.marginTop = "8px";
+          actions.style.justifyContent = "flex-end";
+
+          const detailsBtn = document.createElement("a");
+          detailsBtn.className = "btn btn--ghost btn--small";
+          detailsBtn.href = `/lieferanten/${lieferant.id}`;
+          detailsBtn.textContent = "Ansehen";
+
+          const editBtn = document.createElement("button");
+          editBtn.type = "button";
+          editBtn.className = "btn btn--primary btn--small";
+          editBtn.textContent = "Bearbeiten";
+          editBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            openModal(lieferant);
+          });
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.type = "button";
+          deleteBtn.className = "btn btn--danger btn--small";
+          deleteBtn.textContent = "Loeschen";
+          deleteBtn.addEventListener("click", async (event) => {
+            event.preventDefault();
+            const confirmed = window.confirm(
+              `Lieferant "${lieferant.name}" wirklich loeschen?`,
+            );
+            if (!confirmed) {
+              return;
+            }
+
+            try {
+              const response = await fetch(
+                `/api/lieferanten/${lieferant.id}`,
+                { method: "DELETE" },
+              );
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                alert(`Fehler: ${errorText}`);
+                return;
+              }
+
+              loadLieferanten();
+            } catch (error) {
+              console.error("Fehler beim Loeschen:", error);
+              alert("Loeschen fehlgeschlagen.");
+            }
+          });
+
+          actions.appendChild(detailsBtn);
+          actions.appendChild(editBtn);
+          actions.appendChild(deleteBtn);
+          rightDiv.appendChild(actions);
 
           row.appendChild(leftDiv);
           row.appendChild(rightDiv);
@@ -102,13 +254,104 @@
       const loadLieferanten = async () => {
         try {
           const response = await fetch("/api/lieferanten");
-          const lieferanten = await response.json();
+          const lieferantenResponse = await response.json();
+          const lieferanten = Array.isArray(lieferantenResponse)
+            ? lieferantenResponse
+            : (lieferantenResponse.value || []);
           renderLieferanten(lieferanten);
         } catch (error) {
           console.error("Fehler beim Laden der Lieferanten:", error);
           lieferantenCount.textContent = "Fehler beim Laden";
         }
       };
+
+      lieferantForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        lieferantMessage.textContent = "";
+
+        if (!currentLieferantId) {
+          lieferantMessage.textContent = "Kein Lieferant ausgewaehlt.";
+          return;
+        }
+
+        const payload = {
+          name: lieferantNameInput.value.trim(),
+          kontaktPerson: lieferantKontaktInput.value.trim(),
+          email: lieferantEmailInput.value.trim(),
+          telefon: lieferantTelefonInput.value.trim(),
+          strasse: lieferantStrasseInput.value.trim(),
+          plz: lieferantPlzInput.value.trim(),
+          stadt: lieferantStadtInput.value.trim(),
+          land: lieferantLandInput.value.trim(),
+        };
+
+        if (!payload.name) {
+          lieferantMessage.textContent = "Name ist erforderlich.";
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `/api/lieferanten/${currentLieferantId}`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            },
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            lieferantMessage.textContent = `Fehler: ${errorText}`;
+            return;
+          }
+
+          closeModal();
+          loadLieferanten();
+        } catch (error) {
+          console.error("Fehler beim Speichern:", error);
+          lieferantMessage.textContent = "Speichern fehlgeschlagen.";
+        }
+      });
+
+      lieferantDelete.addEventListener("click", async () => {
+        if (!currentLieferantId) {
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Soll dieser Lieferant wirklich geloescht werden?",
+        );
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `/api/lieferanten/${currentLieferantId}`,
+            { method: "DELETE" },
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            lieferantMessage.textContent = `Fehler: ${errorText}`;
+            return;
+          }
+
+          closeModal();
+          loadLieferanten();
+        } catch (error) {
+          console.error("Fehler beim Loeschen:", error);
+          lieferantMessage.textContent = "Loeschen fehlgeschlagen.";
+        }
+      });
+
+      lieferantCancel.addEventListener("click", closeModal);
+      lieferantModalClose.addEventListener("click", closeModal);
+      lieferantModal.querySelector(".modal__backdrop").addEventListener(
+        "click",
+        closeModal,
+      );
 
       lieferantenRefresh.addEventListener("click", loadLieferanten);
       addLieferantBtn.addEventListener("click", () => {

@@ -43,29 +43,7 @@
             <h2>Letzte Bestellungen</h2>
             <a class="btn btn--link" href="/bestellungen">Alle anzeigen</a>
           </div>
-          <div class="list">
-            <div class="list__row">
-              <div>
-                <div class="list__title">Bueromaterial Q1</div>
-                <div class="list__meta">#BW-2026-0142</div>
-              </div>
-              <span class="pill pill--amber">in Bearbeitung</span>
-            </div>
-            <div class="list__row">
-              <div>
-                <div class="list__title">Serverersatzteile</div>
-                <div class="list__meta">#BW-2026-0139</div>
-              </div>
-              <span class="pill pill--mint">freigegeben</span>
-            </div>
-            <div class="list__row">
-              <div>
-                <div class="list__title">Kantinenbedarf</div>
-                <div class="list__meta">#BW-2026-0136</div>
-              </div>
-              <span class="pill pill--rose">verzoegert</span>
-            </div>
-          </div>
+          <div class="list" id="letzteBestellungenList"></div>
         </div>
 
         <div class="panel">
@@ -153,6 +131,75 @@
       const lowStockCount = document.getElementById("lowStockCount");
       const lowStockList = document.getElementById("lowStockList");
       const lowStockRefresh = document.getElementById("lowStockRefresh");
+      const letzteBestellungenList = document.getElementById(
+        "letzteBestellungenList",
+      );
+
+      const statusClass = (status) => {
+        if (status === "geliefert") {
+          return "pill pill--mint";
+        }
+        if (status === "storniert") {
+          return "pill pill--rose";
+        }
+        return "pill pill--amber";
+      };
+
+      const formatDate = (value) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return "-";
+        }
+        return date.toLocaleDateString("de-DE");
+      };
+
+      const renderLetzteBestellungen = (bestellungen, artikelMap, lieferantMap) => {
+        letzteBestellungenList.innerHTML = "";
+        if (!bestellungen.length) {
+          const emptyRow = document.createElement("div");
+          emptyRow.className = "list__row";
+          emptyRow.textContent = "Keine Bestellungen vorhanden.";
+          letzteBestellungenList.appendChild(emptyRow);
+          return;
+        }
+
+        bestellungen.slice(0, 3).forEach((bestellung) => {
+          const row = document.createElement("div");
+          row.className = "list__row";
+
+          const leftDiv = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "list__title";
+          const erstePosition = Array.isArray(bestellung.positionen)
+            ? bestellung.positionen[0]
+            : null;
+          const artikelName = erstePosition
+            ? artikelMap[erstePosition.artikelId] || `Artikel #${erstePosition.artikelId}`
+            : `Bestellung #${bestellung.id}`;
+          title.textContent = artikelName;
+
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          const lieferantName = erstePosition
+            ? lieferantMap[erstePosition.lieferantId] || `Lieferant #${erstePosition.lieferantId}`
+            : "";
+          const datum = formatDate(bestellung.bestellDatum);
+          meta.textContent = lieferantName
+            ? `${lieferantName} | ${datum}`
+            : datum;
+
+          leftDiv.appendChild(title);
+          leftDiv.appendChild(meta);
+
+          const status = document.createElement("span");
+          status.className = statusClass(bestellung.status);
+          status.textContent = bestellung.status;
+
+          row.appendChild(leftDiv);
+          row.appendChild(status);
+          letzteBestellungenList.appendChild(row);
+        });
+      };
 
       const renderLowStock = (artikel) => {
         lowStockList.innerHTML = "";
@@ -199,10 +246,39 @@
         renderLowStock(lowStock);
       };
 
+      const loadLetzteBestellungen = async () => {
+        try {
+          const [bestellungenRes, artikelRes, lieferantenRes] = await Promise.all([
+            fetch("/api/bestellungen"),
+            fetch("/api/artikel"),
+            fetch("/api/lieferanten"),
+          ]);
+
+          const bestellungen = await bestellungenRes.json();
+          const artikel = await artikelRes.json();
+          const lieferanten = await lieferantenRes.json();
+
+          const artikelMap = artikel.reduce((acc, item) => {
+            acc[item.id] = item.name;
+            return acc;
+          }, {});
+
+          const lieferantMap = lieferanten.reduce((acc, item) => {
+            acc[item.id] = item.name;
+            return acc;
+          }, {});
+
+          renderLetzteBestellungen(bestellungen, artikelMap, lieferantMap);
+        } catch (error) {
+          console.error("Fehler beim Laden der Bestellungen:", error);
+        }
+      };
+
       lowStockRefresh.addEventListener("click", loadArtikel);
 
       loadLieferanten();
       loadArtikel();
+      loadLetzteBestellungen();
     </script>
   </body>
 </html>

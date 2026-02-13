@@ -144,7 +144,11 @@
                 });
 
                 if (response.ok) {
-                    message.textContent = 'Bestellung gespeichert.';
+                    const result = await response.json();
+                    const count = Array.isArray(result) ? result.length : 1;
+                    message.textContent = count > 1
+                        ? `${count} Bestellungen gespeichert.`
+                        : 'Bestellung gespeichert.';
                     form.reset();
                     bestellDatumInput.valueAsDate = new Date();
                     positionenContainer.innerHTML = '';

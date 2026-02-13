@@ -4,6 +4,10 @@ create table if not exists lieferanten (
     kontakt_person text,
     email text,
     telefon text,
+    strasse text,
+    plz text,
+    stadt text,
+    land text,
     created_at timestamp not null default now()
 );
 

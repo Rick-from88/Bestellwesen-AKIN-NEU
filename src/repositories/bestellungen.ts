@@ -15,6 +15,12 @@ export interface CreateBestellungInput {
     positionen: BestellungPositionInput[];
 }
 
+export interface UpdateBestellungInput {
+    status?: BestellungStatus;
+    bestellDatum?: string;
+    positionen: BestellungPositionInput[];
+}
+
 export const listBestellungen = async (): Promise<Bestellung[]> => {
     const result = await query(
         `select b.id,
@@ -108,4 +114,60 @@ export const createBestellung = async (input: CreateBestellungInput): Promise<Be
     } finally {
         client.release();
     }
+};
+
+export const updateBestellung = async (
+    id: number,
+    input: UpdateBestellungInput
+): Promise<Bestellung> => {
+    const client = await getClient();
+
+    try {
+        await client.query('begin');
+
+        const firstPosition = input.positionen[0];
+        const bestellungResult = await client.query(
+            'update bestellungen set artikel_id = $1, lieferant_id = $2, menge = $3, status = $4, bestell_datum = coalesce($5::timestamp, bestell_datum) where id = $6 returning id, status, bestell_datum as "bestellDatum"',
+            [
+                firstPosition.artikelId,
+                firstPosition.lieferantId,
+                firstPosition.menge,
+                input.status ?? 'offen',
+                input.bestellDatum ?? null,
+                id,
+            ]
+        );
+
+        if (!bestellungResult.rows.length) {
+            throw new Error('Bestellung nicht gefunden');
+        }
+
+        await client.query('delete from bestellpositionen where bestellung_id = $1', [id]);
+
+        for (const position of input.positionen) {
+            await client.query(
+                'insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) values ($1, $2, $3, $4)',
+                [id, position.artikelId, position.lieferantId, position.menge]
+            );
+        }
+
+        await client.query('commit');
+
+        const bestellung = bestellungResult.rows[0];
+        return {
+            id: bestellung.id,
+            status: bestellung.status as BestellungStatus,
+            bestellDatum: bestellung.bestellDatum,
+            positionen: input.positionen,
+        };
+    } catch (error) {
+        await client.query('rollback');
+        throw error;
+    } finally {
+        client.release();
+    }
+};
+
+export const deleteBestellung = async (id: number): Promise<void> => {
+    await query('delete from bestellungen where id = $1', [id]);
 };

@@ -4,13 +4,17 @@ import path from "path";
 import {
   createBestellung,
   listBestellungen,
+  updateBestellung,
+  deleteBestellung,
   BestellungStatus,
 } from "./repositories/bestellungen";
 import {
   createLieferant,
+  deleteLieferant,
   getLieferantById,
   listLieferantArtikel,
   listLieferanten,
+  updateLieferant,
 } from "./repositories/lieferanten";
 import { createArtikel, listArtikel } from "./repositories/artikel";
 
@@ -29,6 +33,10 @@ const parseNumber = (value: unknown): number | null => {
 const parseInteger = (value: unknown): number | null => {
   const parsed = parseNumber(value);
   return parsed !== null && Number.isInteger(parsed) ? parsed : null;
+};
+
+const parseString = (value: unknown): string | undefined => {
+  return typeof value === "string" ? value.trim() : undefined;
 };
 
 const parseStatus = (value: unknown): BestellungStatus | null => {
@@ -50,30 +58,17 @@ type BestellungPositionParsed = {
   menge: number | null;
 };
 
-app.get("/api/bestellungen", async (req, res) => {
-  try {
-    const bestellungen = await listBestellungen();
-    res.json(bestellungen);
-  } catch (error) {
-    console.error("Fehler beim Laden der Bestellungen", error);
-    res
-      .status(500)
-      .json({ error: "Bestellungen konnten nicht geladen werden." });
-  }
-});
+type BestellungPositionValid = {
+  artikelId: number;
+  lieferantId: number;
+  menge: number;
+};
 
-app.post("/api/bestellungen", async (req, res) => {
-  const status = parseStatus(req.body.status) ?? "offen";
-  const bestellDatum =
-    typeof req.body.bestellDatum === "string"
-      ? req.body.bestellDatum
-      : undefined;
-
-  const positionenInput: BestellungPositionBody[] = Array.isArray(
-    req.body.positionen,
-  )
-    ? req.body.positionen
+const parsePositionen = (value: unknown): BestellungPositionValid[] | null => {
+  const positionenInput: BestellungPositionBody[] = Array.isArray(value)
+    ? value
     : [];
+
   const positionen = positionenInput
     .map((position: BestellungPositionBody): BestellungPositionParsed => {
       const artikelId = parseInteger(position?.artikelId);
@@ -95,20 +90,116 @@ app.post("/api/bestellungen", async (req, res) => {
     }));
 
   if (!positionen.length || positionen.length !== positionenInput.length) {
-    res.status(400).json({ error: "Alle Positionen muessen Artikel, Lieferant und Menge enthalten." });
+    return null;
+  }
+
+  return positionen;
+};
+
+app.get("/api/bestellungen", async (req, res) => {
+  try {
+    const bestellungen = await listBestellungen();
+    res.json(bestellungen);
+  } catch (error) {
+    console.error("Fehler beim Laden der Bestellungen", error);
+    res
+      .status(500)
+      .json({ error: "Bestellungen konnten nicht geladen werden." });
+  }
+});
+
+app.post("/api/bestellungen", async (req, res) => {
+  const status = parseStatus(req.body.status) ?? "offen";
+  const bestellDatum =
+    typeof req.body.bestellDatum === "string"
+      ? req.body.bestellDatum
+      : undefined;
+
+  const positionen = parsePositionen(req.body.positionen);
+  if (!positionen) {
+    res
+      .status(400)
+      .json({
+        error: "Alle Positionen muessen Artikel, Lieferant und Menge enthalten.",
+      });
     return;
   }
 
   try {
-    const bestellung = await createBestellung({
+    const positionenNachLieferant = new Map<number, BestellungPositionValid[]>();
+    positionen.forEach((position) => {
+      const entries = positionenNachLieferant.get(position.lieferantId) ?? [];
+      entries.push(position);
+      positionenNachLieferant.set(position.lieferantId, entries);
+    });
+
+    const bestellungen = [];
+    for (const entry of positionenNachLieferant.values()) {
+      const bestellung = await createBestellung({
+        status,
+        bestellDatum,
+        positionen: entry,
+      });
+      bestellungen.push(bestellung);
+    }
+
+    res.status(201).json(bestellungen);
+  } catch (error) {
+    console.error("Fehler beim Erstellen der Bestellung", error);
+    res.status(500).json({ error: "Bestellung konnte nicht erstellt werden." });
+  }
+});
+
+app.put("/api/bestellungen/:id", async (req, res) => {
+  const bestellungId = parseInteger(req.params.id);
+  const status = parseStatus(req.body.status) ?? "offen";
+  const bestellDatum =
+    typeof req.body.bestellDatum === "string"
+      ? req.body.bestellDatum
+      : undefined;
+
+  if (!bestellungId) {
+    res.status(400).json({ error: "Ungueltige Bestellungs-ID." });
+    return;
+  }
+
+  const positionen = parsePositionen(req.body.positionen);
+  if (!positionen) {
+    res
+      .status(400)
+      .json({
+        error: "Alle Positionen muessen Artikel, Lieferant und Menge enthalten.",
+      });
+    return;
+  }
+
+  try {
+    const bestellung = await updateBestellung(bestellungId, {
       status,
       bestellDatum,
       positionen,
     });
-    res.status(201).json(bestellung);
+    res.json(bestellung);
   } catch (error) {
-    console.error("Fehler beim Erstellen der Bestellung", error);
-    res.status(500).json({ error: "Bestellung konnte nicht erstellt werden." });
+    console.error("Fehler beim Aktualisieren der Bestellung", error);
+    res.status(500).json({ error: "Bestellung konnte nicht aktualisiert werden." });
+  }
+});
+
+app.delete("/api/bestellungen/:id", async (req, res) => {
+  const bestellungId = parseInteger(req.params.id);
+
+  if (!bestellungId) {
+    res.status(400).json({ error: "Ungueltige Bestellungs-ID." });
+    return;
+  }
+
+  try {
+    await deleteBestellung(bestellungId);
+    res.status(204).send();
+  } catch (error) {
+    console.error("Fehler beim Loeschen der Bestellung", error);
+    res.status(500).json({ error: "Bestellung konnte nicht geloescht werden." });
   }
 });
 
@@ -134,6 +225,10 @@ app.post("/api/lieferanten", async (req, res) => {
     typeof req.body.email === "string" ? req.body.email.trim() : undefined;
   const telefon =
     typeof req.body.telefon === "string" ? req.body.telefon.trim() : undefined;
+  const strasse = parseString(req.body.strasse);
+  const plz = parseString(req.body.plz);
+  const stadt = parseString(req.body.stadt);
+  const land = parseString(req.body.land);
 
   if (!name) {
     res.status(400).json({ error: "name ist ein Pflichtfeld." });
@@ -146,6 +241,10 @@ app.post("/api/lieferanten", async (req, res) => {
       kontaktPerson,
       email,
       telefon,
+      strasse,
+      plz,
+      stadt,
+      land,
     });
     res.status(201).json(lieferant);
   } catch (error) {
@@ -173,6 +272,79 @@ app.get("/api/lieferanten/:id", async (req, res) => {
   } catch (error) {
     console.error("Fehler beim Laden des Lieferanten", error);
     res.status(500).json({ error: "Lieferant konnte nicht geladen werden." });
+  }
+});
+
+app.put("/api/lieferanten/:id", async (req, res) => {
+  const lieferantId = parseInteger(req.params.id);
+  const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+  const kontaktPerson = parseString(req.body.kontaktPerson);
+  const email = parseString(req.body.email);
+  const telefon = parseString(req.body.telefon);
+  const strasse = parseString(req.body.strasse);
+  const plz = parseString(req.body.plz);
+  const stadt = parseString(req.body.stadt);
+  const land = parseString(req.body.land);
+
+  if (!lieferantId) {
+    res.status(400).json({ error: "Ungueltige Lieferanten-ID." });
+    return;
+  }
+
+  if (!name) {
+    res.status(400).json({ error: "name ist ein Pflichtfeld." });
+    return;
+  }
+
+  try {
+    const lieferant = await updateLieferant(lieferantId, {
+      name,
+      kontaktPerson,
+      email,
+      telefon,
+      strasse,
+      plz,
+      stadt,
+      land,
+    });
+
+    if (!lieferant) {
+      res.status(404).json({ error: "Lieferant nicht gefunden." });
+      return;
+    }
+
+    res.json(lieferant);
+  } catch (error) {
+    console.error("Fehler beim Aktualisieren des Lieferanten", error);
+    res.status(500).json({ error: "Lieferant konnte nicht aktualisiert werden." });
+  }
+});
+
+app.delete("/api/lieferanten/:id", async (req, res) => {
+  const lieferantId = parseInteger(req.params.id);
+
+  if (!lieferantId) {
+    res.status(400).json({ error: "Ungueltige Lieferanten-ID." });
+    return;
+  }
+
+  try {
+    const deleted = await deleteLieferant(lieferantId);
+    if (!deleted) {
+      res.status(404).json({ error: "Lieferant nicht gefunden." });
+      return;
+    }
+
+    res.status(204).send();
+  } catch (error) {
+    const err = error as { code?: string };
+    if (err && err.code === "23503") {
+      res.status(409).json({ error: "Lieferant ist noch referenziert." });
+      return;
+    }
+
+    console.error("Fehler beim Loeschen des Lieferanten", error);
+    res.status(500).json({ error: "Lieferant konnte nicht geloescht werden." });
   }
 });
 

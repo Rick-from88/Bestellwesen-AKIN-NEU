@@ -9,7 +9,6 @@
   <body>
     <div class="page">
       <header class="hero">
-        <div class="hero__badge">Lieferantenprofil</div>
         <h1 id="lieferantName">Lieferant</h1>
         <p id="lieferantMeta" class="hero__subtitle"></p>
       </header>
@@ -125,13 +124,25 @@
         const artikel = await artikelRes.json();
 
         lieferantName.textContent = lieferant.name;
-        lieferantMeta.textContent = `ID: ${lieferant.id}`;
+        lieferantMeta.textContent = "";
         kontaktList.innerHTML = "";
         kontaktList.appendChild(
           formatValue("Kontaktperson", lieferant.kontaktPerson),
         );
         kontaktList.appendChild(formatValue("E-Mail", lieferant.email));
         kontaktList.appendChild(formatValue("Telefon", lieferant.telefon));
+        
+        // Anschrift zusammenstellen
+        const adresspteile = [];
+        if (lieferant.strasse) adresspteile.push(lieferant.strasse);
+        if (lieferant.plz || lieferant.stadt) {
+          const plzStadt = [lieferant.plz, lieferant.stadt].filter(Boolean).join(" ");
+          if (plzStadt) adresspteile.push(plzStadt);
+        }
+        if (lieferant.land) adresspteile.push(lieferant.land);
+        const anschrift = adresspteile.join(", ");
+        
+        kontaktList.appendChild(formatValue("Anschrift", anschrift));
         renderArtikel(artikel);
 
         if (lieferant.email) {
