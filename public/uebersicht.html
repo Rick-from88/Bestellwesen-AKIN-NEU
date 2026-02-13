@@ -1,114 +1,229 @@
 <!doctype html>
 <html lang="de">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Bestellwesen Uebersicht</title>
-        <link rel="stylesheet" href="/static/styles/uebersicht.css" />
-    </head>
-    <body>
-        <div class="page">
-            <header class="hero">
-                <div class="hero__badge">Bestellwesen</div>
-                <h1>Uebersicht</h1>
-                <p class="hero__subtitle">Schneller Blick auf Bestellungen, Lieferanten und Artikel.</p>
-                <div class="hero__actions">
-                    <a class="btn btn--primary" href="/bestellung-neu">Neue Bestellung</a>
-                    <button class="btn btn--ghost">Lieferant hinzufuegen</button>
-                </div>
-            </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bestellwesen Uebersicht</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div class="hero__badge">Bestellwesen</div>
+        <h1>Uebersicht</h1>
+        <p class="hero__subtitle">
+          Schneller Blick auf Bestellungen, Lieferanten und Artikel.
+        </p>
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="/bestellung-neu">Neue Bestellung</a>
+          <a class="btn btn--ghost" href="#lieferanten">Lieferanten anzeigen</a>
+        </div>
+      </header>
 
-            <section class="grid">
-                <article class="card">
-                    <div class="card__label">Offene Bestellungen</div>
-                    <div class="card__value">24</div>
-                    <div class="card__trend">+5 seit letzter Woche</div>
-                </article>
-                <article class="card">
-                    <div class="card__label">Gefaellige Lieferanten</div>
-                    <div class="card__value">18</div>
-                    <div class="card__trend">2 neue Profile</div>
-                </article>
-                <article class="card">
-                    <div class="card__label">Artikel im Fokus</div>
-                    <div class="card__value">312</div>
-                    <div class="card__trend">9 Low-Stock</div>
-                </article>
-            </section>
+      <section class="grid">
+        <article class="card">
+          <div class="card__label">Offene Bestellungen</div>
+          <div class="card__value">24</div>
+          <div class="card__trend">+5 seit letzter Woche</div>
+        </article>
+        <article class="card">
+          <div class="card__label">Gefaellige Lieferanten</div>
+          <div class="card__value" id="lieferantenCount">0</div>
+          <div class="card__trend" id="lieferantenTrend">Noch keine Daten</div>
+        </article>
+        <article class="card">
+          <div class="card__label">Artikel im Fokus</div>
+          <div class="card__value" id="artikelCount">0</div>
+          <div class="card__trend" id="lowStockCount">Noch keine Daten</div>
+        </article>
+      </section>
 
-            <section class="split">
-                <div class="panel">
-                    <div class="panel__header">
-                        <h2>Letzte Bestellungen</h2>
-                        <button class="btn btn--link">Alle anzeigen</button>
-                    </div>
-                    <div class="list">
-                        <div class="list__row">
-                            <div>
-                                <div class="list__title">Bueromaterial Q1</div>
-                                <div class="list__meta">#BW-2026-0142</div>
-                            </div>
-                            <span class="pill pill--amber">in Bearbeitung</span>
-                        </div>
-                        <div class="list__row">
-                            <div>
-                                <div class="list__title">Serverersatzteile</div>
-                                <div class="list__meta">#BW-2026-0139</div>
-                            </div>
-                            <span class="pill pill--mint">freigegeben</span>
-                        </div>
-                        <div class="list__row">
-                            <div>
-                                <div class="list__title">Kantinenbedarf</div>
-                                <div class="list__meta">#BW-2026-0136</div>
-                            </div>
-                            <span class="pill pill--rose">verzoegert</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="panel">
-                    <div class="panel__header">
-                        <h2>Heute wichtig</h2>
-                        <button class="btn btn--link">Mehr</button>
-                    </div>
-                    <div class="alert">
-                        <div class="alert__title">3 Angebote laufen aus</div>
-                        <p>Pruefe die Lieferantenpreise bis 16:00, um Staffelrabatte zu sichern.</p>
-                    </div>
-                    <div class="timeline">
-                        <div class="timeline__item">
-                            <div class="timeline__time">09:30</div>
-                            <div>
-                                <div class="timeline__title">Freigabe Einkauf IT</div>
-                                <div class="timeline__meta">Budget: 18.400 EUR</div>
-                            </div>
-                        </div>
-                        <div class="timeline__item">
-                            <div class="timeline__time">11:15</div>
-                            <div>
-                                <div class="timeline__title">Lieferantencheck</div>
-                                <div class="timeline__meta">Datenimport abgeschlossen</div>
-                            </div>
-                        </div>
-                        <div class="timeline__item">
-                            <div class="timeline__time">15:00</div>
-                            <div>
-                                <div class="timeline__title">Bestellung versenden</div>
-                                <div class="timeline__meta">Nachbearbeitung offen</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+      <section class="split">
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Letzte Bestellungen</h2>
+            <button class="btn btn--link">Alle anzeigen</button>
+          </div>
+          <div class="list">
+            <div class="list__row">
+              <div>
+                <div class="list__title">Bueromaterial Q1</div>
+                <div class="list__meta">#BW-2026-0142</div>
+              </div>
+              <span class="pill pill--amber">in Bearbeitung</span>
+            </div>
+            <div class="list__row">
+              <div>
+                <div class="list__title">Serverersatzteile</div>
+                <div class="list__meta">#BW-2026-0139</div>
+              </div>
+              <span class="pill pill--mint">freigegeben</span>
+            </div>
+            <div class="list__row">
+              <div>
+                <div class="list__title">Kantinenbedarf</div>
+                <div class="list__meta">#BW-2026-0136</div>
+              </div>
+              <span class="pill pill--rose">verzoegert</span>
+            </div>
+          </div>
         </div>
 
-        <nav class="navbar">
-            <a class="navbar__item is-active" href="/uebersicht">Uebersicht</a>
-            <a class="navbar__item" href="#">Bestellungen</a>
-            <a class="navbar__item" href="#">Lieferanten</a>
-            <a class="navbar__item" href="#">Artikel</a>
-            <a class="navbar__item" href="#">Einstellungen</a>
-        </nav>
-    </body>
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Heute wichtig</h2>
+            <button class="btn btn--link">Mehr</button>
+          </div>
+          <div class="alert">
+            <div class="alert__title">3 Angebote laufen aus</div>
+            <p>
+              Pruefe die Lieferantenpreise bis 16:00, um Staffelrabatte zu
+              sichern.
+            </p>
+          </div>
+          <div class="timeline">
+            <div class="timeline__item">
+              <div class="timeline__time">09:30</div>
+              <div>
+                <div class="timeline__title">Freigabe Einkauf IT</div>
+                <div class="timeline__meta">Budget: 18.400 EUR</div>
+              </div>
+            </div>
+            <div class="timeline__item">
+              <div class="timeline__time">11:15</div>
+              <div>
+                <div class="timeline__title">Lieferantencheck</div>
+                <div class="timeline__meta">Datenimport abgeschlossen</div>
+              </div>
+            </div>
+            <div class="timeline__item">
+              <div class="timeline__time">15:00</div>
+              <div>
+                <div class="timeline__title">Bestellung versenden</div>
+                <div class="timeline__meta">Nachbearbeitung offen</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="split" id="lieferanten">
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Lieferanten</h2>
+            <button class="btn btn--link" id="lieferantenRefresh">
+              Aktualisieren
+            </button>
+          </div>
+          <div class="list" id="lieferantenList"></div>
+        </div>
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Low-Stock Warnungen</h2>
+            <button class="btn btn--link" id="lowStockRefresh">
+              Aktualisieren
+            </button>
+          </div>
+          <div class="list" id="lowStockList"></div>
+        </div>
+      </section>
+    </div>
+
+    <nav class="navbar">
+      <a class="navbar__item is-active" href="/uebersicht">Uebersicht</a>
+      <a class="navbar__item" href="#">Bestellungen</a>
+      <a class="navbar__item" href="/uebersicht#lieferanten">Lieferanten</a>
+      <a class="navbar__item" href="#">Artikel</a>
+      <a class="navbar__item" href="#">Einstellungen</a>
+    </nav>
+
+    <script>
+      const lieferantenCount = document.getElementById("lieferantenCount");
+      const lieferantenTrend = document.getElementById("lieferantenTrend");
+      const artikelCount = document.getElementById("artikelCount");
+      const lowStockCount = document.getElementById("lowStockCount");
+      const lieferantenList = document.getElementById("lieferantenList");
+      const lowStockList = document.getElementById("lowStockList");
+      const lieferantenRefresh = document.getElementById("lieferantenRefresh");
+      const lowStockRefresh = document.getElementById("lowStockRefresh");
+
+      const renderLieferanten = (lieferanten) => {
+        lieferantenList.innerHTML = "";
+        if (!lieferanten.length) {
+          const emptyRow = document.createElement("div");
+          emptyRow.className = "list__row";
+          emptyRow.textContent = "Keine Lieferanten vorhanden.";
+          lieferantenList.appendChild(emptyRow);
+          return;
+        }
+
+        lieferanten.forEach((lieferant) => {
+          const row = document.createElement("a");
+          row.className = "list__row";
+          row.href = `/lieferanten/${lieferant.id}`;
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = lieferant.name;
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          meta.textContent = lieferant.email || "Keine E-Mail";
+          row.appendChild(title);
+          row.appendChild(meta);
+          lieferantenList.appendChild(row);
+        });
+      };
+
+      const renderLowStock = (artikel) => {
+        lowStockList.innerHTML = "";
+        if (!artikel.length) {
+          const emptyRow = document.createElement("div");
+          emptyRow.className = "list__row";
+          emptyRow.textContent = "Keine Low-Stock Artikel.";
+          lowStockList.appendChild(emptyRow);
+          return;
+        }
+
+        artikel.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "list__row";
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = item.name;
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          meta.textContent = `Lager: ${item.lagerbestand} | Min: ${item.minBestand}`;
+          row.appendChild(title);
+          row.appendChild(meta);
+          lowStockList.appendChild(row);
+        });
+      };
+
+      const loadLieferanten = async () => {
+        const response = await fetch("/api/lieferanten");
+        const lieferanten = await response.json();
+        lieferantenCount.textContent = lieferanten.length;
+        lieferantenTrend.textContent = lieferanten.length
+          ? "Profil gepflegt"
+          : "Noch keine Daten";
+        renderLieferanten(lieferanten);
+      };
+
+      const loadArtikel = async () => {
+        const response = await fetch("/api/artikel");
+        const artikel = await response.json();
+        artikelCount.textContent = artikel.length;
+        const lowStock = artikel.filter(
+          (item) => item.lagerbestand <= item.minBestand,
+        );
+        lowStockCount.textContent = `${lowStock.length} Low-Stock`;
+        renderLowStock(lowStock);
+      };
+
+      lieferantenRefresh.addEventListener("click", loadLieferanten);
+      lowStockRefresh.addEventListener("click", loadArtikel);
+
+      loadLieferanten();
+      loadArtikel();
+    </script>
+  </body>
 </html>

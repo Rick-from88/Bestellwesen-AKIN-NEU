@@ -13,6 +13,7 @@ create table if not exists artikel (
     beschreibung text,
     preis numeric(10, 2) not null,
     lagerbestand integer not null default 0,
+    min_bestand integer not null default 0,
     created_at timestamp not null default now()
 );
 

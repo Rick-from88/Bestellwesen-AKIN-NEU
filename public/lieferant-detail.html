@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lieferantendetail</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div class="hero__badge">Lieferantenprofil</div>
+        <h1 id="lieferantName">Lieferant</h1>
+        <p id="lieferantMeta" class="hero__subtitle"></p>
+      </header>
+
+      <section class="split">
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Kontakt</h2>
+          </div>
+          <div class="list" id="kontaktList"></div>
+          <div class="panel__header" style="margin-top: 20px">
+            <h2>Nachricht senden</h2>
+          </div>
+          <form id="emailForm" class="form">
+            <div class="form__row">
+              <label for="emailSubject">Betreff</label>
+              <input id="emailSubject" name="subject" type="text" />
+            </div>
+            <div class="form__row">
+              <label for="emailText">Nachricht</label>
+              <textarea id="emailText" name="text" rows="5"></textarea>
+            </div>
+            <div class="form__actions">
+              <a class="btn btn--primary" id="mailtoLink" href="#"
+                >E-Mail oeffnen</a
+              >
+              <a class="btn btn--ghost" href="/uebersicht">Zurueck</a>
+            </div>
+            <div id="emailMessage" class="form__message" role="status"></div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Artikel vom Lieferanten</h2>
+          </div>
+          <div class="list" id="artikelList"></div>
+        </div>
+      </section>
+    </div>
+
+    <nav class="navbar">
+      <a class="navbar__item" href="/uebersicht">Uebersicht</a>
+      <a class="navbar__item" href="/bestellung-neu">Bestellung</a>
+      <a class="navbar__item is-active" href="#">Lieferanten</a>
+      <a class="navbar__item" href="#">Artikel</a>
+      <a class="navbar__item" href="#">Einstellungen</a>
+    </nav>
+
+    <script>
+      const lieferantName = document.getElementById("lieferantName");
+      const lieferantMeta = document.getElementById("lieferantMeta");
+      const kontaktList = document.getElementById("kontaktList");
+      const artikelList = document.getElementById("artikelList");
+      const emailForm = document.getElementById("emailForm");
+      const emailMessage = document.getElementById("emailMessage");
+      const mailtoLink = document.getElementById("mailtoLink");
+
+      const lieferantId = Number(window.location.pathname.split("/").pop());
+
+      const formatValue = (label, value) => {
+        const row = document.createElement("div");
+        row.className = "list__row";
+        const title = document.createElement("div");
+        title.className = "list__title";
+        title.textContent = label;
+        const meta = document.createElement("div");
+        meta.className = "list__meta";
+        meta.textContent = value || "Nicht hinterlegt";
+        row.appendChild(title);
+        row.appendChild(meta);
+        return row;
+      };
+
+      const renderArtikel = (artikel) => {
+        artikelList.innerHTML = "";
+        if (!artikel.length) {
+          const row = document.createElement("div");
+          row.className = "list__row";
+          row.textContent = "Keine Artikel fuer diesen Lieferanten gefunden.";
+          artikelList.appendChild(row);
+          return;
+        }
+
+        artikel.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "list__row";
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = item.name;
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          meta.textContent = `Lager: ${item.lagerbestand} | Min: ${item.minBestand}`;
+          row.appendChild(title);
+          row.appendChild(meta);
+          artikelList.appendChild(row);
+        });
+      };
+
+      const loadLieferant = async () => {
+        const [lieferantRes, artikelRes] = await Promise.all([
+          fetch(`/api/lieferanten/${lieferantId}`),
+          fetch(`/api/lieferanten/${lieferantId}/artikel`),
+        ]);
+
+        if (!lieferantRes.ok) {
+          lieferantName.textContent = "Lieferant nicht gefunden";
+          lieferantMeta.textContent = "";
+          return;
+        }
+
+        const lieferant = await lieferantRes.json();
+        const artikel = await artikelRes.json();
+
+        lieferantName.textContent = lieferant.name;
+        lieferantMeta.textContent = `ID: ${lieferant.id}`;
+        kontaktList.innerHTML = "";
+        kontaktList.appendChild(
+          formatValue("Kontaktperson", lieferant.kontaktPerson),
+        );
+        kontaktList.appendChild(formatValue("E-Mail", lieferant.email));
+        kontaktList.appendChild(formatValue("Telefon", lieferant.telefon));
+        renderArtikel(artikel);
+
+        if (lieferant.email) {
+          mailtoLink.dataset.email = lieferant.email;
+          mailtoLink.textContent = "E-Mail oeffnen";
+          mailtoLink.classList.remove("is-disabled");
+        } else {
+          mailtoLink.dataset.email = "";
+          mailtoLink.textContent = "Keine E-Mail hinterlegt";
+          mailtoLink.classList.add("is-disabled");
+        }
+      };
+
+      emailForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        emailMessage.textContent = "";
+      });
+
+      mailtoLink.addEventListener("click", (event) => {
+        const email = mailtoLink.dataset.email;
+        if (!email) {
+          event.preventDefault();
+          emailMessage.textContent = "Keine E-Mail-Adresse hinterlegt.";
+          return;
+        }
+
+        const subject = document.getElementById("emailSubject").value || "";
+        const text = document.getElementById("emailText").value || "";
+        const params = new URLSearchParams();
+        if (subject) {
+          params.set("subject", subject);
+        }
+        if (text) {
+          params.set("body", text);
+        }
+
+        const query = params.toString();
+        mailtoLink.href = query
+          ? `mailto:${email}?${query}`
+          : `mailto:${email}`;
+      });
+
+      if (Number.isFinite(lieferantId)) {
+        loadLieferant();
+      } else {
+        lieferantName.textContent = "Ungueltige Lieferanten-ID";
+        lieferantMeta.textContent = "";
+      }
+    </script>
+  </body>
+</html>
