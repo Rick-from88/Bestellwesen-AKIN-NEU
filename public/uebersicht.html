@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Bestellwesen Uebersicht</title>
+        <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+    </head>
+    <body>
+        <div class="page">
+            <header class="hero">
+                <div class="hero__badge">Bestellwesen</div>
+                <h1>Uebersicht</h1>
+                <p class="hero__subtitle">Schneller Blick auf Bestellungen, Lieferanten und Artikel.</p>
+                <div class="hero__actions">
+                    <a class="btn btn--primary" href="/bestellung-neu">Neue Bestellung</a>
+                    <button class="btn btn--ghost">Lieferant hinzufuegen</button>
+                </div>
+            </header>
+
+            <section class="grid">
+                <article class="card">
+                    <div class="card__label">Offene Bestellungen</div>
+                    <div class="card__value">24</div>
+                    <div class="card__trend">+5 seit letzter Woche</div>
+                </article>
+                <article class="card">
+                    <div class="card__label">Gefaellige Lieferanten</div>
+                    <div class="card__value">18</div>
+                    <div class="card__trend">2 neue Profile</div>
+                </article>
+                <article class="card">
+                    <div class="card__label">Artikel im Fokus</div>
+                    <div class="card__value">312</div>
+                    <div class="card__trend">9 Low-Stock</div>
+                </article>
+            </section>
+
+            <section class="split">
+                <div class="panel">
+                    <div class="panel__header">
+                        <h2>Letzte Bestellungen</h2>
+                        <button class="btn btn--link">Alle anzeigen</button>
+                    </div>
+                    <div class="list">
+                        <div class="list__row">
+                            <div>
+                                <div class="list__title">Bueromaterial Q1</div>
+                                <div class="list__meta">#BW-2026-0142</div>
+                            </div>
+                            <span class="pill pill--amber">in Bearbeitung</span>
+                        </div>
+                        <div class="list__row">
+                            <div>
+                                <div class="list__title">Serverersatzteile</div>
+                                <div class="list__meta">#BW-2026-0139</div>
+                            </div>
+                            <span class="pill pill--mint">freigegeben</span>
+                        </div>
+                        <div class="list__row">
+                            <div>
+                                <div class="list__title">Kantinenbedarf</div>
+                                <div class="list__meta">#BW-2026-0136</div>
+                            </div>
+                            <span class="pill pill--rose">verzoegert</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel__header">
+                        <h2>Heute wichtig</h2>
+                        <button class="btn btn--link">Mehr</button>
+                    </div>
+                    <div class="alert">
+                        <div class="alert__title">3 Angebote laufen aus</div>
+                        <p>Pruefe die Lieferantenpreise bis 16:00, um Staffelrabatte zu sichern.</p>
+                    </div>
+                    <div class="timeline">
+                        <div class="timeline__item">
+                            <div class="timeline__time">09:30</div>
+                            <div>
+                                <div class="timeline__title">Freigabe Einkauf IT</div>
+                                <div class="timeline__meta">Budget: 18.400 EUR</div>
+                            </div>
+                        </div>
+                        <div class="timeline__item">
+                            <div class="timeline__time">11:15</div>
+                            <div>
+                                <div class="timeline__title">Lieferantencheck</div>
+                                <div class="timeline__meta">Datenimport abgeschlossen</div>
+                            </div>
+                        </div>
+                        <div class="timeline__item">
+                            <div class="timeline__time">15:00</div>
+                            <div>
+                                <div class="timeline__title">Bestellung versenden</div>
+                                <div class="timeline__meta">Nachbearbeitung offen</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <nav class="navbar">
+            <a class="navbar__item is-active" href="/uebersicht">Uebersicht</a>
+            <a class="navbar__item" href="#">Bestellungen</a>
+            <a class="navbar__item" href="#">Lieferanten</a>
+            <a class="navbar__item" href="#">Artikel</a>
+            <a class="navbar__item" href="#">Einstellungen</a>
+        </nav>
+    </body>
+</html>

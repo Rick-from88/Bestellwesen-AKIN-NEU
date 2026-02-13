@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Bestellung anlegen</title>
+        <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+    </head>
+    <body>
+        <div class="page">
+            <header class="hero">
+                <div class="hero__badge">Bestellwesen</div>
+                <h1>Bestellung anlegen</h1>
+                <p class="hero__subtitle">Neue Bestellung erfassen und speichern.</p>
+            </header>
+
+            <section class="panel">
+                <form id="bestellungForm" class="form">
+                    <div class="form__row">
+                        <label for="lieferantId">Lieferant</label>
+                        <select id="lieferantId" name="lieferantId" required></select>
+                    </div>
+                    <div class="form__row">
+                        <label for="artikelId">Artikel</label>
+                        <select id="artikelId" name="artikelId" required></select>
+                    </div>
+                    <div class="form__row">
+                        <label for="menge">Menge</label>
+                        <input id="menge" name="menge" type="number" min="1" step="1" required />
+                    </div>
+                    <div class="form__row">
+                        <label for="bestellDatum">Bestelldatum</label>
+                        <input id="bestellDatum" name="bestellDatum" type="date" required />
+                    </div>
+                    <div class="form__actions">
+                        <button class="btn btn--primary" type="submit">Speichern</button>
+                        <a class="btn btn--ghost" href="/uebersicht">Abbrechen</a>
+                    </div>
+                    <div id="formMessage" class="form__message" role="status"></div>
+                </form>
+            </section>
+        </div>
+
+        <nav class="navbar">
+            <a class="navbar__item" href="/uebersicht">Uebersicht</a>
+            <a class="navbar__item is-active" href="/bestellung-neu">Bestellung</a>
+            <a class="navbar__item" href="#">Lieferanten</a>
+            <a class="navbar__item" href="#">Artikel</a>
+            <a class="navbar__item" href="#">Einstellungen</a>
+        </nav>
+
+        <script>
+            const lieferantSelect = document.getElementById('lieferantId');
+            const artikelSelect = document.getElementById('artikelId');
+            const form = document.getElementById('bestellungForm');
+            const message = document.getElementById('formMessage');
+            const bestellDatumInput = document.getElementById('bestellDatum');
+
+            const fillSelect = (select, items) => {
+                select.innerHTML = '';
+                if (!items.length) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'Keine Eintraege vorhanden';
+                    select.appendChild(option);
+                    return;
+                }
+
+                items.forEach((item) => {
+                    const option = document.createElement('option');
+                    option.value = item.id;
+                    option.textContent = item.name || `#${item.id}`;
+                    select.appendChild(option);
+                });
+            };
+
+            const loadData = async () => {
+                const [lieferantenRes, artikelRes] = await Promise.all([
+                    fetch('/api/lieferanten'),
+                    fetch('/api/artikel'),
+                ]);
+
+                const lieferanten = await lieferantenRes.json();
+                const artikel = await artikelRes.json();
+
+                fillSelect(lieferantSelect, lieferanten);
+                fillSelect(artikelSelect, artikel);
+            };
+
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                message.textContent = '';
+
+                const payload = {
+                    lieferantId: Number(lieferantSelect.value),
+                    artikelId: Number(artikelSelect.value),
+                    menge: Number(document.getElementById('menge').value),
+                    bestellDatum: bestellDatumInput.value,
+                };
+
+                const response = await fetch('/api/bestellungen', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                if (response.ok) {
+                    message.textContent = 'Bestellung gespeichert.';
+                    form.reset();
+                    bestellDatumInput.valueAsDate = new Date();
+                    return;
+                }
+
+                const errorText = await response.text();
+                message.textContent = `Fehler: ${errorText}`;
+            });
+
+            bestellDatumInput.valueAsDate = new Date();
+            loadData();
+        </script>
+    </body>
+</html>
