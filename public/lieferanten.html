@@ -50,7 +50,11 @@
           </div>
           <div class="form__row">
             <label for="lieferantKontaktInput">Kontaktperson</label>
-            <input id="lieferantKontaktInput" name="kontaktPerson" type="text" />
+            <input
+              id="lieferantKontaktInput"
+              name="kontaktPerson"
+              type="text"
+            />
           </div>
           <div class="form__row">
             <label for="lieferantEmailInput">E-Mail</label>
@@ -104,17 +108,31 @@
       const lieferantenRefresh = document.getElementById("lieferantenRefresh");
       const addLieferantBtn = document.getElementById("addLieferantBtn");
       const lieferantModal = document.getElementById("lieferantModal");
-      const lieferantModalTitle = document.getElementById("lieferantModalTitle");
-      const lieferantModalClose = document.getElementById("lieferantModalClose");
+      const lieferantModalTitle = document.getElementById(
+        "lieferantModalTitle",
+      );
+      const lieferantModalClose = document.getElementById(
+        "lieferantModalClose",
+      );
       const lieferantForm = document.getElementById("lieferantForm");
       const lieferantMessage = document.getElementById("lieferantMessage");
       const lieferantNameInput = document.getElementById("lieferantNameInput");
-      const lieferantKontaktInput = document.getElementById("lieferantKontaktInput");
-      const lieferantEmailInput = document.getElementById("lieferantEmailInput");
-      const lieferantTelefonInput = document.getElementById("lieferantTelefonInput");
-      const lieferantStrasseInput = document.getElementById("lieferantStrasseInput");
+      const lieferantKontaktInput = document.getElementById(
+        "lieferantKontaktInput",
+      );
+      const lieferantEmailInput = document.getElementById(
+        "lieferantEmailInput",
+      );
+      const lieferantTelefonInput = document.getElementById(
+        "lieferantTelefonInput",
+      );
+      const lieferantStrasseInput = document.getElementById(
+        "lieferantStrasseInput",
+      );
       const lieferantPlzInput = document.getElementById("lieferantPlzInput");
-      const lieferantStadtInput = document.getElementById("lieferantStadtInput");
+      const lieferantStadtInput = document.getElementById(
+        "lieferantStadtInput",
+      );
       const lieferantLandInput = document.getElementById("lieferantLandInput");
       const lieferantCancel = document.getElementById("lieferantCancel");
       const lieferantDelete = document.getElementById("lieferantDelete");
@@ -227,10 +245,9 @@
             }
 
             try {
-              const response = await fetch(
-                `/api/lieferanten/${lieferant.id}`,
-                { method: "DELETE" },
-              );
+              const response = await fetch(`/api/lieferanten/${lieferant.id}`, {
+                method: "DELETE",
+              });
 
               if (!response.ok) {
                 const errorText = await response.text();
@@ -262,7 +279,7 @@
           const lieferantenResponse = await response.json();
           const lieferanten = Array.isArray(lieferantenResponse)
             ? lieferantenResponse
-            : (lieferantenResponse.value || []);
+            : lieferantenResponse.value || [];
           renderLieferanten(lieferanten);
         } catch (error) {
           console.error("Fehler beim Laden der Lieferanten:", error);
@@ -298,7 +315,9 @@
         try {
           const isCreate = !currentLieferantId;
           const response = await fetch(
-            isCreate ? "/api/lieferanten" : `/api/lieferanten/${currentLieferantId}`,
+            isCreate
+              ? "/api/lieferanten"
+              : `/api/lieferanten/${currentLieferantId}`,
             {
               method: isCreate ? "POST" : "PUT",
               headers: { "Content-Type": "application/json" },
@@ -354,10 +373,9 @@
 
       lieferantCancel.addEventListener("click", closeModal);
       lieferantModalClose.addEventListener("click", closeModal);
-      lieferantModal.querySelector(".modal__backdrop").addEventListener(
-        "click",
-        closeModal,
-      );
+      lieferantModal
+        .querySelector(".modal__backdrop")
+        .addEventListener("click", closeModal);
 
       lieferantenRefresh.addEventListener("click", loadLieferanten);
       addLieferantBtn.addEventListener("click", () => {

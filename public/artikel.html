@@ -10,9 +10,7 @@
     <div class="page">
       <header class="hero">
         <h1>Artikel</h1>
-        <p class="hero__subtitle">
-          Alle Artikel pro Lieferant im Ueberblick.
-        </p>
+        <p class="hero__subtitle">Alle Artikel pro Lieferant im Ueberblick.</p>
         <div class="hero__actions">
           <button class="btn btn--primary" id="addArtikelBtn">
             Artikel hinzufuegen
@@ -26,9 +24,7 @@
       <section class="panel">
         <div class="panel__header">
           <h2>Artikelverzeichnis</h2>
-          <div id="artikelCount" style="color: var(--ink-soft)">
-            Laden...
-          </div>
+          <div id="artikelCount" style="color: var(--ink-soft)">Laden...</div>
         </div>
         <div class="list" id="artikelList"></div>
       </section>
@@ -46,7 +42,11 @@
         <form id="artikelForm" class="form">
           <div class="form__row">
             <label for="artikelLieferantInput">Lieferant</label>
-            <select id="artikelLieferantInput" name="lieferantId" required></select>
+            <select
+              id="artikelLieferantInput"
+              name="lieferantId"
+              required
+            ></select>
           </div>
           <div class="form__row">
             <label for="artikelNameInput">Name</label>
@@ -54,19 +54,41 @@
           </div>
           <div class="form__row">
             <label for="artikelBeschreibungInput">Beschreibung</label>
-            <input id="artikelBeschreibungInput" name="beschreibung" type="text" />
+            <input
+              id="artikelBeschreibungInput"
+              name="beschreibung"
+              type="text"
+            />
           </div>
           <div class="form__row">
             <label for="artikelPreisInput">Preis</label>
-            <input id="artikelPreisInput" name="preis" type="number" step="0.01" min="0" required />
+            <input
+              id="artikelPreisInput"
+              name="preis"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+            />
           </div>
           <div class="form__row">
             <label for="artikelLagerInput">Lagerbestand</label>
-            <input id="artikelLagerInput" name="lagerbestand" type="number" min="0" required />
+            <input
+              id="artikelLagerInput"
+              name="lagerbestand"
+              type="number"
+              min="0"
+              required
+            />
           </div>
           <div class="form__row">
             <label for="artikelMinInput">Mindestbestand</label>
-            <input id="artikelMinInput" name="minBestand" type="number" min="0" />
+            <input
+              id="artikelMinInput"
+              name="minBestand"
+              type="number"
+              min="0"
+            />
           </div>
           <div class="form__actions">
             <button class="btn btn--primary" type="submit">Speichern</button>
@@ -100,9 +122,13 @@
       const artikelModalTitle = document.getElementById("artikelModalTitle");
       const artikelForm = document.getElementById("artikelForm");
       const artikelMessage = document.getElementById("artikelMessage");
-      const artikelLieferantInput = document.getElementById("artikelLieferantInput");
+      const artikelLieferantInput = document.getElementById(
+        "artikelLieferantInput",
+      );
       const artikelNameInput = document.getElementById("artikelNameInput");
-      const artikelBeschreibungInput = document.getElementById("artikelBeschreibungInput");
+      const artikelBeschreibungInput = document.getElementById(
+        "artikelBeschreibungInput",
+      );
       const artikelPreisInput = document.getElementById("artikelPreisInput");
       const artikelLagerInput = document.getElementById("artikelLagerInput");
       const artikelMinInput = document.getElementById("artikelMinInput");
@@ -323,8 +349,14 @@
           minBestand: Number(artikelMinInput.value || 0),
         };
 
-        if (!payload.lieferantId || !payload.name || !Number.isFinite(payload.preis) || !Number.isFinite(payload.lagerbestand)) {
-          artikelMessage.textContent = "Lieferant, Name, Preis und Lagerbestand sind erforderlich.";
+        if (
+          !payload.lieferantId ||
+          !payload.name ||
+          !Number.isFinite(payload.preis) ||
+          !Number.isFinite(payload.lagerbestand)
+        ) {
+          artikelMessage.textContent =
+            "Lieferant, Name, Preis und Lagerbestand sind erforderlich.";
           return;
         }
 
@@ -367,10 +399,9 @@
         }
 
         try {
-          const response = await fetch(
-            `/api/artikel/${currentArtikelId}`,
-            { method: "DELETE" },
-          );
+          const response = await fetch(`/api/artikel/${currentArtikelId}`, {
+            method: "DELETE",
+          });
 
           if (!response.ok) {
             const errorText = await response.text();
@@ -386,10 +417,9 @@
         }
       });
       artikelModalClose.addEventListener("click", closeArtikelModal);
-      artikelModal.querySelector(".modal__backdrop").addEventListener(
-        "click",
-        closeArtikelModal,
-      );
+      artikelModal
+        .querySelector(".modal__backdrop")
+        .addEventListener("click", closeArtikelModal);
       loadArtikel();
     </script>
   </body>

@@ -153,7 +153,11 @@
         return date.toLocaleDateString("de-DE");
       };
 
-      const renderLetzteBestellungen = (bestellungen, artikelMap, lieferantMap) => {
+      const renderLetzteBestellungen = (
+        bestellungen,
+        artikelMap,
+        lieferantMap,
+      ) => {
         letzteBestellungenList.innerHTML = "";
         if (!bestellungen.length) {
           const emptyRow = document.createElement("div");
@@ -174,14 +178,16 @@
             ? bestellung.positionen[0]
             : null;
           const artikelName = erstePosition
-            ? artikelMap[erstePosition.artikelId] || `Artikel #${erstePosition.artikelId}`
+            ? artikelMap[erstePosition.artikelId] ||
+              `Artikel #${erstePosition.artikelId}`
             : `Bestellung #${bestellung.id}`;
           title.textContent = artikelName;
 
           const meta = document.createElement("div");
           meta.className = "list__meta";
           const lieferantName = erstePosition
-            ? lieferantMap[erstePosition.lieferantId] || `Lieferant #${erstePosition.lieferantId}`
+            ? lieferantMap[erstePosition.lieferantId] ||
+              `Lieferant #${erstePosition.lieferantId}`
             : "";
           const datum = formatDate(bestellung.bestellDatum);
           meta.textContent = lieferantName
@@ -248,11 +254,12 @@
 
       const loadLetzteBestellungen = async () => {
         try {
-          const [bestellungenRes, artikelRes, lieferantenRes] = await Promise.all([
-            fetch("/api/bestellungen"),
-            fetch("/api/artikel"),
-            fetch("/api/lieferanten"),
-          ]);
+          const [bestellungenRes, artikelRes, lieferantenRes] =
+            await Promise.all([
+              fetch("/api/bestellungen"),
+              fetch("/api/artikel"),
+              fetch("/api/lieferanten"),
+            ]);
 
           const bestellungen = await bestellungenRes.json();
           const artikel = await artikelRes.json();

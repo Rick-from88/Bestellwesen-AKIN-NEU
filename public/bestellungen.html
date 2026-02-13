@@ -234,24 +234,29 @@
         }
 
         // determine editability: not editable when delivered or cancelled
-        const editable = !(bestellung.status === 'geliefert' || bestellung.status === 'storniert');
+        const editable = !(
+          bestellung.status === "geliefert" || bestellung.status === "storniert"
+        );
         // enable/disable add button
         editAddPosition.disabled = !editable;
         // show/hide delete button
-        editDelete.style.display = editable ? '' : 'none';
+        editDelete.style.display = editable ? "" : "none";
 
         // disable remove buttons and inputs when not editable
         if (!editable) {
-          Array.from(editPositionen.querySelectorAll('select, input, button')).forEach(el => {
-            if (el.tagName.toLowerCase() === 'button') {
-              el.setAttribute('disabled', 'true');
+          Array.from(
+            editPositionen.querySelectorAll("select, input, button"),
+          ).forEach((el) => {
+            if (el.tagName.toLowerCase() === "button") {
+              el.setAttribute("disabled", "true");
             } else {
-              el.setAttribute('disabled', 'true');
+              el.setAttribute("disabled", "true");
             }
           });
-          editMessage.textContent = 'Diese Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden. Status kann jedoch geaendert werden.';
+          editMessage.textContent =
+            "Diese Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden. Status kann jedoch geaendert werden.";
         } else {
-          editMessage.textContent = '';
+          editMessage.textContent = "";
         }
 
         bestellungModal.classList.add("is-open");
@@ -322,9 +327,9 @@
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
           headerRow.appendChild(leftDiv);
-          const statusEl = document.createElement('div');
+          const statusEl = document.createElement("div");
           statusEl.className = statusClass(bestellung.status);
-          statusEl.textContent = (bestellung.status || 'offen').toUpperCase();
+          statusEl.textContent = (bestellung.status || "offen").toUpperCase();
           headerRow.appendChild(statusEl);
           group.appendChild(headerRow);
 
@@ -446,16 +451,25 @@
         // if positions are not editable, only change status via status endpoint
         if (editAddPosition.disabled) {
           try {
-            const res = await fetch(`/api/bestellungen/${currentBestellungId}/status`, {
-              method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: editStatus.value })
-            });
+            const res = await fetch(
+              `/api/bestellungen/${currentBestellungId}/status`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: editStatus.value }),
+              },
+            );
             if (!res.ok) {
               const txt = await res.text();
               editMessage.textContent = `Fehler: ${txt}`;
               return;
             }
-            closeModal(); loadBestellungen();
-          } catch (e) { console.error(e); editMessage.textContent = 'Speichern fehlgeschlagen.' }
+            closeModal();
+            loadBestellungen();
+          } catch (e) {
+            console.error(e);
+            editMessage.textContent = "Speichern fehlgeschlagen.";
+          }
           return;
         }
 
