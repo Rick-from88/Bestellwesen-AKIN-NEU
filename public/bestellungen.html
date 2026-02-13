@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bestellungen</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <h1>Bestellungen</h1>
+        <p class="hero__subtitle">
+          Alle Bestellungen und deren Status im Ueberblick.
+        </p>
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="/bestellung-neu"
+            >Neue Bestellung</a
+          >
+          <button class="btn btn--ghost" id="bestellungenRefresh">
+            Aktualisieren
+          </button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Alle Bestellungen</h2>
+          <div id="bestellungenCount" style="color: var(--ink-soft)">
+            Laden...
+          </div>
+        </div>
+        <div class="list" id="bestellungenList"></div>
+      </section>
+    </div>
+
+    <nav class="navbar">
+      <a class="navbar__item" href="/uebersicht">Dashboard</a>
+      <a class="navbar__item is-active" href="/bestellungen">Bestellungen</a>
+      <a class="navbar__item" href="/lieferanten">Lieferanten</a>
+      <a class="navbar__item" href="#">Artikel</a>
+      <a class="navbar__item" href="#">Einstellungen</a>
+    </nav>
+
+    <script>
+      const bestellungenList = document.getElementById("bestellungenList");
+      const bestellungenCount = document.getElementById("bestellungenCount");
+      const bestellungenRefresh = document.getElementById(
+        "bestellungenRefresh",
+      );
+
+      const statusClass = (status) => {
+        if (status === "geliefert") {
+          return "pill pill--mint";
+        }
+        if (status === "storniert") {
+          return "pill pill--rose";
+        }
+        return "pill pill--amber";
+      };
+
+      const formatDate = (value) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return "-";
+        }
+        return date.toLocaleDateString("de-DE");
+      };
+
+      const renderBestellungen = (bestellungen, artikelMap, lieferantMap) => {
+        bestellungenList.innerHTML = "";
+        bestellungenCount.textContent = `${bestellungen.length} Bestellungen`;
+
+        if (!bestellungen.length) {
+          const emptyRow = document.createElement("div");
+          emptyRow.className = "list__row";
+          emptyRow.textContent = "Keine Bestellungen vorhanden.";
+          bestellungenList.appendChild(emptyRow);
+          return;
+        }
+
+        bestellungen.forEach((bestellung) => {
+          const row = document.createElement("div");
+          row.className = "list__row";
+
+          const leftDiv = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "list__title";
+          const artikelName = artikelMap[bestellung.artikelId] ||
+            `Artikel #${bestellung.artikelId}`;
+          title.textContent = artikelName;
+
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          const lieferantName = lieferantMap[bestellung.lieferantId] ||
+            `Lieferant #${bestellung.lieferantId}`;
+          const datum = formatDate(bestellung.bestellDatum);
+          meta.textContent =
+            `${lieferantName} | Menge: ${bestellung.menge} | ${datum}`;
+
+          leftDiv.appendChild(title);
+          leftDiv.appendChild(meta);
+
+          const status = document.createElement("span");
+          status.className = statusClass(bestellung.status);
+          status.textContent = bestellung.status;
+
+          row.appendChild(leftDiv);
+          row.appendChild(status);
+          bestellungenList.appendChild(row);
+        });
+      };
+
+      const loadBestellungen = async () => {
+        try {
+          const [bestellungenRes, artikelRes, lieferantenRes] = await Promise.all([
+            fetch("/api/bestellungen"),
+            fetch("/api/artikel"),
+            fetch("/api/lieferanten"),
+          ]);
+
+          const bestellungen = await bestellungenRes.json();
+          const artikel = await artikelRes.json();
+          const lieferanten = await lieferantenRes.json();
+
+          const artikelMap = artikel.reduce((acc, item) => {
+            acc[item.id] = item.name;
+            return acc;
+          }, {});
+
+          const lieferantMap = lieferanten.reduce((acc, item) => {
+            acc[item.id] = item.name;
+            return acc;
+          }, {});
+
+          renderBestellungen(bestellungen, artikelMap, lieferantMap);
+        } catch (error) {
+          console.error("Fehler beim Laden der Bestellungen:", error);
+          bestellungenCount.textContent = "Fehler beim Laden";
+        }
+      };
+
+      bestellungenRefresh.addEventListener("click", loadBestellungen);
+      loadBestellungen();
+    </script>
+  </body>
+</html>
