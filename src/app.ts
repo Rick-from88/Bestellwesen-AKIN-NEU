@@ -16,7 +16,7 @@ import {
   listLieferanten,
   updateLieferant,
 } from "./repositories/lieferanten";
-import { createArtikel, listArtikel } from "./repositories/artikel";
+import { createArtikel, deleteArtikel, listArtikel, updateArtikel } from "./repositories/artikel";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -376,6 +376,7 @@ app.get("/api/artikel", async (req, res) => {
 });
 
 app.post("/api/artikel", async (req, res) => {
+  const lieferantId = parseInteger(req.body.lieferantId);
   const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
   const beschreibung =
     typeof req.body.beschreibung === "string"
@@ -386,6 +387,7 @@ app.post("/api/artikel", async (req, res) => {
   const minBestand = parseInteger(req.body.minBestand);
 
   if (
+    !lieferantId ||
     !name ||
     preis === null ||
     preis < 0 ||
@@ -394,7 +396,7 @@ app.post("/api/artikel", async (req, res) => {
   ) {
     res
       .status(400)
-      .json({ error: "name, preis und lagerbestand sind Pflichtfelder." });
+      .json({ error: "lieferant, name, preis und lagerbestand sind Pflichtfelder." });
     return;
   }
 
@@ -405,6 +407,7 @@ app.post("/api/artikel", async (req, res) => {
 
   try {
     const artikel = await createArtikel({
+      lieferantId,
       name,
       beschreibung,
       preis,
@@ -415,6 +418,78 @@ app.post("/api/artikel", async (req, res) => {
   } catch (error) {
     console.error("Fehler beim Erstellen des Artikels", error);
     res.status(500).json({ error: "Artikel konnte nicht erstellt werden." });
+  }
+});
+
+app.put("/api/artikel/:id", async (req, res) => {
+  const artikelId = parseInteger(req.params.id);
+  const lieferantId = parseInteger(req.body.lieferantId);
+  const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+  const beschreibung =
+    typeof req.body.beschreibung === "string"
+      ? req.body.beschreibung.trim()
+      : undefined;
+  const preis = parseNumber(req.body.preis);
+  const lagerbestand = parseInteger(req.body.lagerbestand);
+  const minBestand = parseInteger(req.body.minBestand) ?? 0;
+
+  if (!artikelId) {
+    res.status(400).json({ error: "Ungueltige Artikel-ID." });
+    return;
+  }
+
+  if (!lieferantId || !name || preis === null || lagerbestand === null) {
+    res.status(400).json({ error: "Lieferant, Name, Preis und Lagerbestand sind Pflichtfelder." });
+    return;
+  }
+
+  try {
+    const artikel = await updateArtikel(artikelId, {
+      lieferantId,
+      name,
+      beschreibung,
+      preis,
+      lagerbestand,
+      minBestand,
+    });
+
+    if (!artikel) {
+      res.status(404).json({ error: "Artikel nicht gefunden." });
+      return;
+    }
+
+    res.json(artikel);
+  } catch (error) {
+    console.error("Fehler beim Aktualisieren des Artikels", error);
+    res.status(500).json({ error: "Artikel konnte nicht aktualisiert werden." });
+  }
+});
+
+app.delete("/api/artikel/:id", async (req, res) => {
+  const artikelId = parseInteger(req.params.id);
+
+  if (!artikelId) {
+    res.status(400).json({ error: "Ungueltige Artikel-ID." });
+    return;
+  }
+
+  try {
+    const deleted = await deleteArtikel(artikelId);
+    if (!deleted) {
+      res.status(404).json({ error: "Artikel nicht gefunden." });
+      return;
+    }
+
+    res.status(204).send();
+  } catch (error) {
+    const err = error as { code?: string };
+    if (err && err.code === "23503") {
+      res.status(409).json({ error: "Artikel ist noch referenziert." });
+      return;
+    }
+
+    console.error("Fehler beim Loeschen des Artikels", error);
+    res.status(500).json({ error: "Artikel konnte nicht geloescht werden." });
   }
 });
 
@@ -434,6 +509,10 @@ app.get("/lieferanten", (req, res) => {
 });
 app.get("/lieferanten/:id", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "lieferant-detail.html"));
+});
+
+app.get("/artikel", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "artikel.html"));
 });
 
 app.get("/", (req, res) => {

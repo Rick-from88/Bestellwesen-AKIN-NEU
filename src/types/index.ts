@@ -13,6 +13,7 @@ export interface BestellungPosition {
 
 export interface Artikel {
   id: number;
+  lieferantId: number;
   name: string;
   beschreibung: string;
   preis: number;

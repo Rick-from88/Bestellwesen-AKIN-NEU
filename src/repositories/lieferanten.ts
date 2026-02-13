@@ -36,15 +36,14 @@ export const listLieferantArtikel = async (
 ): Promise<Artikel[]> => {
   const result = await query(
     `select a.id,
+                a.lieferant_id as "lieferantId",
                 a.name,
                 a.beschreibung,
                 a.preis,
                 a.lagerbestand,
                 a.min_bestand as "minBestand"
-           from bestellungen b
-           join artikel a on a.id = b.artikel_id
-          where b.lieferant_id = $1
-          group by a.id, a.name, a.beschreibung, a.preis, a.lagerbestand, a.min_bestand
+           from artikel a
+          where a.lieferant_id = $1
           order by a.name`,
     [lieferantId],
   );

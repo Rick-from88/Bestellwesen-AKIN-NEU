@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Artikel</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <h1>Artikel</h1>
+        <p class="hero__subtitle">
+          Alle Artikel pro Lieferant im Ueberblick.
+        </p>
+        <div class="hero__actions">
+          <button class="btn btn--primary" id="addArtikelBtn">
+            Artikel hinzufuegen
+          </button>
+          <button class="btn btn--ghost" id="artikelRefresh">
+            Aktualisieren
+          </button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Artikelverzeichnis</h2>
+          <div id="artikelCount" style="color: var(--ink-soft)">
+            Laden...
+          </div>
+        </div>
+        <div class="list" id="artikelList"></div>
+      </section>
+    </div>
+
+    <div class="modal" id="artikelModal" aria-hidden="true">
+      <div class="modal__backdrop"></div>
+      <div class="modal__content" role="dialog" aria-modal="true">
+        <div class="modal__header">
+          <h2 id="artikelModalTitle">Artikel bearbeiten</h2>
+          <button class="btn btn--link" type="button" id="artikelModalClose">
+            Schliessen
+          </button>
+        </div>
+        <form id="artikelForm" class="form">
+          <div class="form__row">
+            <label for="artikelLieferantInput">Lieferant</label>
+            <select id="artikelLieferantInput" name="lieferantId" required></select>
+          </div>
+          <div class="form__row">
+            <label for="artikelNameInput">Name</label>
+            <input id="artikelNameInput" name="name" type="text" required />
+          </div>
+          <div class="form__row">
+            <label for="artikelBeschreibungInput">Beschreibung</label>
+            <input id="artikelBeschreibungInput" name="beschreibung" type="text" />
+          </div>
+          <div class="form__row">
+            <label for="artikelPreisInput">Preis</label>
+            <input id="artikelPreisInput" name="preis" type="number" step="0.01" min="0" required />
+          </div>
+          <div class="form__row">
+            <label for="artikelLagerInput">Lagerbestand</label>
+            <input id="artikelLagerInput" name="lagerbestand" type="number" min="0" required />
+          </div>
+          <div class="form__row">
+            <label for="artikelMinInput">Mindestbestand</label>
+            <input id="artikelMinInput" name="minBestand" type="number" min="0" />
+          </div>
+          <div class="form__actions">
+            <button class="btn btn--primary" type="submit">Speichern</button>
+            <button class="btn btn--ghost" type="button" id="artikelCancel">
+              Abbrechen
+            </button>
+            <button class="btn btn--danger" type="button" id="artikelDelete">
+              Loeschen
+            </button>
+          </div>
+          <div id="artikelMessage" class="form__message" role="status"></div>
+        </form>
+      </div>
+    </div>
+
+    <nav class="navbar">
+      <a class="navbar__item" href="/uebersicht">Dashboard</a>
+      <a class="navbar__item" href="/bestellungen">Bestellungen</a>
+      <a class="navbar__item" href="/lieferanten">Lieferanten</a>
+      <a class="navbar__item is-active" href="/artikel">Artikel</a>
+      <a class="navbar__item" href="#">Einstellungen</a>
+    </nav>
+
+    <script>
+      const artikelList = document.getElementById("artikelList");
+      const artikelCount = document.getElementById("artikelCount");
+      const artikelRefresh = document.getElementById("artikelRefresh");
+      const addArtikelBtn = document.getElementById("addArtikelBtn");
+      const artikelModal = document.getElementById("artikelModal");
+      const artikelModalClose = document.getElementById("artikelModalClose");
+      const artikelModalTitle = document.getElementById("artikelModalTitle");
+      const artikelForm = document.getElementById("artikelForm");
+      const artikelMessage = document.getElementById("artikelMessage");
+      const artikelLieferantInput = document.getElementById("artikelLieferantInput");
+      const artikelNameInput = document.getElementById("artikelNameInput");
+      const artikelBeschreibungInput = document.getElementById("artikelBeschreibungInput");
+      const artikelPreisInput = document.getElementById("artikelPreisInput");
+      const artikelLagerInput = document.getElementById("artikelLagerInput");
+      const artikelMinInput = document.getElementById("artikelMinInput");
+      const artikelCancel = document.getElementById("artikelCancel");
+      const artikelDelete = document.getElementById("artikelDelete");
+
+      let currentArtikelId = null;
+      let lieferantenData = [];
+      let lastOpenedLieferantId = null;
+
+      const refreshLieferantSelect = (selectedId) => {
+        artikelLieferantInput.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Lieferant waehlen";
+        artikelLieferantInput.appendChild(placeholder);
+
+        lieferantenData.forEach((lieferant) => {
+          const option = document.createElement("option");
+          option.value = String(lieferant.id);
+          option.textContent = lieferant.name;
+          if (selectedId && lieferant.id === selectedId) {
+            option.selected = true;
+          }
+          artikelLieferantInput.appendChild(option);
+        });
+      };
+
+      const openArtikelModal = (artikel = null) => {
+        currentArtikelId = artikel ? artikel.id : null;
+        artikelMessage.textContent = "";
+        artikelNameInput.value = artikel?.name || "";
+        artikelBeschreibungInput.value = artikel?.beschreibung || "";
+        artikelPreisInput.value = artikel?.preis ?? "";
+        artikelLagerInput.value = artikel?.lagerbestand ?? "";
+        artikelMinInput.value = artikel?.minBestand ?? "";
+        artikelModalTitle.textContent = artikel
+          ? "Artikel bearbeiten"
+          : "Artikel hinzufuegen";
+        artikelDelete.style.display = artikel ? "inline-flex" : "none";
+        const defaultLieferantId =
+          artikel?.lieferantId ??
+          lastOpenedLieferantId ??
+          (lieferantenData[0] ? lieferantenData[0].id : null);
+        refreshLieferantSelect(defaultLieferantId);
+        artikelModal.classList.add("is-open");
+        artikelModal.setAttribute("aria-hidden", "false");
+      };
+
+      const closeArtikelModal = () => {
+        artikelModal.classList.remove("is-open");
+        artikelModal.setAttribute("aria-hidden", "true");
+        currentArtikelId = null;
+      };
+
+      const normalizeList = (data) => {
+        if (Array.isArray(data)) {
+          return data;
+        }
+        if (data && Array.isArray(data.value)) {
+          return data.value;
+        }
+        return [];
+      };
+
+      const formatCurrency = (value) => {
+        const amount = Number(value);
+        if (!Number.isFinite(amount)) {
+          return "-";
+        }
+        return new Intl.NumberFormat("de-DE", {
+          style: "currency",
+          currency: "EUR",
+        }).format(amount);
+      };
+
+      const renderArtikel = (lieferanten, artikelByLieferant) => {
+        artikelList.innerHTML = "";
+
+        const totalArtikel = Object.values(artikelByLieferant).reduce(
+          (sum, items) => sum + items.length,
+          0,
+        );
+        artikelCount.textContent = `${totalArtikel} Artikel`;
+
+        if (!lieferanten.length) {
+          const emptyRow = document.createElement("div");
+          emptyRow.className = "list__row";
+          emptyRow.textContent = "Keine Lieferanten vorhanden.";
+          artikelList.appendChild(emptyRow);
+          return;
+        }
+
+        lieferanten.forEach((lieferant) => {
+          const group = document.createElement("div");
+          group.className = "supplier-group";
+
+          const headerRow = document.createElement("div");
+          headerRow.className = "list__row list__row--clickable";
+
+          const leftDiv = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = lieferant.name;
+
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          meta.textContent = lieferant.kontaktPerson || "Keine Kontaktperson";
+
+          leftDiv.appendChild(title);
+          leftDiv.appendChild(meta);
+
+          const rightDiv = document.createElement("div");
+          rightDiv.style.textAlign = "right";
+          const countMeta = document.createElement("div");
+          countMeta.className = "list__meta";
+          const items = artikelByLieferant[lieferant.id] || [];
+          countMeta.textContent = `${items.length} Artikel`;
+          rightDiv.appendChild(countMeta);
+
+          headerRow.appendChild(leftDiv);
+          headerRow.appendChild(rightDiv);
+          headerRow.addEventListener("click", () => {
+            lastOpenedLieferantId = lieferant.id;
+            group.classList.toggle("is-open");
+          });
+          group.appendChild(headerRow);
+
+          const itemsContainer = document.createElement("div");
+          itemsContainer.className = "supplier-items";
+
+          if (!items.length) {
+            const emptyRow = document.createElement("div");
+            emptyRow.className = "list__row list__row--sub";
+            emptyRow.textContent = "Keine Artikel fuer diesen Lieferanten.";
+            itemsContainer.appendChild(emptyRow);
+          } else {
+            items.forEach((artikel) => {
+              const row = document.createElement("div");
+              row.className = "list__row list__row--sub";
+              row.addEventListener("dblclick", () => {
+                openArtikelModal({
+                  ...artikel,
+                  lieferantId: artikel.lieferantId ?? lieferant.id,
+                });
+              });
+
+              const itemLeft = document.createElement("div");
+              const itemTitle = document.createElement("div");
+              itemTitle.className = "list__title";
+              itemTitle.textContent = artikel.name;
+
+              const itemMeta = document.createElement("div");
+              itemMeta.className = "list__meta";
+              itemMeta.textContent = `Preis: ${formatCurrency(artikel.preis)} | Lager: ${artikel.lagerbestand}`;
+
+              itemLeft.appendChild(itemTitle);
+              itemLeft.appendChild(itemMeta);
+
+              const itemRight = document.createElement("div");
+              itemRight.style.textAlign = "right";
+              const minMeta = document.createElement("div");
+              minMeta.className = "list__meta";
+              minMeta.textContent = `Min: ${artikel.minBestand}`;
+              itemRight.appendChild(minMeta);
+
+              row.appendChild(itemLeft);
+              row.appendChild(itemRight);
+              itemsContainer.appendChild(row);
+            });
+          }
+
+          group.appendChild(itemsContainer);
+          artikelList.appendChild(group);
+        });
+      };
+
+      const loadArtikel = async () => {
+        try {
+          const response = await fetch("/api/lieferanten");
+          const lieferantenResponse = await response.json();
+          const lieferanten = normalizeList(lieferantenResponse);
+          lieferantenData = lieferanten;
+
+          const artikelRequests = lieferanten.map((lieferant) =>
+            fetch(`/api/lieferanten/${lieferant.id}/artikel`).then((res) =>
+              res.json(),
+            ),
+          );
+
+          const artikelResults = await Promise.all(artikelRequests);
+          const artikelByLieferant = {};
+          artikelResults.forEach((items, index) => {
+            artikelByLieferant[lieferanten[index].id] = normalizeList(items);
+          });
+
+          renderArtikel(lieferanten, artikelByLieferant);
+        } catch (error) {
+          console.error("Fehler beim Laden der Artikel:", error);
+          artikelCount.textContent = "Fehler beim Laden";
+        }
+      };
+
+      artikelRefresh.addEventListener("click", loadArtikel);
+      addArtikelBtn.addEventListener("click", () => {
+        openArtikelModal();
+      });
+      artikelForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        artikelMessage.textContent = "";
+
+        const payload = {
+          lieferantId: Number(artikelLieferantInput.value),
+          name: artikelNameInput.value.trim(),
+          beschreibung: artikelBeschreibungInput.value.trim(),
+          preis: Number(artikelPreisInput.value),
+          lagerbestand: Number(artikelLagerInput.value),
+          minBestand: Number(artikelMinInput.value || 0),
+        };
+
+        if (!payload.lieferantId || !payload.name || !Number.isFinite(payload.preis) || !Number.isFinite(payload.lagerbestand)) {
+          artikelMessage.textContent = "Lieferant, Name, Preis und Lagerbestand sind erforderlich.";
+          return;
+        }
+
+        try {
+          const isCreate = !currentArtikelId;
+          const response = await fetch(
+            isCreate ? "/api/artikel" : `/api/artikel/${currentArtikelId}`,
+            {
+              method: isCreate ? "POST" : "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            },
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            artikelMessage.textContent = `Fehler: ${errorText}`;
+            return;
+          }
+
+          closeArtikelModal();
+          loadArtikel();
+        } catch (error) {
+          console.error("Fehler beim Speichern:", error);
+          artikelMessage.textContent = "Speichern fehlgeschlagen.";
+        }
+      });
+
+      artikelCancel.addEventListener("click", closeArtikelModal);
+      artikelDelete.addEventListener("click", async () => {
+        if (!currentArtikelId) {
+          return;
+        }
+
+        const confirmed = window.confirm(
+          "Soll dieser Artikel wirklich geloescht werden?",
+        );
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `/api/artikel/${currentArtikelId}`,
+            { method: "DELETE" },
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            artikelMessage.textContent = `Fehler: ${errorText}`;
+            return;
+          }
+
+          closeArtikelModal();
+          loadArtikel();
+        } catch (error) {
+          console.error("Fehler beim Loeschen:", error);
+          artikelMessage.textContent = "Loeschen fehlgeschlagen.";
+        }
+      });
+      artikelModalClose.addEventListener("click", closeArtikelModal);
+      artikelModal.querySelector(".modal__backdrop").addEventListener(
+        "click",
+        closeArtikelModal,
+      );
+      loadArtikel();
+    </script>
+  </body>
+</html>

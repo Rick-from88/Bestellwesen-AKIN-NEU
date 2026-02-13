@@ -13,6 +13,7 @@ create table if not exists lieferanten (
 
 create table if not exists artikel (
     id serial primary key,
+    lieferant_id integer references lieferanten(id) on delete restrict,
     name text not null,
     beschreibung text,
     preis numeric(10, 2) not null,

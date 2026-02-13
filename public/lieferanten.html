@@ -94,7 +94,7 @@
       <a class="navbar__item" href="/uebersicht">Dashboard</a>
       <a class="navbar__item" href="/bestellungen">Bestellungen</a>
       <a class="navbar__item is-active" href="/lieferanten">Lieferanten</a>
-      <a class="navbar__item" href="#">Artikel</a>
+      <a class="navbar__item" href="/artikel">Artikel</a>
       <a class="navbar__item" href="#">Einstellungen</a>
     </nav>
 
@@ -104,6 +104,7 @@
       const lieferantenRefresh = document.getElementById("lieferantenRefresh");
       const addLieferantBtn = document.getElementById("addLieferantBtn");
       const lieferantModal = document.getElementById("lieferantModal");
+      const lieferantModalTitle = document.getElementById("lieferantModalTitle");
       const lieferantModalClose = document.getElementById("lieferantModalClose");
       const lieferantForm = document.getElementById("lieferantForm");
       const lieferantMessage = document.getElementById("lieferantMessage");
@@ -120,17 +121,21 @@
 
       let currentLieferantId = null;
 
-      const openModal = (lieferant) => {
-        currentLieferantId = lieferant.id;
+      const openModal = (lieferant = null) => {
+        currentLieferantId = lieferant ? lieferant.id : null;
         lieferantMessage.textContent = "";
-        lieferantNameInput.value = lieferant.name || "";
-        lieferantKontaktInput.value = lieferant.kontaktPerson || "";
-        lieferantEmailInput.value = lieferant.email || "";
-        lieferantTelefonInput.value = lieferant.telefon || "";
-        lieferantStrasseInput.value = lieferant.strasse || "";
-        lieferantPlzInput.value = lieferant.plz || "";
-        lieferantStadtInput.value = lieferant.stadt || "";
-        lieferantLandInput.value = lieferant.land || "";
+        lieferantNameInput.value = lieferant?.name || "";
+        lieferantKontaktInput.value = lieferant?.kontaktPerson || "";
+        lieferantEmailInput.value = lieferant?.email || "";
+        lieferantTelefonInput.value = lieferant?.telefon || "";
+        lieferantStrasseInput.value = lieferant?.strasse || "";
+        lieferantPlzInput.value = lieferant?.plz || "";
+        lieferantStadtInput.value = lieferant?.stadt || "";
+        lieferantLandInput.value = lieferant?.land || "";
+        lieferantModalTitle.textContent = lieferant
+          ? "Lieferant bearbeiten"
+          : "Lieferant hinzufuegen";
+        lieferantDelete.style.display = lieferant ? "inline-flex" : "none";
         lieferantModal.classList.add("is-open");
         lieferantModal.setAttribute("aria-hidden", "false");
       };
@@ -269,20 +274,20 @@
         event.preventDefault();
         lieferantMessage.textContent = "";
 
-        if (!currentLieferantId) {
-          lieferantMessage.textContent = "Kein Lieferant ausgewaehlt.";
-          return;
-        }
+        const optionalValue = (value) => {
+          const trimmed = value.trim();
+          return trimmed ? trimmed : undefined;
+        };
 
         const payload = {
           name: lieferantNameInput.value.trim(),
-          kontaktPerson: lieferantKontaktInput.value.trim(),
-          email: lieferantEmailInput.value.trim(),
-          telefon: lieferantTelefonInput.value.trim(),
-          strasse: lieferantStrasseInput.value.trim(),
-          plz: lieferantPlzInput.value.trim(),
-          stadt: lieferantStadtInput.value.trim(),
-          land: lieferantLandInput.value.trim(),
+          kontaktPerson: optionalValue(lieferantKontaktInput.value),
+          email: optionalValue(lieferantEmailInput.value),
+          telefon: optionalValue(lieferantTelefonInput.value),
+          strasse: optionalValue(lieferantStrasseInput.value),
+          plz: optionalValue(lieferantPlzInput.value),
+          stadt: optionalValue(lieferantStadtInput.value),
+          land: optionalValue(lieferantLandInput.value),
         };
 
         if (!payload.name) {
@@ -291,10 +296,11 @@
         }
 
         try {
+          const isCreate = !currentLieferantId;
           const response = await fetch(
-            `/api/lieferanten/${currentLieferantId}`,
+            isCreate ? "/api/lieferanten" : `/api/lieferanten/${currentLieferantId}`,
             {
-              method: "PUT",
+              method: isCreate ? "POST" : "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload),
             },
@@ -355,7 +361,7 @@
 
       lieferantenRefresh.addEventListener("click", loadLieferanten);
       addLieferantBtn.addEventListener("click", () => {
-        alert("Lieferant hinzufuegen - Feature kommt bald!");
+        openModal();
       });
 
       loadLieferanten();

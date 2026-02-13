@@ -205,6 +205,20 @@ body::before {
   gap: 8px;
 }
 
+.supplier-group {
+  display: grid;
+  gap: 8px;
+}
+
+.supplier-items {
+  display: none;
+  gap: 8px;
+}
+
+.supplier-group.is-open .supplier-items {
+  display: grid;
+}
+
 .order-items {
   display: none;
   gap: 8px;
