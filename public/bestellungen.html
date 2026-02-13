@@ -80,23 +80,21 @@
         }
 
         bestellungen.forEach((bestellung) => {
-          const row = document.createElement("div");
-          row.className = "list__row";
+          const group = document.createElement("div");
+          group.className = "order-group";
+
+          const headerRow = document.createElement("div");
+          headerRow.className = "list__row";
 
           const leftDiv = document.createElement("div");
           const title = document.createElement("div");
           title.className = "list__title";
-          const artikelName = artikelMap[bestellung.artikelId] ||
-            `Artikel #${bestellung.artikelId}`;
-          title.textContent = artikelName;
+          title.textContent = `Bestellung #${bestellung.id}`;
 
           const meta = document.createElement("div");
           meta.className = "list__meta";
-          const lieferantName = lieferantMap[bestellung.lieferantId] ||
-            `Lieferant #${bestellung.lieferantId}`;
           const datum = formatDate(bestellung.bestellDatum);
-          meta.textContent =
-            `${lieferantName} | Menge: ${bestellung.menge} | ${datum}`;
+          meta.textContent = `Datum: ${datum}`;
 
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
@@ -105,9 +103,46 @@
           status.className = statusClass(bestellung.status);
           status.textContent = bestellung.status;
 
-          row.appendChild(leftDiv);
-          row.appendChild(status);
-          bestellungenList.appendChild(row);
+          headerRow.appendChild(leftDiv);
+          headerRow.appendChild(status);
+          group.appendChild(headerRow);
+
+          const positionen = Array.isArray(bestellung.positionen)
+            ? bestellung.positionen
+            : [];
+
+          if (!positionen.length) {
+            const emptyRow = document.createElement("div");
+            emptyRow.className = "list__row list__row--sub";
+            emptyRow.textContent = "Keine Positionen vorhanden.";
+            group.appendChild(emptyRow);
+          } else {
+            positionen.forEach((position) => {
+              const row = document.createElement("div");
+              row.className = "list__row list__row--sub";
+
+              const posLeft = document.createElement("div");
+              const posTitle = document.createElement("div");
+              posTitle.className = "list__title";
+              const artikelName = artikelMap[position.artikelId] ||
+                `Artikel #${position.artikelId}`;
+              posTitle.textContent = artikelName;
+
+              const posMeta = document.createElement("div");
+              posMeta.className = "list__meta";
+              const lieferantName = lieferantMap[position.lieferantId] ||
+                `Lieferant #${position.lieferantId}`;
+              posMeta.textContent =
+                `${lieferantName} | Menge: ${position.menge}`;
+
+              posLeft.appendChild(posTitle);
+              posLeft.appendChild(posMeta);
+              row.appendChild(posLeft);
+              group.appendChild(row);
+            });
+          }
+
+          bestellungenList.appendChild(group);
         });
       };
 

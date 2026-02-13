@@ -38,6 +38,18 @@ const parseStatus = (value: unknown): BestellungStatus | null => {
   return null;
 };
 
+type BestellungPositionBody = {
+  artikelId?: unknown;
+  lieferantId?: unknown;
+  menge?: unknown;
+};
+
+type BestellungPositionParsed = {
+  artikelId: number | null;
+  lieferantId: number | null;
+  menge: number | null;
+};
+
 app.get("/api/bestellungen", async (req, res) => {
   try {
     const bestellungen = await listBestellungen();
@@ -51,29 +63,47 @@ app.get("/api/bestellungen", async (req, res) => {
 });
 
 app.post("/api/bestellungen", async (req, res) => {
-  const artikelId = parseInteger(req.body.artikelId);
-  const lieferantId = parseInteger(req.body.lieferantId);
-  const menge = parseInteger(req.body.menge);
   const status = parseStatus(req.body.status) ?? "offen";
   const bestellDatum =
     typeof req.body.bestellDatum === "string"
       ? req.body.bestellDatum
       : undefined;
 
-  if (!artikelId || !lieferantId || !menge || menge <= 0) {
-    res
-      .status(400)
-      .json({ error: "artikelId, lieferantId und menge sind Pflichtfelder." });
+  const positionenInput: BestellungPositionBody[] = Array.isArray(
+    req.body.positionen,
+  )
+    ? req.body.positionen
+    : [];
+  const positionen = positionenInput
+    .map((position: BestellungPositionBody): BestellungPositionParsed => {
+      const artikelId = parseInteger(position?.artikelId);
+      const lieferantId = parseInteger(position?.lieferantId);
+      const menge = parseInteger(position?.menge);
+      return { artikelId, lieferantId, menge };
+    })
+    .filter(
+      (position: BestellungPositionParsed) =>
+        position.artikelId &&
+        position.lieferantId &&
+        position.menge &&
+        position.menge > 0,
+    )
+    .map((position: BestellungPositionParsed) => ({
+      artikelId: position.artikelId as number,
+      lieferantId: position.lieferantId as number,
+      menge: position.menge as number,
+    }));
+
+  if (!positionen.length || positionen.length !== positionenInput.length) {
+    res.status(400).json({ error: "Alle Positionen muessen Artikel, Lieferant und Menge enthalten." });
     return;
   }
 
   try {
     const bestellung = await createBestellung({
-      artikelId,
-      lieferantId,
-      menge,
       status,
       bestellDatum,
+      positionen,
     });
     res.status(201).json(bestellung);
   } catch (error) {

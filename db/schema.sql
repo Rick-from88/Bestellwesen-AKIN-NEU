@@ -26,5 +26,14 @@ create table if not exists bestellungen (
     bestell_datum timestamp not null default now()
 );
 
+create table if not exists bestellpositionen (
+    id serial primary key,
+    bestellung_id integer not null references bestellungen(id) on delete cascade,
+    artikel_id integer not null references artikel(id) on delete restrict,
+    lieferant_id integer not null references lieferanten(id) on delete restrict,
+    menge integer not null
+);
+
 create index if not exists idx_bestellungen_status on bestellungen(status);
 create index if not exists idx_bestellungen_bestell_datum on bestellungen(bestell_datum);
+create index if not exists idx_bestellpositionen_bestellung_id on bestellpositionen(bestellung_id);

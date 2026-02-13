@@ -16,16 +16,11 @@
             <section class="panel">
                 <form id="bestellungForm" class="form">
                     <div class="form__row">
-                        <label for="lieferantId">Lieferant</label>
-                        <select id="lieferantId" name="lieferantId" required></select>
-                    </div>
-                    <div class="form__row">
-                        <label for="artikelId">Artikel</label>
-                        <select id="artikelId" name="artikelId" required></select>
-                    </div>
-                    <div class="form__row">
-                        <label for="menge">Menge</label>
-                        <input id="menge" name="menge" type="number" min="1" step="1" required />
+                        <label>Positionen</label>
+                        <div id="positionenContainer" class="position-list"></div>
+                        <button class="btn btn--ghost" type="button" id="addPositionBtn">
+                            Position hinzufuegen
+                        </button>
                     </div>
                     <div class="form__row">
                         <label for="bestellDatum">Bestelldatum</label>
@@ -50,21 +45,23 @@
         </nav>
 
         <script>
-            const lieferantSelect = document.getElementById('lieferantId');
-            const artikelSelect = document.getElementById('artikelId');
             const form = document.getElementById('bestellungForm');
             const message = document.getElementById('formMessage');
             const bestellDatumInput = document.getElementById('bestellDatum');
+            const positionenContainer = document.getElementById('positionenContainer');
+            const addPositionBtn = document.getElementById('addPositionBtn');
+            let lieferanten = [];
+            let artikel = [];
 
-            const fillSelect = (select, items) => {
-                select.innerHTML = '';
-                if (!items.length) {
-                    const option = document.createElement('option');
-                    option.value = '';
-                    option.textContent = 'Keine Eintraege vorhanden';
-                    select.appendChild(option);
-                    return;
-                }
+            const buildSelect = (items, placeholder) => {
+                const select = document.createElement('select');
+                select.required = true;
+                select.setAttribute('aria-label', placeholder);
+
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = placeholder;
+                select.appendChild(defaultOption);
 
                 items.forEach((item) => {
                     const option = document.createElement('option');
@@ -72,6 +69,41 @@
                     option.textContent = item.name || `#${item.id}`;
                     select.appendChild(option);
                 });
+
+                return select;
+            };
+
+            const addPositionRow = () => {
+                const row = document.createElement('div');
+                row.className = 'position-row';
+
+                const lieferantSelect = buildSelect(lieferanten, 'Lieferant');
+                const artikelSelect = buildSelect(artikel, 'Artikel');
+
+                const mengeInput = document.createElement('input');
+                mengeInput.type = 'number';
+                mengeInput.min = '1';
+                mengeInput.step = '1';
+                mengeInput.required = true;
+                mengeInput.placeholder = 'Menge';
+                mengeInput.setAttribute('aria-label', 'Menge');
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn--link';
+                removeBtn.textContent = 'Entfernen';
+                removeBtn.addEventListener('click', () => {
+                    row.remove();
+                    if (!positionenContainer.children.length) {
+                        addPositionRow();
+                    }
+                });
+
+                row.appendChild(lieferantSelect);
+                row.appendChild(artikelSelect);
+                row.appendChild(mengeInput);
+                row.appendChild(removeBtn);
+                positionenContainer.appendChild(row);
             };
 
             const loadData = async () => {
@@ -80,22 +112,29 @@
                     fetch('/api/artikel'),
                 ]);
 
-                const lieferanten = await lieferantenRes.json();
-                const artikel = await artikelRes.json();
+                lieferanten = await lieferantenRes.json();
+                artikel = await artikelRes.json();
 
-                fillSelect(lieferantSelect, lieferanten);
-                fillSelect(artikelSelect, artikel);
+                positionenContainer.innerHTML = '';
+                addPositionRow();
             };
 
             form.addEventListener('submit', async (event) => {
                 event.preventDefault();
                 message.textContent = '';
 
+                const positionen = Array.from(positionenContainer.children).map((row) => {
+                    const selects = row.querySelectorAll('select');
+                    const inputs = row.querySelectorAll('input');
+                    const lieferantId = Number(selects[0].value);
+                    const artikelId = Number(selects[1].value);
+                    const menge = Number(inputs[0].value);
+                    return { lieferantId, artikelId, menge };
+                });
+
                 const payload = {
-                    lieferantId: Number(lieferantSelect.value),
-                    artikelId: Number(artikelSelect.value),
-                    menge: Number(document.getElementById('menge').value),
                     bestellDatum: bestellDatumInput.value,
+                    positionen,
                 };
 
                 const response = await fetch('/api/bestellungen', {
@@ -108,12 +147,16 @@
                     message.textContent = 'Bestellung gespeichert.';
                     form.reset();
                     bestellDatumInput.valueAsDate = new Date();
+                    positionenContainer.innerHTML = '';
+                    addPositionRow();
                     return;
                 }
 
                 const errorText = await response.text();
                 message.textContent = `Fehler: ${errorText}`;
             });
+
+            addPositionBtn.addEventListener('click', () => addPositionRow());
 
             bestellDatumInput.valueAsDate = new Date();
             loadData();

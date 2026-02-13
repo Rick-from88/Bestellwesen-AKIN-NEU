@@ -1,10 +1,14 @@
 export interface Bestellung {
   id: number;
+  status: "offen" | "geliefert" | "storniert";
+  bestellDatum: Date;
+  positionen: BestellungPosition[];
+}
+
+export interface BestellungPosition {
   artikelId: number;
   lieferantId: number;
   menge: number;
-  status: "offen" | "geliefert" | "storniert";
-  bestellDatum: Date;
 }
 
 export interface Artikel {
