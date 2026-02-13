@@ -25,6 +25,7 @@
                     <div class="form__row">
                         <label for="bestellDatum">Bestelldatum</label>
                         <input id="bestellDatum" name="bestellDatum" type="date" required />
+                        <div id="bestellnummerPreview" style="margin-top:8px;color:var(--ink-soft);"></div>
                     </div>
                     <div class="form__actions">
                         <button class="btn btn--primary" type="submit">Speichern</button>
@@ -41,7 +42,7 @@
             <a class="navbar__item" href="/bestellungen">Bestellungen</a>
             <a class="navbar__item" href="/lieferanten">Lieferanten</a>
               <a class="navbar__item" href="/artikel">Artikel</a>
-            <a class="navbar__item" href="#">Einstellungen</a>
+            <a class="navbar__item" href="/einstellungen">Einstellungen</a>
         </nav>
 
         <script>
@@ -117,6 +118,22 @@
 
                 positionenContainer.innerHTML = '';
                 addPositionRow();
+                // load preview for bestellnummer
+                const previewEl = document.getElementById('bestellnummerPreview');
+                const loadPreview = async () => {
+                    try {
+                        const date = bestellDatumInput.value;
+                        const res = await fetch(`/api/bestellungen/next-number?date=${encodeURIComponent(date)}`);
+                        if (res.ok) {
+                            const j = await res.json();
+                            previewEl.textContent = `Voraussichtliche Bestellnummer: ${j.next}`;
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                };
+                loadPreview();
+                bestellDatumInput.addEventListener('change', loadPreview);
             };
 
             form.addEventListener('submit', async (event) => {

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Einstellungen</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body class="settings-page">
+    <div class="page">
+      <header class="hero">
+        <h1>Einstellungen</h1>
+        <p class="hero__subtitle">Verwalte Profil, Backup und weitere Einstellungen.</p>
+      </header>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Einstellungen</h2>
+        </div>
+
+        <div class="grid">
+          <a class="card" href="#" role="button">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="3" stroke="#111" stroke-width="1.5"/><path d="M4 20c0-3.3137 2.6863-6 6-6h4c3.3137 0 6 2.6863 6 6" stroke="#111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div>
+                <div class="card__label">Profil</div>
+                <div class="card__value">Benutzerinformationen bearbeiten</div>
+              </div>
+            </div>
+          </a>
+
+          <a class="card" href="#" role="button">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 5v7" stroke="#111" stroke-width="1.5" stroke-linecap="round"/><path d="M19.4 15a7 7 0 10-14.8 0" stroke="#111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div>
+                <div class="card__label">Backup</div>
+                <div class="card__value">Daten exportieren / importieren</div>
+              </div>
+            </div>
+          </a>
+
+          <a class="card" href="#" role="button">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 7h16" stroke="#111" stroke-width="1.5" stroke-linecap="round"/><rect x="4" y="11" width="16" height="8" rx="2" stroke="#111" stroke-width="1.5"/></svg>
+              <div>
+                <div class="card__label">Maileinstellungen</div>
+                <div class="card__value">SMTP, Absenderadresse konfigurieren</div>
+              </div>
+            </div>
+          </a>
+
+          <a class="card" href="#" role="button">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 12h18" stroke="#111" stroke-width="1.5" stroke-linecap="round"/><path d="M6 8v8" stroke="#111" stroke-width="1.5" stroke-linecap="round"/><path d="M18 8v8" stroke="#111" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <div>
+                <div class="card__label">Bestellnummer</div>
+                <div class="card__value">Fortlaufende Nummern konfigurieren</div>
+              </div>
+            </div>
+          </a>
+        </div>
+      </section>
+    </div>
+
+    <nav class="navbar">
+      <a class="navbar__item" href="/uebersicht">Dashboard</a>
+      <a class="navbar__item" href="/bestellungen">Bestellungen</a>
+      <a class="navbar__item" href="/lieferanten">Lieferanten</a>
+      <a class="navbar__item" href="/artikel">Artikel</a>
+      <a class="navbar__item is-active" href="/einstellungen">Einstellungen</a>
+    </nav>
+  </body>
+</html>

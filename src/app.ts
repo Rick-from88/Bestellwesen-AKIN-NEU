@@ -40,8 +40,13 @@ const parseString = (value: unknown): string | undefined => {
 };
 
 const parseStatus = (value: unknown): BestellungStatus | null => {
-  if (value === "offen" || value === "geliefert" || value === "storniert") {
-    return value;
+  if (
+    value === "offen" ||
+    value === "bestellt" ||
+    value === "geliefert" ||
+    value === "storniert"
+  ) {
+    return value as BestellungStatus;
   }
   return null;
 };
@@ -174,6 +179,15 @@ app.put("/api/bestellungen/:id", async (req, res) => {
   }
 
   try {
+    // prevent editing positions if order is delivered or cancelled
+    const { query } = await Promise.resolve(require('./db'));
+    const cur = await query('select status from bestellungen where id = $1', [bestellungId]);
+    const curStatus = cur.rows[0]?.status;
+    if (curStatus === 'geliefert' || curStatus === 'storniert') {
+      res.status(409).json({ error: 'Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden.' });
+      return;
+    }
+
     const bestellung = await updateBestellung(bestellungId, {
       status,
       bestellDatum,
@@ -183,6 +197,37 @@ app.put("/api/bestellungen/:id", async (req, res) => {
   } catch (error) {
     console.error("Fehler beim Aktualisieren der Bestellung", error);
     res.status(500).json({ error: "Bestellung konnte nicht aktualisiert werden." });
+  }
+});
+
+// change status only (allows changing status even when positions are locked)
+app.put('/api/bestellungen/:id/status', express.json(), async (req, res) => {
+  const id = parseInteger(req.params.id);
+  const status = parseStatus(req.body?.status);
+  if (!id || !status) {
+    res.status(400).json({ error: 'ungueltige anfrage' });
+    return;
+  }
+  try {
+    const { query } = await Promise.resolve(require('./db'));
+    const cur = await query('select status from bestellungen where id = $1', [id]);
+    if (!cur.rows.length) {
+      res.status(404).json({ error: 'Bestellung nicht gefunden' });
+      return;
+    }
+    const curStatus = cur.rows[0].status;
+
+    // simple transition rules: delivered is final except it can be set to 'storniert'
+    if (curStatus === 'geliefert' && status !== 'storniert') {
+      res.status(409).json({ error: 'Gelieferte Bestellungen koennen nur storniert werden.' });
+      return;
+    }
+
+    await query('update bestellungen set status = $1 where id = $2', [status, id]);
+    res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('error');
   }
 });
 
@@ -501,8 +546,95 @@ app.get("/bestellungen", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "bestellungen.html"));
 });
 
+app.get("/einstellungen", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "einstellungen.html"));
+});
+
 app.get("/bestellung-neu", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "bestellung-neu.html"));
+});
+app.get('/api/settings', async (req, res) => {
+  try {
+    const { listSettings } = await Promise.resolve(require('./repositories/settings'));
+    const settings = await listSettings();
+    res.json(settings);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('error');
+  }
+});
+
+app.put('/api/settings', express.json(), async (req, res) => {
+  try {
+    const { setSetting } = await Promise.resolve(require('./repositories/settings'));
+    const body = req.body || {};
+    if (body.bestellnummer_prefix !== undefined) {
+      await setSetting('bestellnummer_prefix', String(body.bestellnummer_prefix));
+    }
+    if (body.bestellnummer_seq_digits !== undefined) {
+      await setSetting('bestellnummer_seq_digits', String(body.bestellnummer_seq_digits));
+    }
+    res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('error');
+  }
+});
+
+app.put('/api/settings/sequence', express.json(), async (req, res) => {
+  try {
+    const { getSetting, setSetting } = await Promise.resolve(require('./repositories/settings'));
+    const { query } = await Promise.resolve(require('./db'));
+
+    const prefixSetting = await getSetting('bestellnummer_prefix');
+    const seqDigitsSetting = await getSetting('bestellnummer_seq_digits');
+
+    if (!prefixSetting || !seqDigitsSetting) {
+      res.status(400).json({ error: 'Prefix oder Anzahl Ziffern nicht konfiguriert.' });
+      return;
+    }
+
+    const prefix = String(prefixSetting);
+    const seqDigits = Number(seqDigitsSetting);
+    const lastDigits = Number(req.body?.lastDigits);
+    if (!Number.isInteger(lastDigits) || lastDigits < 0 || lastDigits >= Math.pow(10, seqDigits)) {
+      res.status(400).json({ error: 'ungueltige lastDigits' });
+      return;
+    }
+
+    const multiplier = Math.pow(10, seqDigits);
+    const lower = Number(prefix) * multiplier;
+    const upper = (Number(prefix) + 1) * multiplier - 1;
+
+    // we store the full next number; choose next = prefix*multiplier + lastDigits + 1
+    const desiredNext = Number(prefix) * multiplier + lastDigits + 1;
+
+    const maxRes = await query('select max(bestellnummer) as mx from bestellungen where bestellnummer between $1 and $2', [lower, upper]);
+    const mx = maxRes.rows[0]?.mx ?? null;
+    if (mx && Number(mx) >= desiredNext) {
+      res.status(400).json({ error: 'Gewuenschte Zahl ist kleiner oder gleich bestehender Maximalnummer.' });
+      return;
+    }
+
+    const overrideKey = `bestellnummer_next_${prefix}`;
+    await setSetting(overrideKey, String(desiredNext));
+    res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('error');
+  }
+});
+
+app.get('/api/bestellungen/next-number', async (req, res) => {
+  try {
+    const { getNextBestellnummer } = await Promise.resolve(require('./repositories/bestellungen'));
+    const date = req.query.date ? String(req.query.date) : undefined;
+    const next = await getNextBestellnummer(date);
+    res.json({ next });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('error');
+  }
 });
 app.get("/lieferanten", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "lieferanten.html"));

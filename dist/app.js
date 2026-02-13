@@ -31,6 +31,9 @@ const parseInteger = (value) => {
     const parsed = parseNumber(value);
     return parsed !== null && Number.isInteger(parsed) ? parsed : null;
 };
+const parseString = (value) => {
+    return typeof value === "string" ? value.trim() : undefined;
+};
 const parseStatus = (value) => {
     if (value === "offen" || value === "geliefert" || value === "storniert") {
         return value;
@@ -180,6 +183,10 @@ app.post("/api/lieferanten", (req, res) => __awaiter(void 0, void 0, void 0, fun
         : undefined;
     const email = typeof req.body.email === "string" ? req.body.email.trim() : undefined;
     const telefon = typeof req.body.telefon === "string" ? req.body.telefon.trim() : undefined;
+    const strasse = parseString(req.body.strasse);
+    const plz = parseString(req.body.plz);
+    const stadt = parseString(req.body.stadt);
+    const land = parseString(req.body.land);
     if (!name) {
         res.status(400).json({ error: "name ist ein Pflichtfeld." });
         return;
@@ -190,6 +197,10 @@ app.post("/api/lieferanten", (req, res) => __awaiter(void 0, void 0, void 0, fun
             kontaktPerson,
             email,
             telefon,
+            strasse,
+            plz,
+            stadt,
+            land,
         });
         res.status(201).json(lieferant);
     }
@@ -215,6 +226,70 @@ app.get("/api/lieferanten/:id", (req, res) => __awaiter(void 0, void 0, void 0, 
     catch (error) {
         console.error("Fehler beim Laden des Lieferanten", error);
         res.status(500).json({ error: "Lieferant konnte nicht geladen werden." });
+    }
+}));
+app.put("/api/lieferanten/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const lieferantId = parseInteger(req.params.id);
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const kontaktPerson = parseString(req.body.kontaktPerson);
+    const email = parseString(req.body.email);
+    const telefon = parseString(req.body.telefon);
+    const strasse = parseString(req.body.strasse);
+    const plz = parseString(req.body.plz);
+    const stadt = parseString(req.body.stadt);
+    const land = parseString(req.body.land);
+    if (!lieferantId) {
+        res.status(400).json({ error: "Ungueltige Lieferanten-ID." });
+        return;
+    }
+    if (!name) {
+        res.status(400).json({ error: "name ist ein Pflichtfeld." });
+        return;
+    }
+    try {
+        const lieferant = yield (0, lieferanten_1.updateLieferant)(lieferantId, {
+            name,
+            kontaktPerson,
+            email,
+            telefon,
+            strasse,
+            plz,
+            stadt,
+            land,
+        });
+        if (!lieferant) {
+            res.status(404).json({ error: "Lieferant nicht gefunden." });
+            return;
+        }
+        res.json(lieferant);
+    }
+    catch (error) {
+        console.error("Fehler beim Aktualisieren des Lieferanten", error);
+        res.status(500).json({ error: "Lieferant konnte nicht aktualisiert werden." });
+    }
+}));
+app.delete("/api/lieferanten/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const lieferantId = parseInteger(req.params.id);
+    if (!lieferantId) {
+        res.status(400).json({ error: "Ungueltige Lieferanten-ID." });
+        return;
+    }
+    try {
+        const deleted = yield (0, lieferanten_1.deleteLieferant)(lieferantId);
+        if (!deleted) {
+            res.status(404).json({ error: "Lieferant nicht gefunden." });
+            return;
+        }
+        res.status(204).send();
+    }
+    catch (error) {
+        const err = error;
+        if (err && err.code === "23503") {
+            res.status(409).json({ error: "Lieferant ist noch referenziert." });
+            return;
+        }
+        console.error("Fehler beim Loeschen des Lieferanten", error);
+        res.status(500).json({ error: "Lieferant konnte nicht geloescht werden." });
     }
 }));
 app.get("/api/lieferanten/:id/artikel", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -243,6 +318,7 @@ app.get("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, function
     }
 }));
 app.post("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const lieferantId = parseInteger(req.body.lieferantId);
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
     const beschreibung = typeof req.body.beschreibung === "string"
         ? req.body.beschreibung.trim()
@@ -250,14 +326,15 @@ app.post("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, functio
     const preis = parseNumber(req.body.preis);
     const lagerbestand = parseInteger(req.body.lagerbestand);
     const minBestand = parseInteger(req.body.minBestand);
-    if (!name ||
+    if (!lieferantId ||
+        !name ||
         preis === null ||
         preis < 0 ||
         lagerbestand === null ||
         lagerbestand < 0) {
         res
             .status(400)
-            .json({ error: "name, preis und lagerbestand sind Pflichtfelder." });
+            .json({ error: "lieferant, name, preis und lagerbestand sind Pflichtfelder." });
         return;
     }
     if (minBestand !== null && minBestand < 0) {
@@ -266,6 +343,7 @@ app.post("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, functio
     }
     try {
         const artikel = yield (0, artikel_1.createArtikel)({
+            lieferantId,
             name,
             beschreibung,
             preis,
@@ -279,11 +357,77 @@ app.post("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, functio
         res.status(500).json({ error: "Artikel konnte nicht erstellt werden." });
     }
 }));
+app.put("/api/artikel/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _c;
+    const artikelId = parseInteger(req.params.id);
+    const lieferantId = parseInteger(req.body.lieferantId);
+    const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const beschreibung = typeof req.body.beschreibung === "string"
+        ? req.body.beschreibung.trim()
+        : undefined;
+    const preis = parseNumber(req.body.preis);
+    const lagerbestand = parseInteger(req.body.lagerbestand);
+    const minBestand = (_c = parseInteger(req.body.minBestand)) !== null && _c !== void 0 ? _c : 0;
+    if (!artikelId) {
+        res.status(400).json({ error: "Ungueltige Artikel-ID." });
+        return;
+    }
+    if (!lieferantId || !name || preis === null || lagerbestand === null) {
+        res.status(400).json({ error: "Lieferant, Name, Preis und Lagerbestand sind Pflichtfelder." });
+        return;
+    }
+    try {
+        const artikel = yield (0, artikel_1.updateArtikel)(artikelId, {
+            lieferantId,
+            name,
+            beschreibung,
+            preis,
+            lagerbestand,
+            minBestand,
+        });
+        if (!artikel) {
+            res.status(404).json({ error: "Artikel nicht gefunden." });
+            return;
+        }
+        res.json(artikel);
+    }
+    catch (error) {
+        console.error("Fehler beim Aktualisieren des Artikels", error);
+        res.status(500).json({ error: "Artikel konnte nicht aktualisiert werden." });
+    }
+}));
+app.delete("/api/artikel/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const artikelId = parseInteger(req.params.id);
+    if (!artikelId) {
+        res.status(400).json({ error: "Ungueltige Artikel-ID." });
+        return;
+    }
+    try {
+        const deleted = yield (0, artikel_1.deleteArtikel)(artikelId);
+        if (!deleted) {
+            res.status(404).json({ error: "Artikel nicht gefunden." });
+            return;
+        }
+        res.status(204).send();
+    }
+    catch (error) {
+        const err = error;
+        if (err && err.code === "23503") {
+            res.status(409).json({ error: "Artikel ist noch referenziert." });
+            return;
+        }
+        console.error("Fehler beim Loeschen des Artikels", error);
+        res.status(500).json({ error: "Artikel konnte nicht geloescht werden." });
+    }
+}));
 app.get("/uebersicht", (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "uebersicht.html"));
 });
 app.get("/bestellungen", (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "bestellungen.html"));
+});
+app.get("/einstellungen", (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, "..", "public", "einstellungen.html"));
 });
 app.get("/bestellung-neu", (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "bestellung-neu.html"));
@@ -293,6 +437,9 @@ app.get("/lieferanten", (req, res) => {
 });
 app.get("/lieferanten/:id", (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "lieferant-detail.html"));
+});
+app.get("/artikel", (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, "..", "public", "artikel.html"));
 });
 app.get("/", (req, res) => {
     res.redirect("/uebersicht");

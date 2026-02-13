@@ -46,7 +46,6 @@
             <label for="editStatus">Status</label>
             <select id="editStatus" required>
               <option value="offen">offen</option>
-              <option value="bestellt">bestellt</option>
               <option value="geliefert">geliefert</option>
               <option value="storniert">storniert</option>
             </select>
@@ -81,7 +80,7 @@
       <a class="navbar__item is-active" href="/bestellungen">Bestellungen</a>
       <a class="navbar__item" href="/lieferanten">Lieferanten</a>
       <a class="navbar__item" href="/artikel">Artikel</a>
-      <a class="navbar__item" href="/einstellungen">Einstellungen</a>
+      <a class="navbar__item" href="#">Einstellungen</a>
     </nav>
 
     <script>
@@ -113,9 +112,6 @@
         }
         if (status === "storniert") {
           return "pill pill--rose";
-        }
-        if (status === "bestellt") {
-          return "pill pill--blue";
         }
         return "pill pill--amber";
       };
@@ -216,7 +212,7 @@
 
       const openModal = (bestellung) => {
         currentBestellungId = bestellung.id;
-        modalTitle.textContent = `Bestellung #${bestellung.bestellnummer ?? bestellung.id} bearbeiten`;
+        modalTitle.textContent = `Bestellung #${bestellung.id} bearbeiten`;
         editStatus.value = bestellung.status || "offen";
         editDatum.value = toInputDate(bestellung.bestellDatum);
         editPositionen.innerHTML = "";
@@ -233,27 +229,7 @@
           });
         }
 
-        // determine editability: not editable when delivered or cancelled
-        const editable = !(bestellung.status === 'geliefert' || bestellung.status === 'storniert');
-        // enable/disable add button
-        editAddPosition.disabled = !editable;
-        // show/hide delete button
-        editDelete.style.display = editable ? '' : 'none';
-
-        // disable remove buttons and inputs when not editable
-        if (!editable) {
-          Array.from(editPositionen.querySelectorAll('select, input, button')).forEach(el => {
-            if (el.tagName.toLowerCase() === 'button') {
-              el.setAttribute('disabled', 'true');
-            } else {
-              el.setAttribute('disabled', 'true');
-            }
-          });
-          editMessage.textContent = 'Diese Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden. Status kann jedoch geaendert werden.';
-        } else {
-          editMessage.textContent = '';
-        }
-
+        editMessage.textContent = "";
         bestellungModal.classList.add("is-open");
         bestellungModal.setAttribute("aria-hidden", "false");
       };
@@ -287,7 +263,7 @@
           const leftDiv = document.createElement("div");
           const title = document.createElement("div");
           title.className = "list__title";
-          title.textContent = `Bestellung #${bestellung.bestellnummer ?? bestellung.id}`;
+          title.textContent = `Bestellung #${bestellung.id}`;
 
           const meta = document.createElement("div");
           meta.className = "list__meta";
@@ -321,11 +297,8 @@
 
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
+
           headerRow.appendChild(leftDiv);
-          const statusEl = document.createElement('div');
-          statusEl.className = statusClass(bestellung.status);
-          statusEl.textContent = (bestellung.status || 'offen').toUpperCase();
-          headerRow.appendChild(statusEl);
           group.appendChild(headerRow);
 
           let clickTimeout = null;
@@ -443,21 +416,6 @@
             menge: Number(inputs[0].value),
           };
         });
-        // if positions are not editable, only change status via status endpoint
-        if (editAddPosition.disabled) {
-          try {
-            const res = await fetch(`/api/bestellungen/${currentBestellungId}/status`, {
-              method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: editStatus.value })
-            });
-            if (!res.ok) {
-              const txt = await res.text();
-              editMessage.textContent = `Fehler: ${txt}`;
-              return;
-            }
-            closeModal(); loadBestellungen();
-          } catch (e) { console.error(e); editMessage.textContent = 'Speichern fehlgeschlagen.' }
-          return;
-        }
 
         if (
           !positionen.length ||
