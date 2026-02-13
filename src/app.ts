@@ -223,7 +223,9 @@ app.get("/uebersicht", (req, res) => {
 app.get("/bestellung-neu", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "bestellung-neu.html"));
 });
-
+app.get('/lieferanten', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'lieferanten.html'));
+});
 app.get("/lieferanten/:id", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "lieferant-detail.html"));
 });

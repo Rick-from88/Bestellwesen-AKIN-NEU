@@ -3,20 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bestellwesen Uebersicht</title>
+    <title>Bestellwesen Dashboard</title>
     <link rel="stylesheet" href="/static/styles/uebersicht.css" />
   </head>
   <body>
     <div class="page">
       <header class="hero">
-        <div class="hero__badge">Bestellwesen</div>
-        <h1>Uebersicht</h1>
+        <h1>Dashboard</h1>
         <p class="hero__subtitle">
           Schneller Blick auf Bestellungen, Lieferanten und Artikel.
         </p>
         <div class="hero__actions">
           <a class="btn btn--primary" href="/bestellung-neu">Neue Bestellung</a>
-          <a class="btn btn--ghost" href="#lieferanten">Lieferanten anzeigen</a>
+          <a class="btn btn--ghost" href="/lieferanten">Lieferanten</a>
         </div>
       </header>
 
@@ -107,16 +106,7 @@
         </div>
       </section>
 
-      <section class="split" id="lieferanten">
-        <div class="panel">
-          <div class="panel__header">
-            <h2>Lieferanten</h2>
-            <button class="btn btn--link" id="lieferantenRefresh">
-              Aktualisieren
-            </button>
-          </div>
-          <div class="list" id="lieferantenList"></div>
-        </div>
+      <section class="split">
         <div class="panel">
           <div class="panel__header">
             <h2>Low-Stock Warnungen</h2>
@@ -126,13 +116,32 @@
           </div>
           <div class="list" id="lowStockList"></div>
         </div>
+        <div class="panel">
+          <div class="panel__header">
+            <h2>Schnellzugriff</h2>
+          </div>
+          <div class="list">
+            <a class="list__row" href="/lieferanten">
+              <div>
+                <div class="list__title">Lieferanten verwalten</div>
+                <div class="list__meta">Alle Lieferanten anzeigen</div>
+              </div>
+            </a>
+            <a class="list__row" href="/bestellung-neu">
+              <div>
+                <div class="list__title">Neue Bestellung</div>
+                <div class="list__meta">Bestellung erfassen</div>
+              </div>
+            </a>
+          </div>
+        </div>
       </section>
     </div>
 
     <nav class="navbar">
-      <a class="navbar__item is-active" href="/uebersicht">Uebersicht</a>
+      <a class="navbar__item is-active" href="/uebersicht">Dashboard</a>
       <a class="navbar__item" href="#">Bestellungen</a>
-      <a class="navbar__item" href="/uebersicht#lieferanten">Lieferanten</a>
+      <a class="navbar__item" href="/lieferanten">Lieferanten</a>
       <a class="navbar__item" href="#">Artikel</a>
       <a class="navbar__item" href="#">Einstellungen</a>
     </nav>
@@ -142,36 +151,8 @@
       const lieferantenTrend = document.getElementById("lieferantenTrend");
       const artikelCount = document.getElementById("artikelCount");
       const lowStockCount = document.getElementById("lowStockCount");
-      const lieferantenList = document.getElementById("lieferantenList");
       const lowStockList = document.getElementById("lowStockList");
-      const lieferantenRefresh = document.getElementById("lieferantenRefresh");
       const lowStockRefresh = document.getElementById("lowStockRefresh");
-
-      const renderLieferanten = (lieferanten) => {
-        lieferantenList.innerHTML = "";
-        if (!lieferanten.length) {
-          const emptyRow = document.createElement("div");
-          emptyRow.className = "list__row";
-          emptyRow.textContent = "Keine Lieferanten vorhanden.";
-          lieferantenList.appendChild(emptyRow);
-          return;
-        }
-
-        lieferanten.forEach((lieferant) => {
-          const row = document.createElement("a");
-          row.className = "list__row";
-          row.href = `/lieferanten/${lieferant.id}`;
-          const title = document.createElement("div");
-          title.className = "list__title";
-          title.textContent = lieferant.name;
-          const meta = document.createElement("div");
-          meta.className = "list__meta";
-          meta.textContent = lieferant.email || "Keine E-Mail";
-          row.appendChild(title);
-          row.appendChild(meta);
-          lieferantenList.appendChild(row);
-        });
-      };
 
       const renderLowStock = (artikel) => {
         lowStockList.innerHTML = "";
@@ -205,7 +186,6 @@
         lieferantenTrend.textContent = lieferanten.length
           ? "Profil gepflegt"
           : "Noch keine Daten";
-        renderLieferanten(lieferanten);
       };
 
       const loadArtikel = async () => {
@@ -219,7 +199,6 @@
         renderLowStock(lowStock);
       };
 
-      lieferantenRefresh.addEventListener("click", loadLieferanten);
       lowStockRefresh.addEventListener("click", loadArtikel);
 
       loadLieferanten();

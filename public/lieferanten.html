@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lieferanten</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <h1>Lieferanten</h1>
+        <p class="hero__subtitle">
+          Verwalten Sie Ihre Lieferantenkontakte und -beziehungen.
+        </p>
+        <div class="hero__actions">
+          <button class="btn btn--primary" id="addLieferantBtn">
+            Lieferant hinzufuegen
+          </button>
+          <button class="btn btn--ghost" id="lieferantenRefresh">
+            Aktualisieren
+          </button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Alle Lieferanten</h2>
+          <div id="lieferantenCount" style="color: var(--ink-soft)">
+            Laden...
+          </div>
+        </div>
+        <div class="list" id="lieferantenList"></div>
+      </section>
+    </div>
+
+    <nav class="navbar">
+      <a class="navbar__item" href="/uebersicht">Dashboard</a>
+      <a class="navbar__item" href="#">Bestellungen</a>
+      <a class="navbar__item is-active" href="/lieferanten">Lieferanten</a>
+      <a class="navbar__item" href="#">Artikel</a>
+      <a class="navbar__item" href="#">Einstellungen</a>
+    </nav>
+
+    <script>
+      const lieferantenList = document.getElementById("lieferantenList");
+      const lieferantenCount = document.getElementById("lieferantenCount");
+      const lieferantenRefresh = document.getElementById("lieferantenRefresh");
+      const addLieferantBtn = document.getElementById("addLieferantBtn");
+
+      const renderLieferanten = (lieferanten) => {
+        lieferantenList.innerHTML = "";
+        lieferantenCount.textContent = `${lieferanten.length} Lieferanten`;
+
+        if (!lieferanten.length) {
+          const emptyRow = document.createElement("div");
+          emptyRow.className = "list__row";
+          emptyRow.textContent = "Keine Lieferanten vorhanden.";
+          lieferantenList.appendChild(emptyRow);
+          return;
+        }
+
+        lieferanten.forEach((lieferant) => {
+          const row = document.createElement("a");
+          row.className = "list__row";
+          row.href = `/lieferanten/${lieferant.id}`;
+
+          const leftDiv = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = lieferant.name;
+
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          const parts = [];
+          if (lieferant.kontaktPerson) {
+            parts.push(lieferant.kontaktPerson);
+          }
+          if (lieferant.email) {
+            parts.push(lieferant.email);
+          }
+          meta.textContent = parts.length ? parts.join(" • ") : "Keine Kontaktdaten";
+
+          leftDiv.appendChild(title);
+          leftDiv.appendChild(meta);
+
+          const rightDiv = document.createElement("div");
+          rightDiv.style.textAlign = "right";
+          if (lieferant.telefon) {
+            const telefon = document.createElement("div");
+            telefon.className = "list__meta";
+            telefon.textContent = lieferant.telefon;
+            rightDiv.appendChild(telefon);
+          }
+
+          row.appendChild(leftDiv);
+          row.appendChild(rightDiv);
+          lieferantenList.appendChild(row);
+        });
+      };
+
+      const loadLieferanten = async () => {
+        try {
+          const response = await fetch("/api/lieferanten");
+          const lieferanten = await response.json();
+          renderLieferanten(lieferanten);
+        } catch (error) {
+          console.error("Fehler beim Laden der Lieferanten:", error);
+          lieferantenCount.textContent = "Fehler beim Laden";
+        }
+      };
+
+      lieferantenRefresh.addEventListener("click", loadLieferanten);
+      addLieferantBtn.addEventListener("click", () => {
+        alert("Lieferant hinzufuegen - Feature kommt bald!");
+      });
+
+      loadLieferanten();
+    </script>
+  </body>
+</html>
