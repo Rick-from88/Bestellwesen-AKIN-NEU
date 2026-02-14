@@ -63,6 +63,7 @@
             </button>
           </div>
           <div class="form__actions">
+            <button class="btn btn--primary" type="button" id="editSend">Senden</button>
             <button class="btn btn--primary" type="submit">Speichern</button>
             <button class="btn btn--danger" type="button" id="editDelete">
               Loeschen
@@ -542,6 +543,39 @@
         } catch (error) {
           console.error("Fehler beim Loeschen:", error);
           editMessage.textContent = "Loeschen fehlgeschlagen.";
+        }
+      });
+
+      const editSend = document.getElementById("editSend");
+      editSend.addEventListener("click", async () => {
+        if (!currentBestellungId) return;
+
+        // disable while sending
+        editSend.setAttribute("disabled", "true");
+        editMessage.textContent = "";
+
+        try {
+          const res = await fetch(
+            `/api/bestellungen/${currentBestellungId}/status`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: "bestellt" }),
+            },
+          );
+          if (!res.ok) {
+            const txt = await res.text();
+            editMessage.textContent = `Fehler: ${txt}`;
+            editSend.removeAttribute("disabled");
+            return;
+          }
+
+          closeModal();
+          loadBestellungen();
+        } catch (e) {
+          console.error(e);
+          editMessage.textContent = "Senden fehlgeschlagen.";
+          editSend.removeAttribute("disabled");
         }
       });
 

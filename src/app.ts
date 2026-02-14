@@ -253,6 +253,119 @@ app.put("/api/bestellungen/:id/status", express.json(), async (req, res) => {
   }
 });
 
+// send order by email with PDF attachment (uses puppeteer)
+app.put(
+  "/api/bestellungen/:id/send",
+  express.json(),
+  async (req, res) => {
+    const id = parseInteger(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "ungueltige id" });
+      return;
+    }
+
+    try {
+      const { getNextBestellnummer } = await Promise.resolve(
+        require("./repositories/bestellungen"),
+      );
+      const { listBestellungen } = await Promise.resolve(
+        require("./repositories/bestellungen"),
+      );
+      const { getLieferantById } = await Promise.resolve(
+        require("./repositories/lieferanten"),
+      );
+      const { sendOrderEmail, ensureTmpDir } = await Promise.resolve(
+        require("./services/email"),
+      );
+      const fs = await Promise.resolve(require("fs"));
+      const path = await Promise.resolve(require("path"));
+      const puppeteer = await Promise.resolve(require("puppeteer"));
+
+      const bestellungen = await listBestellungen();
+      const bestellung = bestellungen.find((b: any) => b.id === id);
+      if (!bestellung) {
+        res.status(404).json({ error: "Bestellung nicht gefunden" });
+        return;
+      }
+
+      const positionen = Array.isArray(bestellung.positionen)
+        ? bestellung.positionen
+        : [];
+      const lieferantId = positionen[0]?.lieferantId;
+      const lieferant = lieferantId
+        ? await getLieferantById(lieferantId)
+        : null;
+      const to = lieferant?.email;
+      if (!to) {
+        res.status(400).json({ error: "Lieferanten-E-Mail nicht vorhanden" });
+        return;
+      }
+
+      // load template and render
+      const templatePath = path.join(
+        __dirname,
+        "..",
+        "public",
+        "templates",
+        "order-letter.html",
+      );
+      let tpl = fs.readFileSync(templatePath, "utf8");
+
+      const itemsHtml = positionen
+        .map((pos: any) => {
+          const artikelName = `Artikel #${pos.artikelId}`;
+          const preis = pos.preis ?? "-";
+          const menge = pos.menge ?? 0;
+          const gesamt = Number(preis || 0) * Number(menge || 0);
+          return `<tr><td>${artikelName}</td><td>${preis}</td><td>${menge}</td><td>${gesamt.toFixed(2)} EUR</td></tr>`;
+        })
+        .join("\n");
+
+      const total = positionen.reduce((s: number, p: any) => {
+        const preis = Number(p.preis || 0);
+        const menge = Number(p.menge || 0);
+        return s + preis * menge;
+      }, 0);
+
+      tpl = tpl
+        .replace("{{company_name}}", "Dein Unternehmen")
+        .replace("{{bestellnummer}}", String(bestellung.bestellnummer ?? ""))
+        .replace("{{datum}}", String(bestellung.bestellDatum ?? ""))
+        .replace("{{lieferant_name}}", lieferant?.name ?? "")
+        .replace("{{items}}", itemsHtml)
+        .replace("{{gesamt}}", `${total.toFixed(2)} EUR`);
+
+      const tmpDir = ensureTmpDir();
+      const fileName = `bestellung-${id}-${Date.now()}.pdf`;
+      const filePath = path.join(tmpDir, fileName);
+
+      // render PDF
+      const browser = await puppeteer.launch({ args: ["--no-sandbox"] });
+      const page = await browser.newPage();
+      await page.setContent(tpl, { waitUntil: "networkidle0" });
+      await page.pdf({ path: filePath, format: "A4", printBackground: true });
+      await browser.close();
+
+      // mail subject/body from settings if present
+      const { getSetting } = await Promise.resolve(
+        require("./repositories/settings"),
+      );
+      const subjectTemplate = (await getSetting("mail_subject_template")) || "Bestellung {{bestellnummer}}";
+      const bodyTemplate = (await getSetting("mail_body_template")) || "Hallo, anbei unsere Bestellung {{bestellnummer}}.";
+      const subject = subjectTemplate.replace("{{bestellnummer}}", String(bestellung.bestellnummer ?? ""));
+      const body = bodyTemplate.replace("{{bestellnummer}}", String(bestellung.bestellnummer ?? ""));
+
+      // send mail (or log-only)
+      await sendOrderEmail(to, subject, body, [{ filename: fileName, path: filePath }]);
+
+      res.status(204).send();
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Fehler beim Versenden" });
+    }
+  },
+);
+
 app.delete("/api/bestellungen/:id", async (req, res) => {
   const bestellungId = parseInteger(req.params.id);
 
@@ -682,6 +795,350 @@ app.put("/api/settings/sequence", express.json(), async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).send("error");
+  }
+});
+
+// Export entity data as JSON
+app.get("/api/export/:entity", async (req, res) => {
+  const entity = String(req.params.entity || "");
+  const format = String(req.query.format || "json").toLowerCase();
+  try {
+    if (entity === "lieferanten") {
+      const { listLieferanten } = await Promise.resolve(
+        require("./repositories/lieferanten"),
+      );
+      const data = await listLieferanten();
+      if (format === "csv") {
+        const keys = Object.keys(data[0] || {});
+        const csv = [keys.join(",")]// header
+          .concat(
+            data.map((row: any) =>
+              keys.map((k) => escapeCsv(String(row[k] ?? ""))).join(","),
+            ),
+          )
+          .join("\n");
+        res.setHeader("Content-Type", "text/csv");
+        res.send(csv);
+        return;
+      }
+      res.json(data);
+      return;
+    }
+    if (entity === "artikel") {
+      const { listArtikel } = await Promise.resolve(
+        require("./repositories/artikel"),
+      );
+      const data = await listArtikel();
+      if (format === "csv") {
+        const keys = Object.keys(data[0] || {});
+        const csv = [keys.join(",")]// header
+          .concat(
+            data.map((row: any) =>
+              keys.map((k) => escapeCsv(String(row[k] ?? ""))).join(","),
+            ),
+          )
+          .join("\n");
+        res.setHeader("Content-Type", "text/csv");
+        res.send(csv);
+        return;
+      }
+      res.json(data);
+      return;
+    }
+    if (entity === "bestellungen") {
+      const { listBestellungen } = await Promise.resolve(
+        require("./repositories/bestellungen"),
+      );
+      const data = await listBestellungen();
+      if (format === "csv") {
+        // flatten positionen as JSON string in one column
+        const keys = ["id", "bestellnummer", "status", "bestellDatum", "positionen"];
+        const csv = [keys.join(",")]
+          .concat(
+            data.map((row: any) =>
+              keys
+                .map((k) => {
+                  if (k === "positionen") return escapeCsv(JSON.stringify(row.positionen || []));
+                  return escapeCsv(String(row[k] ?? ""));
+                })
+                .join(","),
+            ),
+          )
+          .join("\n");
+        res.setHeader("Content-Type", "text/csv");
+        res.send(csv);
+        return;
+      }
+      res.json(data);
+      return;
+    }
+    if (entity === "settings") {
+      const { listSettings } = await Promise.resolve(
+        require("./repositories/settings"),
+      );
+      const dataObj = await listSettings();
+      const data = Object.keys(dataObj).map((k) => ({ key: k, value: dataObj[k] }));
+      if (format === "csv") {
+        const keys = ["key", "value"];
+        const csv = [keys.join(",")]
+          .concat(data.map((row: any) => keys.map((k) => escapeCsv(String(row[k] ?? ""))).join(",")))
+          .join("\n");
+        res.setHeader("Content-Type", "text/csv");
+        res.send(csv);
+        return;
+      }
+      res.json(dataObj);
+      return;
+    }
+
+    res.status(400).json({ error: "unknown entity" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "export failed" });
+  }
+});
+
+// basic CSV escaping
+function escapeCsv(val: string) {
+  if (val == null) return "";
+  if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+    return '"' + val.replace(/"/g, '""') + '"';
+  }
+  return val;
+}
+
+// Import entity data (expects JSON array in body)
+app.post("/api/import/:entity", express.json({ limit: "10mb" }), async (req, res) => {
+  const entity = String(req.params.entity || "");
+  let payload = req.body;
+  // if CSV was posted as text/plain or text/csv, parse it
+  try {
+    const ct = String(req.headers["content-type"] || "").toLowerCase();
+    if (ct.includes("text/csv") || ct.includes("text/plain")) {
+      // body is raw text (not parsed JSON)
+      const raw = typeof req.body === "string" ? req.body : "";
+      payload = parseCsv(raw);
+    }
+  } catch (e) {
+    console.error("CSV parse failed", e);
+  }
+  try {
+    if (!payload) {
+      res.status(400).json({ error: "no payload" });
+      return;
+    }
+
+    if (entity === "lieferanten") {
+      const { createLieferant, updateLieferant } = await Promise.resolve(
+        require("./repositories/lieferanten"),
+      );
+      const { query } = await Promise.resolve(require("./db"));
+      const created: any[] = [];
+      const updated: any[] = [];
+      for (const item of Array.isArray(payload) ? payload : []) {
+        const inData = {
+          name: item.name,
+          kontaktPerson: item.kontaktPerson,
+          email: item.email,
+          telefon: item.telefon,
+          strasse: item.strasse,
+          plz: item.plz,
+          stadt: item.stadt,
+          land: item.land,
+        };
+        // try to find existing by email, otherwise by name
+        let existingId: number | null = null;
+        if (inData.email) {
+          const r = await query("select id from lieferanten where email = $1", [inData.email]);
+          if (r.rows[0]) existingId = r.rows[0].id;
+        }
+        if (!existingId && inData.name) {
+          const r2 = await query("select id from lieferanten where name = $1", [inData.name]);
+          if (r2.rows[0]) existingId = r2.rows[0].id;
+        }
+
+        if (existingId) {
+          const u = await updateLieferant(existingId, inData);
+          updated.push(u);
+        } else {
+          const c = await createLieferant(inData);
+          created.push(c);
+        }
+      }
+      res.json({ created: created.length, updated: updated.length });
+      return;
+    }
+
+    if (entity === "artikel") {
+      const { createArtikel, updateArtikel } = await Promise.resolve(
+        require("./repositories/artikel"),
+      );
+      const { query } = await Promise.resolve(require("./db"));
+      const created: any[] = [];
+      const updated: any[] = [];
+      for (const item of Array.isArray(payload) ? payload : []) {
+        const inData = {
+          lieferantId: Number(item.lieferantId),
+          name: item.name,
+          beschreibung: item.beschreibung,
+          preis: Number(item.preis) || 0,
+          lagerbestand: Number(item.lagerbestand) || 0,
+          minBestand: Number(item.minBestand) || 0,
+        };
+        // try match by lieferantId + name
+        let existingId: number | null = null;
+        if (inData.lieferantId && inData.name) {
+          const r = await query("select id from artikel where lieferant_id = $1 and name = $2", [inData.lieferantId, inData.name]);
+          if (r.rows[0]) existingId = r.rows[0].id;
+        }
+
+        if (existingId) {
+          const u = await updateArtikel(existingId, inData);
+          updated.push(u);
+        } else {
+          const c = await createArtikel(inData);
+          created.push(c);
+        }
+      }
+      res.json({ created: created.length, updated: updated.length });
+      return;
+    }
+
+    if (entity === "bestellungen") {
+      const { createBestellung, updateBestellung } = await Promise.resolve(
+        require("./repositories/bestellungen"),
+      );
+      const { query } = await Promise.resolve(require("./db"));
+      const created: any[] = [];
+      const updated: any[] = [];
+      for (const item of Array.isArray(payload) ? payload : []) {
+        const inData = {
+          status: item.status || "offen",
+          bestellDatum: item.bestellDatum,
+          positionen: Array.isArray(item.positionen) ? item.positionen.map((p: any) => ({ artikelId: p.artikelId, lieferantId: p.lieferantId, menge: p.menge })) : [],
+        };
+        // try match by bestellnummer if present
+        let existingId: number | null = null;
+        if (item.bestellnummer) {
+          const r = await query("select id from bestellungen where bestellnummer = $1", [item.bestellnummer]);
+          if (r.rows[0]) existingId = r.rows[0].id;
+        }
+
+        if (existingId) {
+          const u = await updateBestellung(existingId, inData);
+          updated.push(u);
+        } else {
+          const c = await createBestellung(inData);
+          created.push(c);
+        }
+      }
+      res.json({ created: created.length, updated: updated.length });
+      return;
+    }
+
+    if (entity === "settings") {
+      const { setSetting } = await Promise.resolve(
+        require("./repositories/settings"),
+      );
+      let count = 0;
+      const items = Array.isArray(payload) ? payload : [];
+      for (const item of items) {
+        if (item.key && item.value !== undefined) {
+          await setSetting(item.key, String(item.value));
+          count++;
+        }
+      }
+      res.json({ created: count });
+      return;
+    }
+
+    res.status(400).json({ error: "unknown entity" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "import failed" });
+  }
+});
+
+// simple CSV parser -> returns array of objects using header row
+function parseCsv(text: string) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (!lines.length) return [];
+  const header = splitCsvLine(lines[0]);
+  const data = [];
+  for (let i = 1; i < lines.length; i++) {
+    const row = splitCsvLine(lines[i]);
+    const obj: any = {};
+    for (let j = 0; j < header.length; j++) {
+      obj[header[j]] = row[j] ?? "";
+    }
+    data.push(obj);
+  }
+  return data;
+}
+
+function splitCsvLine(line: string) {
+  const result: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else {
+      if (ch === ',') {
+        result.push(cur);
+        cur = "";
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else {
+        cur += ch;
+      }
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+// One-click backup: return a JSON file with all main entities
+app.get("/api/backup", async (req, res) => {
+  try {
+    const { listLieferanten } = await Promise.resolve(
+      require("./repositories/lieferanten"),
+    );
+    const { listArtikel } = await Promise.resolve(
+      require("./repositories/artikel"),
+    );
+    const { listBestellungen } = await Promise.resolve(
+      require("./repositories/bestellungen"),
+    );
+    const { listSettings } = await Promise.resolve(
+      require("./repositories/settings"),
+    );
+
+    const backup = {
+      timestamp: new Date().toISOString(),
+      lieferanten: await listLieferanten(),
+      artikel: await listArtikel(),
+      bestellungen: await listBestellungen(),
+      settings: await listSettings(),
+    };
+
+    const fname = `backup-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+    res.setHeader("Content-Disposition", `attachment; filename="${fname}"`);
+    res.setHeader("Content-Type", "application/json");
+    res.send(JSON.stringify(backup, null, 2));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "backup failed" });
   }
 });
 

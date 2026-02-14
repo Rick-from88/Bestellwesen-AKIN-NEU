@@ -46,7 +46,7 @@
             </div>
           </a>
 
-          <a class="card" href="#" role="button">
+          <a class="card" href="#" role="button" id="backupCard">
             <div style="display: flex; align-items: center; gap: 12px">
               <svg
                 width="40"
@@ -152,6 +152,51 @@
             </div>
           </a>
         </div>
+        <!-- Backup panel is shown when clicking the Backup card -->
+        <section id="backupPanel" class="panel" style="margin-top:18px; display:none">
+          <div class="panel__header">
+            <h2>Daten Import / Export</h2>
+          </div>
+          <div style="padding: 16px">
+            <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px">
+              <div style="width:160px; font-weight:700; color:var(--ink-soft)">Lieferanten</div>
+              <button id="exportLieferanten" class="btn">Export JSON</button>
+              <button id="exportLieferantenCsv" class="btn">Export CSV</button>
+              <input id="importLieferantenFile" type="file" accept="application/json" />
+              <button id="importLieferanten" class="btn btn--secondary">Import</button>
+            </div>
+
+            <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px">
+              <div style="width:160px; font-weight:700; color:var(--ink-soft)">Artikel</div>
+              <button id="exportArtikel" class="btn">Export JSON</button>
+              <button id="exportArtikelCsv" class="btn">Export CSV</button>
+              <input id="importArtikelFile" type="file" accept="application/json" />
+              <button id="importArtikel" class="btn btn--secondary">Import</button>
+            </div>
+
+            <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px">
+              <div style="width:160px; font-weight:700; color:var(--ink-soft)">Bestellungen</div>
+              <button id="exportBestellungen" class="btn">Export JSON</button>
+              <button id="exportBestellungenCsv" class="btn">Export CSV</button>
+              <input id="importBestellungenFile" type="file" accept="application/json" />
+              <button id="importBestellungen" class="btn btn--secondary">Import</button>
+            </div>
+
+            <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px">
+              <div style="width:160px; font-weight:700; color:var(--ink-soft)">Einstellungen</div>
+              <button id="exportSettings" class="btn">Export JSON</button>
+              <button id="exportSettingsCsv" class="btn">Export CSV</button>
+              <input id="importSettingsFile" type="file" accept="application/json" />
+              <button id="importSettings" class="btn btn--secondary">Import</button>
+            </div>
+
+            <div style="margin-top:12px">
+              <button id="oneClickBackup" class="btn btn--primary">One-Click Backup (Download)</button>
+              <span id="backupMessage" style="margin-left:12px;color:var(--ink-soft)"></span>
+            </div>
+          </div>
+        </section>
+
         <div id="bestellnummerConfig" style="margin-top: 18px; display: none">
           <form id="bestellnummerForm" class="form">
             <div class="form__row">
@@ -273,6 +318,121 @@
           configMessage.textContent = "Fehler beim Setzen.";
         }
       });
+
+      // Export / Import handlers
+      const downloadJson = async (url, filename) => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Download failed');
+        const blob = await res.blob();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      };
+
+      document.getElementById('exportLieferanten').addEventListener('click', async () => {
+        try { await downloadJson('/api/export/lieferanten','lieferanten.json'); } catch(e){alert('Export fehlgeschlagen');}
+      });
+      document.getElementById('exportLieferantenCsv').addEventListener('click', async () => {
+        try { await downloadJson('/api/export/lieferanten?format=csv','lieferanten.csv'); } catch(e){alert('Export fehlgeschlagen');}
+      });
+      document.getElementById('exportArtikel').addEventListener('click', async () => {
+        try { await downloadJson('/api/export/artikel','artikel.json'); } catch(e){alert('Export fehlgeschlagen');}
+      });
+      document.getElementById('exportArtikelCsv').addEventListener('click', async () => {
+        try { await downloadJson('/api/export/artikel?format=csv','artikel.csv'); } catch(e){alert('Export fehlgeschlagen');}
+      });
+      document.getElementById('exportBestellungen').addEventListener('click', async () => {
+        try { await downloadJson('/api/export/bestellungen','bestellungen.json'); } catch(e){alert('Export fehlgeschlagen');}
+      });
+      document.getElementById('exportBestellungenCsv').addEventListener('click', async () => {
+        try { await downloadJson('/api/export/bestellungen?format=csv','bestellungen.csv'); } catch(e){alert('Export fehlgeschlagen');}
+      });
+      document.getElementById('exportSettings').addEventListener('click', async () => {
+        try { await downloadJson('/api/export/settings','settings.json'); } catch(e){alert('Export fehlgeschlagen');}
+      });
+      document.getElementById('exportSettingsCsv').addEventListener('click', async () => {
+        try { await downloadJson('/api/export/settings?format=csv','settings.csv'); } catch(e){alert('Export fehlgeschlagen');}
+      });
+
+      const readFileJson = (inputEl) => new Promise((resolve, reject) => {
+        const f = inputEl.files && inputEl.files[0];
+        if (!f) return reject('no file');
+        const r = new FileReader();
+        r.onload = () => { try { resolve(JSON.parse(String(r.result))); } catch(e){ reject(e); } };
+        r.onerror = () => reject(r.error);
+        r.readAsText(f);
+      });
+
+      document.getElementById('importLieferanten').addEventListener('click', async () => {
+        try{
+          const data = await readFileJson(document.getElementById('importLieferantenFile'));
+          const res = await fetch('/api/import/lieferanten',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+          if(!res.ok) throw new Error('import failed');
+          alert('Import erfolgreich');
+        }catch(e){ console.error(e); alert('Import fehlgeschlagen'); }
+      });
+
+      document.getElementById('importArtikel').addEventListener('click', async () => {
+        try{
+          const data = await readFileJson(document.getElementById('importArtikelFile'));
+          const res = await fetch('/api/import/artikel',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+          if(!res.ok) throw new Error('import failed');
+          alert('Import erfolgreich');
+        }catch(e){ console.error(e); alert('Import fehlgeschlagen'); }
+      });
+
+      document.getElementById('importBestellungen').addEventListener('click', async () => {
+        try{
+          const data = await readFileJson(document.getElementById('importBestellungenFile'));
+          const res = await fetch('/api/import/bestellungen',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+          if(!res.ok) throw new Error('import failed');
+          alert('Import erfolgreich');
+        }catch(e){ console.error(e); alert('Import fehlgeschlagen'); }
+      });
+
+      document.getElementById('importSettings').addEventListener('click', async () => {
+        try{
+          const data = await readFileJson(document.getElementById('importSettingsFile'));
+          const res = await fetch('/api/import/settings',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+          if(!res.ok) throw new Error('import failed');
+          alert('Import erfolgreich');
+        }catch(e){ console.error(e); alert('Import fehlgeschlagen'); }
+      });
+
+      document.getElementById('oneClickBackup').addEventListener('click', async () => {
+        const msg = document.getElementById('backupMessage');
+        msg.textContent = 'Backup wird erstellt...';
+        try{
+          await downloadJson('/api/backup', `backup-${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+          msg.textContent = 'Backup heruntergeladen.';
+          setTimeout(()=>msg.textContent='','3000');
+        }catch(e){ console.error(e); msg.textContent = 'Backup fehlgeschlagen.'; }
+      });
+
+      // Backup card toggles detailed backup panel (robust visibility fallback)
+      const backupCard = document.getElementById('backupCard');
+      const backupPanel = document.getElementById('backupPanel');
+      if (backupCard && backupPanel) {
+        backupCard.addEventListener('click', () => {
+          const comp = window.getComputedStyle(backupPanel);
+          const isHidden = comp.display === 'none' || comp.visibility === 'hidden' || comp.height === '0px';
+          if (isHidden) {
+            backupPanel.style.display = 'block';
+            backupPanel.style.visibility = 'visible';
+            backupPanel.style.opacity = '1';
+            backupPanel.style.minHeight = '120px';
+            backupPanel.style.maxHeight = '2000px';
+            backupPanel.style.overflow = 'visible';
+            // ensure panel is visible in viewport
+            try { backupPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* ignore */ }
+          } else {
+            backupPanel.style.display = 'none';
+          }
+        });
+      }
     </script>
   </body>
 </html>
