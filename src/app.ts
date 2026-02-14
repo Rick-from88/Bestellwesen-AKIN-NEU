@@ -636,6 +636,104 @@ app.get('/api/bestellungen/next-number', async (req, res) => {
     res.status(500).send('error');
   }
 });
+
+// Export endpoint (JSON or CSV)
+app.get('/api/export/:entity', async (req, res) => {
+  const entity = String(req.params.entity || '').toLowerCase();
+  const format = String(req.query.format || 'json').toLowerCase();
+  try {
+    let items: any[] = [];
+    if (entity === 'lieferanten') {
+      const { listLieferanten } = await Promise.resolve(require('./repositories/lieferanten'));
+      items = await listLieferanten();
+    } else if (entity === 'artikel') {
+      const { listArtikel } = await Promise.resolve(require('./repositories/artikel'));
+      items = await listArtikel();
+    } else if (entity === 'bestellungen') {
+      const { listBestellungen } = await Promise.resolve(require('./repositories/bestellungen'));
+      items = await listBestellungen();
+    } else if (entity === 'settings') {
+      const { listSettings } = await Promise.resolve(require('./repositories/settings'));
+      items = await listSettings();
+    } else {
+      res.status(404).json({ error: 'unknown entity' });
+      return;
+    }
+
+    if (format === 'csv') {
+      // simple CSV serialization
+      const escapeCsv = (v: any) => {
+        if (v === null || v === undefined) return '';
+        const s = String(v);
+        if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+          return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+      };
+
+      // special-case settings: listSettings returns an object map
+      if (entity === 'settings' && items && !Array.isArray(items)) {
+        const rows = ['key,value'];
+        for (const [k, v] of Object.entries(items)) {
+          rows.push(`${escapeCsv(k)},${escapeCsv(v)}`);
+        }
+        const csv = rows.join('\n');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${entity}.csv"`);
+        res.send(csv);
+        return;
+      }
+
+      const headerKeys = Array.isArray(items) && items.length ? Object.keys(items[0]) : [];
+      const rows = [headerKeys.join(',')];
+      for (const it of (Array.isArray(items) ? items : [])) {
+        const vals = headerKeys.map((k) => escapeCsv(it[k]));
+        rows.push(vals.join(','));
+      }
+      const csv = rows.join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${entity}.csv"`);
+      res.send(csv);
+      return;
+    }
+
+    res.json(items);
+  } catch (error) {
+    const errAny = error as any;
+    console.error('Export error', errAny && (errAny.stack || errAny));
+    res.status(500).json({ error: 'Export fehlgeschlagen', detail: String(errAny && (errAny.stack || errAny)).slice(0,1000) });
+  }
+});
+
+// One-click backup: return combined JSON of main entities
+app.get('/api/backup', async (req, res) => {
+  try {
+    const [{ listLieferanten }, { listArtikel }, { listBestellungen }, { listSettings }] = await Promise.all([
+      Promise.resolve(require('./repositories/lieferanten')),
+      Promise.resolve(require('./repositories/artikel')),
+      Promise.resolve(require('./repositories/bestellungen')),
+      Promise.resolve(require('./repositories/settings')),
+    ]);
+
+    const [lieferanten, artikel, bestellungen, settings] = await Promise.all([
+      listLieferanten(),
+      listArtikel(),
+      listBestellungen(),
+      listSettings(),
+    ]);
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      lieferanten,
+      artikel,
+      bestellungen,
+      settings,
+    });
+  } catch (error) {
+    console.error('Backup error', error);
+    res.status(500).json({ error: 'Backup fehlgeschlagen' });
+  }
+});
 app.get("/lieferanten", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "lieferanten.html"));
 });

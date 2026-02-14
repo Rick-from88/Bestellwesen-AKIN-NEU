@@ -1,0 +1,4 @@
+key,value
+bestellnummer_prefix,26
+bestellnummer_seq_digits,3
+bestellnummer_next_26,26153
