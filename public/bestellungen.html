@@ -379,6 +379,40 @@
 
           group.appendChild(itemsContainer);
 
+          // actions row (Senden)
+          const actionsRow = document.createElement('div');
+          actionsRow.className = 'list__row list__row--actions';
+          // show send button only for 'offen' status
+          if ((bestellung.status || 'offen') === 'offen') {
+            const sendBtn = document.createElement('button');
+            sendBtn.className = 'btn btn--primary';
+            sendBtn.textContent = 'Senden';
+            sendBtn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              sendBtn.disabled = true;
+              sendBtn.textContent = 'Sende...';
+              try {
+                const res = await fetch(`/api/bestellungen/${bestellung.id}/send`, { method: 'PUT' });
+                if (!res.ok) {
+                  const txt = await res.text();
+                  alert('Senden fehlgeschlagen: ' + txt);
+                  sendBtn.disabled = false;
+                  sendBtn.textContent = 'Senden';
+                  return;
+                }
+                // reload list to update status
+                await loadBestellungen();
+              } catch (err) {
+                console.error(err);
+                alert('Senden fehlgeschlagen');
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Senden';
+              }
+            });
+            actionsRow.appendChild(sendBtn);
+          }
+          group.appendChild(actionsRow);
+
           bestellungenList.appendChild(group);
         });
       };
