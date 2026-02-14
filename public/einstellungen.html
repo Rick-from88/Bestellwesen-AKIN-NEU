@@ -627,11 +627,11 @@
 					});
 				}
 
-				// extend loadSettings to fill mail fields and templates
+				// extend loadSettings to fill mail fields and templates (uses effective settings including env)
 				const originalLoadSettings = loadSettings;
 				loadSettings = async () => {
 					try {
-						const res = await fetch('/api/settings');
+						const res = await fetch('/api/settings/effective');
 						const data = await res.json();
 						// call existing behavior for number fields
 						try { prefixInput.value = data.bestellnummer_prefix || ''; seqDigitsInput.value = data.bestellnummer_seq_digits || '3'; lastDigitsInput.value = ''; } catch(e){}
@@ -653,12 +653,23 @@
 						document.getElementById('mailCurrentFrom').textContent = data.mail_from || '-';
 						document.getElementById('mailCurrentTo').textContent = data.mail_to || '-';
 
-						// setup placeholder copy buttons
+						// setup placeholder copy buttons (idempotent, with fallback)
 						Array.from(document.querySelectorAll('[data-copy]')).forEach(btn => {
+							if ((btn as any)._hasCopyHandler) return;
+							(btn as any)._hasCopyHandler = true;
 							btn.addEventListener('click', async () => {
 								const val = btn.getAttribute('data-copy');
 								try {
-									await navigator.clipboard.writeText(val);
+									if (navigator.clipboard && navigator.clipboard.writeText) {
+										await navigator.clipboard.writeText(val);
+									} else {
+										const ta = document.createElement('textarea');
+										ta.value = val;
+										document.body.appendChild(ta);
+										ta.select();
+										document.execCommand('copy');
+										ta.remove();
+									}
 									document.getElementById('placeholderMessage').textContent = `${val} kopiert.`;
 									setTimeout(()=>{ document.getElementById('placeholderMessage').textContent = ''; }, 1800);
 								} catch (e) {

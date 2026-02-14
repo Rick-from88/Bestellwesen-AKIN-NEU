@@ -580,6 +580,30 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
+// Return effective settings (DB + environment overrides) for frontend display
+app.get('/api/settings/effective', async (req, res) => {
+  try {
+    const { listSettings } = await Promise.resolve(require('./repositories/settings'));
+    const dbSettings = await listSettings();
+    const effective: Record<string, any> = { ...dbSettings };
+    // overlay common MAIL_* env vars if not set in DB
+    const envMap: Record<string, any> = {
+      mail_host: process.env.MAIL_HOST || process.env.SMTP_HOST || null,
+      mail_port: process.env.MAIL_PORT || process.env.SMTP_PORT || null,
+      mail_user: process.env.MAIL_USER || process.env.SMTP_USER || null,
+      mail_from: process.env.MAIL_FROM || null,
+      mail_to: process.env.MAIL_TO || null,
+    };
+    Object.keys(envMap).forEach((k) => {
+      if (!effective[k] && envMap[k] !== null) effective[k] = String(envMap[k]);
+    });
+    res.json(effective);
+  } catch (err) {
+    console.error('effective settings error', err);
+    res.status(500).json({ error: 'error' });
+  }
+});
+
 app.put('/api/settings', express.json(), async (req, res) => {
   try {
     const { setSetting } = await Promise.resolve(require('./repositories/settings'));
