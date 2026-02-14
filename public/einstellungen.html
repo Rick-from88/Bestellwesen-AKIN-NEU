@@ -655,8 +655,10 @@
 
 						// setup placeholder copy buttons (idempotent, with fallback)
 						Array.from(document.querySelectorAll('[data-copy]')).forEach(btn => {
-							if ((btn as any)._hasCopyHandler) return;
-							(btn as any)._hasCopyHandler = true;
+							try {
+								if (btn._hasCopyHandler) return;
+							} catch(e){}
+							btn._hasCopyHandler = true;
 							btn.addEventListener('click', async () => {
 								const val = btn.getAttribute('data-copy');
 								try {
