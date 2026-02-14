@@ -16,6 +16,7 @@ import {
   listLieferanten,
   updateLieferant,
 } from "./repositories/lieferanten";
+import { testSmtpConnection } from './services/email';
 import { createArtikel, deleteArtikel, listArtikel, updateArtikel } from "./repositories/artikel";
 
 const app = express();
@@ -228,6 +229,21 @@ app.put('/api/bestellungen/:id/status', express.json(), async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).send('error');
+  }
+});
+
+// Test SMTP connection (used by settings UI)
+app.post('/api/mail/test', express.json(), async (req, res) => {
+  try {
+    const result = await testSmtpConnection();
+    if (result.ok) {
+      res.json({ ok: true, message: 'SMTP Verbindung OK' });
+    } else {
+      res.status(502).json({ ok: false, error: String(result.error || 'unknown') });
+    }
+  } catch (err) {
+    console.error('SMTP test error', err);
+    res.status(500).json({ ok: false, error: String(err) });
   }
 });
 
@@ -732,6 +748,63 @@ app.get('/api/backup', async (req, res) => {
   } catch (error) {
     console.error('Backup error', error);
     res.status(500).json({ error: 'Backup fehlgeschlagen' });
+  }
+});
+
+// Send order by email and set status to 'bestellt'
+app.put('/api/bestellungen/:id/send', express.json(), async (req, res) => {
+  const id = parseInteger(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: 'ungueltige id' });
+    return;
+  }
+  try {
+    const { getBestellungById } = await Promise.resolve(require('./repositories/bestellungen'));
+    const bestellung = await getBestellungById(id);
+    if (!bestellung) {
+      res.status(404).json({ error: 'Bestellung nicht gefunden' });
+      return;
+    }
+
+    // build simple HTML body
+    const subject = `Bestellung ${bestellung.bestellnummer ?? ''}`;
+    let html = `<h2>Bestellung ${bestellung.bestellnummer ?? ''}</h2>`;
+    html += `<p>Datum: ${bestellung.bestellDatum ?? ''}</p>`;
+    html += `<table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>ArtikelId</th><th>LieferantId</th><th>Menge</th></tr></thead><tbody>`;
+    for (const pos of bestellung.positionen) {
+      html += `<tr><td>${pos.artikelId}</td><td>${pos.lieferantId}</td><td>${pos.menge}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+
+    const { sendOrderEmail } = await Promise.resolve(require('./services/email'));
+
+    // determine recipient(s): try settings or default MAIL_TO env
+    const { getSetting } = await Promise.resolve(require('./repositories/settings'));
+    const toSetting = await getSetting('email_recipient');
+    const to = toSetting || process.env.MAIL_TO || process.env.MAIL_USER || '';
+    if (!to) {
+      res.status(400).json({ error: 'Kein E-Mail-Empfaenger konfiguriert.' });
+      return;
+    }
+
+    // send email
+    try {
+      await sendOrderEmail(to, subject, `Bestellung ${bestellung.bestellnummer}\n+\nDatum: ${bestellung.bestellDatum}`, html);
+    } catch (err) {
+      const e: any = err;
+      console.error('Error during sendOrderEmail', e && (e.stack || e));
+      res.status(500).json({ error: 'E-Mail Versand fehlgeschlagen', detail: String(e && (e.message || e)).slice(0,1000) });
+      return;
+    }
+
+    // mark as bestellt
+    const { query } = await Promise.resolve(require('./db'));
+    await query('update bestellungen set status = $1 where id = $2', ['bestellt', id]);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('error');
   }
 });
 app.get("/lieferanten", (req, res) => {

@@ -43,11 +43,22 @@ export const sendOrderEmail = async (to: string, subject: string, text: string, 
                 console.log('E-Mail gesendet (Fallback): %s', info2.messageId || info2.response);
                 return info2;
             } catch (err2) {
-                console.error('Fehler beim Senden der E-Mail (Fallback):', err2 && (err2.stack || err2));
+                const e2: any = err2;
+                console.error('Fehler beim Senden der E-Mail (Fallback):', e2 && (e2.stack || e2));
                 throw err2;
             }
         }
 
         throw errAny;
+    }
+};
+
+export const testSmtpConnection = async () => {
+    try {
+        await transporter.verify();
+        return { ok: true };
+    } catch (err) {
+        const e: any = err;
+        return { ok: false, error: (e && (e.message || e)) };
     }
 };
