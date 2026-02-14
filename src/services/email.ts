@@ -29,7 +29,25 @@ export const sendOrderEmail = async (to: string, subject: string, text: string, 
         console.log('E-Mail gesendet: %s', info.messageId || info.response);
         return info;
     } catch (error) {
-        console.error('Fehler beim Senden der E-Mail:', error && (error.stack || error));
-        throw error;
+        const errAny = error as any;
+        console.error('Fehler beim Senden der E-Mail (erste Versuch):', errAny && (errAny.stack || errAny));
+
+        // If sending failed due to SendAs/SendOnBehalf rights, retry with authenticated user as from
+        const msg = String(errAny && (errAny.message || errAny.response || ''));
+        if (MAIL_USER && msg.includes('SendAsDenied') || msg.toLowerCase().includes('not allowed to send as')) {
+            try {
+                const fallbackFrom = MAIL_USER;
+                const fallbackOptions = { ...mailOptions, from: `"Bestellwesen App" <${fallbackFrom}>` };
+                console.warn('SendAs denied, retrying with MAIL_USER as from');
+                const info2 = await transporter.sendMail(fallbackOptions);
+                console.log('E-Mail gesendet (Fallback): %s', info2.messageId || info2.response);
+                return info2;
+            } catch (err2) {
+                console.error('Fehler beim Senden der E-Mail (Fallback):', err2 && (err2.stack || err2));
+                throw err2;
+            }
+        }
+
+        throw errAny;
     }
 };
