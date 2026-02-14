@@ -766,15 +766,70 @@ app.put('/api/bestellungen/:id/send', express.json(), async (req, res) => {
       return;
     }
 
-    // build simple HTML body
-    const subject = `Bestellung ${bestellung.bestellnummer ?? ''}`;
-    let html = `<h2>Bestellung ${bestellung.bestellnummer ?? ''}</h2>`;
-    html += `<p>Datum: ${bestellung.bestellDatum ?? ''}</p>`;
-    html += `<table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>ArtikelId</th><th>LieferantId</th><th>Menge</th></tr></thead><tbody>`;
-    for (const pos of bestellung.positionen) {
-      html += `<tr><td>${pos.artikelId}</td><td>${pos.lieferantId}</td><td>${pos.menge}</td></tr>`;
+    // prepare article and supplier data for templates
+    const { query } = await Promise.resolve(require('./db'));
+    const artikelIds = Array.from(new Set((bestellung.positionen || []).map((p: any) => p.artikelId)));
+    let artikelRows: any[] = [];
+    if (artikelIds.length) {
+      const aRes = await query('select id, name, preis from artikel where id = ANY($1)', [artikelIds]);
+      artikelRows = aRes.rows || [];
     }
-    html += `</tbody></table>`;
+    const lieferantIds = Array.from(new Set((bestellung.positionen || []).map((p: any) => p.lieferantId)));
+    let lieferantRows: any[] = [];
+    if (lieferantIds.length) {
+      const lRes = await query('select id, name from lieferanten where id = ANY($1)', [lieferantIds]);
+      lieferantRows = lRes.rows || [];
+    }
+
+    const artikelMap: Record<number, any> = {};
+    artikelRows.forEach(r => { artikelMap[r.id] = r; });
+    const lieferantMap: Record<number, any> = {};
+    lieferantRows.forEach(r => { lieferantMap[r.id] = r; });
+
+    // build HTML and text representations of the article list
+    let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr style="text-align:left"><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th></tr></thead><tbody>`;
+    let artikelText = '';
+    for (const pos of bestellung.positionen) {
+      const a = artikelMap[pos.artikelId] || { name: `Artikel #${pos.artikelId}`, preis: 0 };
+      const menge = Number(pos.menge) || 0;
+      const preis = Number(a.preis) || 0;
+      const gesamt = (preis * menge).toFixed(2);
+      artikelHtml += `<tr><td>${a.name}</td><td>${menge}</td><td>${preis.toFixed(2)} €</td><td>${gesamt} €</td></tr>`;
+      artikelText += `- ${a.name} | Menge: ${menge} | Preis: ${preis.toFixed(2)}€ | Gesamt: ${gesamt}€\n`;
+    }
+    artikelHtml += '</tbody></table>';
+
+    // prepare placeholder replacements
+    const firstLieferantName = lieferantMap[bestellung.positionen?.[0]?.lieferantId]?.name || '';
+    const replacements: Record<string, string> = {
+      '{{bestellnummer}}': String(bestellung.bestellnummer ?? ''),
+      '{{datum}}': String(bestellung.bestellDatum ?? ''),
+      '{{lieferant}}': firstLieferantName,
+      '{{artikel_liste}}': artikelHtml,
+      '{{artikel_text}}': artikelText,
+    };
+
+    // load templates from settings if present
+    const { getSetting } = await Promise.resolve(require('./repositories/settings'));
+    const subjTemplate = (await getSetting('email_subject')) || `Bestellung ${bestellung.bestellnummer ?? ''}`;
+    let bodyTemplate = (await getSetting('email_body')) || `<h2>Bestellung ${bestellung.bestellnummer ?? ''}</h2><p>Datum: ${bestellung.bestellDatum ?? ''}</p>{{artikel_liste}}`;
+    const signature = (await getSetting('email_signature')) || '';
+
+    // apply replacements in subject and body
+    let subject = subjTemplate;
+    let html = bodyTemplate;
+    let text = `Bestellung ${bestellung.bestellnummer ?? ''}\nDatum: ${bestellung.bestellDatum ?? ''}\n\n${artikelText}`;
+    for (const key of Object.keys(replacements)) {
+      const val = replacements[key];
+      const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      subject = subject.replace(re, val);
+      html = html.replace(re, val);
+      text = text.replace(re, val);
+    }
+    if (signature) {
+      html += `<div>${signature}</div>`;
+      text += `\n${signature}`;
+    }
 
     const { sendOrderEmail } = await Promise.resolve(require('./services/email'));
 
