@@ -154,8 +154,9 @@
 						</div>
 					</a>
 				</div>
-				<!-- Mail panel: detailed mail settings shown below the cards -->
-				<section id="mailPanel" class="panel" style="margin-top:18px; display:none">
+				<!-- Mail details (form + summary + placeholders) shown below the cards -->
+				<div id="mailDetails" style="display:none">
+				<section id="mailPanel" class="panel" style="margin-top:18px; display:block">
 					<div class="panel__header">
 						<h2>Maileinstellungen & Vorlagen</h2>
 					</div>
@@ -205,7 +206,7 @@
 						<div id="mailMessage" class="form__message" role="status"></div>
 					</form>
 				</section>
-                
+
 				<!-- Current SMTP summary and placeholders -->
 				<section class="panel" style="margin-top:12px; display:block;">
 					<div class="panel__header">
@@ -248,6 +249,8 @@
 						<div id="placeholderMessage" style="color:var(--ink-soft)"></div>
 					</div>
 				</section>
+
+				</div>
 
 				<!-- Backup panel is shown when clicking the Backup card -->
 				<section id="backupPanel" class="panel" style="margin-top:18px; display:none">
@@ -513,6 +516,7 @@
 			const backupCard = document.getElementById('backupCard');
 			const backupPanel = document.getElementById('backupPanel');
 			const mailPanel = document.getElementById('mailPanel');
+			const mailDetails = document.getElementById('mailDetails');
 			const mailCard = Array.from(document.querySelectorAll('.card')).find(c => c.querySelector('.card__label') && c.querySelector('.card__label').textContent.trim() === 'Maileinstellungen');
 			if (backupCard && backupPanel) {
 				backupCard.addEventListener('click', () => {
@@ -533,16 +537,16 @@
 			}
 
 				// Maileinstellungen card toggles detailed mail panel
-				if (mailCard && mailPanel) {
+				if (mailCard && mailDetails) {
 					mailCard.addEventListener('click', () => {
-						const comp = window.getComputedStyle(mailPanel);
+						const comp = window.getComputedStyle(mailDetails);
 						const isHidden = comp.display === 'none' || comp.visibility === 'hidden' || comp.height === '0px';
 						if (isHidden) {
-							mailPanel.style.display = 'block';
-							mailPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+							mailDetails.style.display = 'block';
+							mailDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
 							loadSettings();
 						} else {
-							mailPanel.style.display = 'none';
+							mailDetails.style.display = 'none';
 						}
 					});
 				}
@@ -561,7 +565,7 @@
 				const email_body = document.getElementById('email_body');
 				const email_signature = document.getElementById('email_signature');
 
-				mailCancel.addEventListener('click', () => { mailPanel.style.display = 'none'; });
+				mailCancel.addEventListener('click', () => { if (mailDetails) mailDetails.style.display = 'none'; });
 
 				mailForm.addEventListener('submit', async (e) => {
 					e.preventDefault();
@@ -585,7 +589,7 @@
 						const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(normalized) });
 						if (!res.ok) throw new Error('Speichern fehlgeschlagen');
 						mailMessage.textContent = 'Gespeichert.';
-						setTimeout(()=>{ mailMessage.textContent = ''; mail_pass.value = ''; mailPanel.style.display = 'none'; }, 1000);
+						setTimeout(()=>{ mailMessage.textContent = ''; mail_pass.value = ''; if (mailDetails) mailDetails.style.display = 'none'; }, 1000);
 					} catch (err) {
 						console.error(err);
 						mailMessage.textContent = 'Fehler beim Speichern.';
