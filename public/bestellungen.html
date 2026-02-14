@@ -67,6 +67,12 @@
             <button class="btn btn--danger" type="button" id="editDelete">
               Loeschen
             </button>
+            <button id="modalSendBtn" type="button" class="btn btn--icon" title="Senden" style="display:none; align-items:center; gap:8px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M22 2L11 13" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
             <button class="btn btn--ghost" type="button" id="editCancel">
               Abbrechen
             </button>
@@ -101,6 +107,7 @@
       const editDelete = document.getElementById("editDelete");
       const editMessage = document.getElementById("editMessage");
       const modalTitle = document.getElementById("modalTitle");
+      const modalSendBtn = document.getElementById('modalSendBtn');
 
       let bestellungenData = [];
       let artikelData = [];
@@ -254,6 +261,16 @@
           editMessage.textContent = '';
         }
 
+        // show send button only when status is 'offen'
+        if (modalSendBtn) {
+          if ((bestellung.status || 'offen') === 'offen') {
+            modalSendBtn.style.display = '';
+            modalSendBtn.disabled = false;
+          } else {
+            modalSendBtn.style.display = 'none';
+          }
+        }
+
         bestellungModal.classList.add("is-open");
         bestellungModal.setAttribute("aria-hidden", "false");
       };
@@ -379,39 +396,7 @@
 
           group.appendChild(itemsContainer);
 
-          // actions row (Senden)
-          const actionsRow = document.createElement('div');
-          actionsRow.className = 'list__row list__row--actions';
-          // show send button only for 'offen' status
-          if ((bestellung.status || 'offen') === 'offen') {
-            const sendBtn = document.createElement('button');
-            sendBtn.className = 'btn btn--primary';
-            sendBtn.textContent = 'Senden';
-            sendBtn.addEventListener('click', async (e) => {
-              e.stopPropagation();
-              sendBtn.disabled = true;
-              sendBtn.textContent = 'Sende...';
-              try {
-                const res = await fetch(`/api/bestellungen/${bestellung.id}/send`, { method: 'PUT' });
-                if (!res.ok) {
-                  const txt = await res.text();
-                  alert('Senden fehlgeschlagen: ' + txt);
-                  sendBtn.disabled = false;
-                  sendBtn.textContent = 'Senden';
-                  return;
-                }
-                // reload list to update status
-                await loadBestellungen();
-              } catch (err) {
-                console.error(err);
-                alert('Senden fehlgeschlagen');
-                sendBtn.disabled = false;
-                sendBtn.textContent = 'Senden';
-              }
-            });
-            actionsRow.appendChild(sendBtn);
-          }
-          group.appendChild(actionsRow);
+          // no per-row action buttons here (send moved to modal)
 
           bestellungenList.appendChild(group);
         });
@@ -564,6 +549,33 @@
           editMessage.textContent = "Loeschen fehlgeschlagen.";
         }
       });
+
+      if (modalSendBtn) {
+        modalSendBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          if (!currentBestellungId) return;
+          modalSendBtn.disabled = true;
+          const original = modalSendBtn.innerHTML;
+          modalSendBtn.innerHTML = 'Sende...';
+          try {
+            const res = await fetch(`/api/bestellungen/${currentBestellungId}/send`, { method: 'PUT' });
+            if (!res.ok) {
+              const txt = await res.text();
+              alert('Senden fehlgeschlagen: ' + txt);
+              modalSendBtn.disabled = false;
+              modalSendBtn.innerHTML = original;
+              return;
+            }
+            closeModal();
+            await loadBestellungen();
+          } catch (err) {
+            console.error(err);
+            alert('Senden fehlgeschlagen');
+            modalSendBtn.disabled = false;
+            modalSendBtn.innerHTML = original;
+          }
+        });
+      }
 
       bestellungenRefresh.addEventListener("click", loadBestellungen);
       loadBestellungen();
