@@ -1,0 +1,707 @@
+﻿<!doctype html>
+<html lang="de">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Einstellungen</title>
+		<link rel="stylesheet" href="/static/styles/uebersicht.css" />
+	</head>
+	<body class="settings-page">
+		<div class="page">
+			<header class="hero">
+				<h1>Einstellungen</h1>
+				<p class="hero__subtitle">
+					Verwalte Profil, Backup und weitere Einstellungen.
+				</p>
+			</header>
+
+			<section class="panel">
+				<div class="panel__header">
+					<h2>Einstellungen</h2>
+				</div>
+
+				<div class="grid">
+					<a class="card" href="#" role="button">
+						<div style="display: flex; align-items: center; gap: 12px">
+							<svg
+								width="40"
+								height="40"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<circle cx="12" cy="8" r="3" stroke="#111" stroke-width="1.5" />
+								<path
+									d="M4 20c0-3.3137 2.6863-6 6-6h4c3.3137 0 6 2.6863 6 6"
+									stroke="#111"
+									stroke-width="1.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							<div>
+								<div class="card__label">Profil</div>
+								<div class="card__value">Benutzerinformationen bearbeiten</div>
+							</div>
+						</div>
+					</a>
+
+					<a class="card" href="#" role="button" id="backupCard">
+						<div style="display: flex; align-items: center; gap: 12px">
+							<svg
+								width="40"
+								height="40"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M12 5v7"
+									stroke="#111"
+									stroke-width="1.5"
+									stroke-linecap="round"
+								/>
+								<path
+									d="M19.4 15a7 7 0 10-14.8 0"
+									stroke="#111"
+									stroke-width="1.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							<div>
+								<div class="card__label">Backup</div>
+								<div class="card__value">Daten exportieren / importieren</div>
+							</div>
+						</div>
+					</a>
+
+					<a class="card" href="#" role="button">
+						<div style="display: flex; align-items: center; gap: 12px">
+							<svg
+								width="40"
+								height="40"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M4 7h16"
+									stroke="#111"
+									stroke-width="1.5"
+									stroke-linecap="round"
+								/>
+								<rect
+									x="4"
+									y="11"
+									width="16"
+									height="8"
+									rx="2"
+									stroke="#111"
+									stroke-width="1.5"
+								/>
+							</svg>
+							<div>
+								<div class="card__label">Maileinstellungen</div>
+								<div class="card__value">
+									SMTP, Absenderadresse konfigurieren
+								</div>
+							</div>
+						</div>
+					</a>
+
+                    
+
+					<a class="card" href="#" role="button">
+						<div style="display: flex; align-items: center; gap: 12px">
+							<svg
+								width="40"
+								height="40"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M3 12h18"
+									stroke="#111"
+									stroke-width="1.5"
+									stroke-linecap="round"
+								/>
+								<path
+									d="M6 8v8"
+									stroke="#111"
+									stroke-width="1.5"
+									stroke-linecap="round"
+								/>
+								<path
+									d="M18 8v8"
+									stroke="#111"
+									stroke-width="1.5"
+									stroke-linecap="round"
+								/>
+							</svg>
+							<div>
+								<div class="card__label">Bestellnummer</div>
+								<div class="card__value">
+									Fortlaufende Nummern konfigurieren
+								</div>
+								<div style="margin-top: 8px">
+									<button id="configureNumberBtn" class="btn btn--small">
+										Konfigurieren
+									</button>
+								</div>
+							</div>
+						</div>
+					</a>
+				</div>
+				<!-- Mail details (form + summary + placeholders) shown below the cards -->
+				<div id="mailDetails" style="display:none">
+				<section id="mailPanel" class="panel" style="margin-top:18px; display:block">
+					<div class="panel__header">
+						<h2>Maileinstellungen & Vorlagen</h2>
+					</div>
+					<form id="mailSettingsForm" class="form" style="padding:16px">
+						<div class="form__row">
+							<label for="mail_host">SMTP Host</label>
+							<input id="mail_host" type="text" placeholder="smtp.example.com" />
+						</div>
+						<div class="form__row">
+							<label for="mail_port">SMTP Port</label>
+							<input id="mail_port" type="number" min="1" max="65535" />
+						</div>
+						<div class="form__row">
+							<label for="mail_user">SMTP Benutzer</label>
+							<input id="mail_user" type="text" />
+						</div>
+						<div class="form__row">
+							<label for="mail_pass">SMTP Passwort (leer = unverändert)</label>
+							<input id="mail_pass" type="password" autocomplete="new-password" />
+						</div>
+						<div class="form__row">
+							<label for="mail_from">Absender (MAIL_FROM)</label>
+							<input id="mail_from" type="email" />
+						</div>
+						<div class="form__row">
+							<label for="mail_to">Standard Empfänger (MAIL_TO)</label>
+							<input id="mail_to" type="email" />
+						</div>
+						<hr />
+						<div class="form__row">
+							<label for="email_subject">Standard Betreff (Template)</label>
+							<input id="email_subject" type="text" placeholder="Bestellung {{bestellnummer}} von {{lieferant}}" />
+						</div>
+						<div class="form__row">
+							<label for="email_body">E-Mail Textvorlage (HTML erlaubt)</label>
+							<textarea id="email_body" rows="6" placeholder="Hallo {{kunde}},\nHier ist Ihre Bestellung..."></textarea>
+						</div>
+						<div class="form__row">
+							<label for="email_signature">Signatur</label>
+							<textarea id="email_signature" rows="3" placeholder="Mit freundlichen Gruessen\nFirma X"></textarea>
+						</div>
+						<div class="form__actions">
+							<button class="btn btn--primary" type="submit">Speichern</button>
+							<button class="btn btn--small btn--ghost" type="button" id="mailTestBtn">Test SMTP</button>
+							<button class="btn btn--ghost" type="button" id="mailCancel">Abbrechen</button>
+						</div>
+						<div id="mailMessage" class="form__message" role="status"></div>
+					</form>
+				</section>
+
+				<!-- Current SMTP summary and placeholders -->
+				<section class="panel" style="margin-top:12px; display:block;">
+					<div class="panel__header">
+						<h2>Aktuelle SMTP-Konfiguration</h2>
+					</div>
+					<div style="padding:16px; display:grid; gap:8px;">
+						<div><strong>Host:</strong> <span id="mailCurrentHost">-</span></div>
+						<div><strong>Port:</strong> <span id="mailCurrentPort">-</span></div>
+						<div><strong>Benutzer:</strong> <span id="mailCurrentUser">-</span></div>
+						<div><strong>Absender (MAIL_FROM):</strong> <span id="mailCurrentFrom">-</span></div>
+						<div><strong>Standard Empfänger (MAIL_TO):</strong> <span id="mailCurrentTo">-</span></div>
+					</div>
+				</section>
+
+				<section class="panel" style="margin-top:12px; display:block;">
+					<div class="panel__header">
+						<h2>Verfügbare Platzhalter (kopieren)</h2>
+					</div>
+					<div style="padding:16px; display:grid; gap:8px;">
+						<div style="display:flex; gap:8px; align-items:center;">
+							<code style="padding:6px 10px; border-radius:8px; background:#fbf9f6">{{bestellnummer}}</code>
+							<button class="btn btn--small" data-copy="{{bestellnummer}}">Kopieren</button>
+							<div style="color:var(--ink-soft); margin-left:8px;">Bestellnummer</div>
+						</div>
+						<div style="display:flex; gap:8px; align-items:center;">
+							<code style="padding:6px 10px; border-radius:8px; background:#fbf9f6">{{lieferant}}</code>
+							<button class="btn btn--small" data-copy="{{lieferant}}">Kopieren</button>
+							<div style="color:var(--ink-soft); margin-left:8px;">Lieferantenname</div>
+						</div>
+						<div style="display:flex; gap:8px; align-items:center;">
+							<code style="padding:6px 10px; border-radius:8px; background:#fbf9f6">{{kunde}}</code>
+							<button class="btn btn--small" data-copy="{{kunde}}">Kopieren</button>
+							<div style="color:var(--ink-soft); margin-left:8px;">Kundenname</div>
+						</div>
+						<div style="display:flex; gap:8px; align-items:center;">
+							<code style="padding:6px 10px; border-radius:8px; background:#fbf9f6">{{datum}}</code>
+							<button class="btn btn--small" data-copy="{{datum}}">Kopieren</button>
+							<div style="color:var(--ink-soft); margin-left:8px;">Bestelldatum</div>
+						</div>
+						<div style="display:flex; gap:8px; align-items:center;">
+							<code style="padding:6px 10px; border-radius:8px; background:#fbf9f6">{{artikel_liste}}</code>
+							<button class="btn btn--small" data-copy="{{artikel_liste}}">Kopieren</button>
+							<div style="color:var(--ink-soft); margin-left:8px;">Liste aller Artikel der Bestellung (HTML)</div>
+						</div>
+						<div id="placeholderMessage" style="color:var(--ink-soft)"></div>
+					</div>
+				</section>
+
+				</div>
+
+				<!-- Backup panel is shown when clicking the Backup card -->
+				<section id="backupPanel" class="panel" style="margin-top:18px; display:none">
+					<div class="panel__header">
+						<h2>Daten Import / Export</h2>
+					</div>
+					<div style="padding: 16px">
+						<div style="display:flex; gap:12px; align-items:center; margin-bottom:8px">
+							<div style="width:160px; font-weight:700; color:var(--ink-soft)">Lieferanten</div>
+							<button id="exportLieferanten" class="btn">Export JSON</button>
+							<button id="exportLieferantenCsv" class="btn">Export CSV</button>
+							<input id="importLieferantenFile" type="file" accept="application/json" />
+							<button id="importLieferanten" class="btn btn--secondary">Import</button>
+						</div>
+
+						<div style="display:flex; gap:12px; align-items:center; margin-bottom:8px">
+							<div style="width:160px; font-weight:700; color:var(--ink-soft)">Artikel</div>
+							<button id="exportArtikel" class="btn">Export JSON</button>
+							<button id="exportArtikelCsv" class="btn">Export CSV</button>
+							<input id="importArtikelFile" type="file" accept="application/json" />
+							<button id="importArtikel" class="btn btn--secondary">Import</button>
+						</div>
+
+						<div style="display:flex; gap:12px; align-items:center; margin-bottom:8px">
+							<div style="width:160px; font-weight:700; color:var(--ink-soft)">Bestellungen</div>
+							<button id="exportBestellungen" class="btn">Export JSON</button>
+							<button id="exportBestellungenCsv" class="btn">Export CSV</button>
+							<input id="importBestellungenFile" type="file" accept="application/json" />
+							<button id="importBestellungen" class="btn btn--secondary">Import</button>
+						</div>
+
+						<div style="display:flex; gap:12px; align-items:center; margin-bottom:8px">
+							<div style="width:160px; font-weight:700; color:var(--ink-soft)">Einstellungen</div>
+							<button id="exportSettings" class="btn">Export JSON</button>
+							<button id="exportSettingsCsv" class="btn">Export CSV</button>
+							<input id="importSettingsFile" type="file" accept="application/json" />
+							<button id="importSettings" class="btn btn--secondary">Import</button>
+						</div>
+
+						<div style="margin-top:12px">
+							<button id="oneClickBackup" class="btn btn--primary">One-Click Backup (Download)</button>
+							<span id="backupMessage" style="margin-left:12px;color:var(--ink-soft)"></span>
+						</div>
+					</div>
+				</section>
+
+				<div id="bestellnummerConfig" style="margin-top: 18px; display: none">
+					<form id="bestellnummerForm" class="form">
+						<div class="form__row">
+							<label for="prefix">Präfix (z.B. Jahrkürzel, '26')</label>
+							<input id="prefix" type="text" />
+						</div>
+						<div class="form__row">
+							<label for="seqDigits">Anzahl Stellen (Sequenz)</label>
+							<input id="seqDigits" type="number" min="1" max="8" />
+						</div>
+						<div class="form__row">
+							<label for="lastDigits">Aktuelle Zahl (letzte N Ziffern)</label>
+							<input id="lastDigits" type="number" min="0" />
+							<div style="margin-top: 8px">
+								<button
+									id="setLastDigits"
+									class="btn btn--secondary"
+									type="button"
+								>
+									Setzen
+								</button>
+							</div>
+						</div>
+						<div class="form__actions">
+							<button class="btn btn--primary" type="submit">Speichern</button>
+							<button class="btn btn--ghost" type="button" id="cancelConfig">
+								Abbrechen
+							</button>
+						</div>
+						<div id="configMessage" class="form__message" role="status"></div>
+					</form>
+				</div>
+			</section>
+		</div>
+
+		<nav class="navbar">
+			<a class="navbar__item" href="/uebersicht">Dashboard</a>
+			<a class="navbar__item" href="/bestellungen">Bestellungen</a>
+			<a class="navbar__item" href="/lieferanten">Lieferanten</a>
+			<a class="navbar__item" href="/artikel">Artikel</a>
+			<a class="navbar__item is-active" href="/einstellungen">Einstellungen</a>
+		</nav>
+		<script>
+			const configureBtn = document.getElementById("configureNumberBtn");
+			const configDiv = document.getElementById("bestellnummerConfig");
+			const cancelConfig = document.getElementById("cancelConfig");
+			const prefixInput = document.getElementById("prefix");
+			const seqDigitsInput = document.getElementById("seqDigits");
+			const configMessage = document.getElementById("configMessage");
+
+			let loadSettings = async () => {
+				try {
+					const res = await fetch("/api/settings");
+					const data = await res.json();
+					prefixInput.value = data.bestellnummer_prefix || "";
+					seqDigitsInput.value = data.bestellnummer_seq_digits || "3";
+					lastDigitsInput.value = "";
+				} catch (err) {
+					console.error(err);
+				}
+			};
+
+			configureBtn.addEventListener("click", () => {
+				configDiv.style.display =
+					configDiv.style.display === "none" ? "block" : "none";
+				loadSettings();
+			});
+
+			cancelConfig.addEventListener("click", () => {
+				configDiv.style.display = "none";
+			});
+
+			document
+				.getElementById("bestellnummerForm")
+				.addEventListener("submit", async (e) => {
+					e.preventDefault();
+					configMessage.textContent = "";
+					try {
+						const payload = {
+							bestellnummer_prefix: prefixInput.value,
+							bestellnummer_seq_digits: Number(seqDigitsInput.value),
+						};
+						const res = await fetch("/api/settings", {
+							method: "PUT",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(payload),
+						});
+						if (!res.ok) throw new Error("save failed");
+						configMessage.textContent = "Gespeichert.";
+						setTimeout(() => {
+							configDiv.style.display = "none";
+							configMessage.textContent = "";
+						}, 1000);
+					} catch (err) {
+						console.error(err);
+						configMessage.textContent = "Fehler beim Speichern.";
+					}
+				});
+
+			const lastDigitsInput = document.getElementById("lastDigits");
+			const setLastDigitsBtn = document.getElementById("setLastDigits");
+			setLastDigitsBtn.addEventListener("click", async () => {
+				configMessage.textContent = "";
+				try {
+					const payload = { lastDigits: Number(lastDigitsInput.value) };
+					const res = await fetch("/api/settings/sequence", {
+						method: "PUT",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(payload),
+					});
+					if (!res.ok) throw new Error("set failed");
+					configMessage.textContent = "Sequenz gesetzt.";
+					setTimeout(() => {
+						configDiv.style.display = "none";
+						configMessage.textContent = "";
+					}, 1000);
+				} catch (err) {
+					console.error(err);
+					configMessage.textContent = "Fehler beim Setzen.";
+				}
+			});
+
+			// Export / Import handlers
+			const downloadJson = async (url, filename) => {
+				const res = await fetch(url);
+				if (!res.ok) throw new Error("Download failed");
+				const blob = await res.blob();
+				const link = document.createElement("a");
+				link.href = URL.createObjectURL(blob);
+				link.download = filename;
+				document.body.appendChild(link);
+				link.click();
+				link.remove();
+			};
+
+			document.getElementById("exportLieferanten").addEventListener("click", async () => {
+				try { await downloadJson('/api/export/lieferanten','lieferanten.json'); } catch(e){alert('Export fehlgeschlagen');}
+			});
+			document.getElementById("exportLieferantenCsv").addEventListener("click", async () => {
+				try { await downloadJson('/api/export/lieferanten?format=csv','lieferanten.csv'); } catch(e){alert('Export fehlgeschlagen');}
+			});
+			document.getElementById("exportArtikel").addEventListener("click", async () => {
+				try { await downloadJson('/api/export/artikel','artikel.json'); } catch(e){alert('Export fehlgeschlagen');}
+			});
+			document.getElementById("exportArtikelCsv").addEventListener("click", async () => {
+				try { await downloadJson('/api/export/artikel?format=csv','artikel.csv'); } catch(e){alert('Export fehlgeschlagen');}
+			});
+			document.getElementById("exportBestellungen").addEventListener("click", async () => {
+				try { await downloadJson('/api/export/bestellungen','bestellungen.json'); } catch(e){alert('Export fehlgeschlagen');}
+			});
+			document.getElementById("exportBestellungenCsv").addEventListener("click", async () => {
+				try { await downloadJson('/api/export/bestellungen?format=csv','bestellungen.csv'); } catch(e){alert('Export fehlgeschlagen');}
+			});
+			document.getElementById("exportSettings").addEventListener("click", async () => {
+				try { await downloadJson('/api/export/settings','settings.json'); } catch(e){alert('Export fehlgeschlagen');}
+			});
+			document.getElementById("exportSettingsCsv").addEventListener("click", async () => {
+				try { await downloadJson('/api/export/settings?format=csv','settings.csv'); } catch(e){alert('Export fehlgeschlagen');}
+			});
+
+			const readFileJson = (inputEl) => new Promise((resolve, reject) => {
+				const f = inputEl.files && inputEl.files[0];
+				if (!f) return reject('no file');
+				const r = new FileReader();
+				r.onload = () => { try { resolve(JSON.parse(String(r.result))); } catch(e){ reject(e); } };
+				r.onerror = () => reject(r.error);
+				r.readAsText(f);
+			});
+
+			document.getElementById('importLieferanten').addEventListener('click', async () => {
+				try{
+					const data = await readFileJson(document.getElementById('importLieferantenFile'));
+					const res = await fetch('/api/import/lieferanten',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+					if(!res.ok) throw new Error('import failed');
+					alert('Import erfolgreich');
+				}catch(e){ console.error(e); alert('Import fehlgeschlagen'); }
+			});
+
+			document.getElementById('importArtikel').addEventListener('click', async () => {
+				try{
+					const data = await readFileJson(document.getElementById('importArtikelFile'));
+					const res = await fetch('/api/import/artikel',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+					if(!res.ok) throw new Error('import failed');
+					alert('Import erfolgreich');
+				}catch(e){ console.error(e); alert('Import fehlgeschlagen'); }
+			});
+
+			document.getElementById('importBestellungen').addEventListener('click', async () => {
+				try{
+					const data = await readFileJson(document.getElementById('importBestellungenFile'));
+					const res = await fetch('/api/import/bestellungen',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+					if(!res.ok) throw new Error('import failed');
+					alert('Import erfolgreich');
+				}catch(e){ console.error(e); alert('Import fehlgeschlagen'); }
+			});
+
+			document.getElementById('importSettings').addEventListener('click', async () => {
+				try{
+					const data = await readFileJson(document.getElementById('importSettingsFile'));
+					const res = await fetch('/api/import/settings',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data)});
+					if(!res.ok) throw new Error('import failed');
+					alert('Import erfolgreich');
+				}catch(e){ console.error(e); alert('Import fehlgeschlagen'); }
+			});
+
+			document.getElementById('oneClickBackup').addEventListener('click', async () => {
+				const msg = document.getElementById('backupMessage');
+				msg.textContent = 'Backup wird erstellt...';
+				try{
+					await downloadJson('/api/backup', `backup-${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+					msg.textContent = 'Backup heruntergeladen.';
+					setTimeout(()=>msg.textContent='','3000');
+				}catch(e){ console.error(e); msg.textContent = 'Backup fehlgeschlagen.'; }
+			});
+
+			// Backup card toggles detailed backup panel (robust visibility fallback)
+			const backupCard = document.getElementById('backupCard');
+			const backupPanel = document.getElementById('backupPanel');
+			const mailPanel = document.getElementById('mailPanel');
+			const mailDetails = document.getElementById('mailDetails');
+			const mailCard = Array.from(document.querySelectorAll('.card')).find(c => c.querySelector('.card__label') && c.querySelector('.card__label').textContent.trim() === 'Maileinstellungen');
+			if (backupCard && backupPanel) {
+				backupCard.addEventListener('click', () => {
+					const comp = window.getComputedStyle(backupPanel);
+					const isHidden = comp.display === 'none' || comp.visibility === 'hidden' || comp.height === '0px';
+					if (isHidden) {
+						backupPanel.style.display = 'block';
+						backupPanel.style.visibility = 'visible';
+						backupPanel.style.opacity = '1';
+						backupPanel.style.minHeight = '120px';
+						backupPanel.style.maxHeight = '2000px';
+						backupPanel.style.overflow = 'visible';
+						try { backupPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { }
+					} else {
+						backupPanel.style.display = 'none';
+					}
+				});
+			}
+
+				// Maileinstellungen card toggles detailed mail panel
+				if (mailCard && mailDetails) {
+					mailCard.addEventListener('click', () => {
+						const comp = window.getComputedStyle(mailDetails);
+						const isHidden = comp.display === 'none' || comp.visibility === 'hidden' || comp.height === '0px';
+						if (isHidden) {
+							mailDetails.style.display = 'block';
+							mailDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
+							loadSettings();
+						} else {
+							mailDetails.style.display = 'none';
+						}
+					});
+				}
+
+				// Mail settings form handling
+				const mailForm = document.getElementById('mailSettingsForm');
+				const mailCancel = document.getElementById('mailCancel');
+				const mailMessage = document.getElementById('mailMessage');
+				const mail_host = document.getElementById('mail_host');
+				const mail_port = document.getElementById('mail_port');
+				const mail_user = document.getElementById('mail_user');
+				const mail_pass = document.getElementById('mail_pass');
+				const mail_from = document.getElementById('mail_from');
+				const mail_to = document.getElementById('mail_to');
+				const email_subject = document.getElementById('email_subject');
+				const email_body = document.getElementById('email_body');
+				const email_signature = document.getElementById('email_signature');
+
+				mailCancel.addEventListener('click', () => { if (mailDetails) mailDetails.style.display = 'none'; });
+
+				mailForm.addEventListener('submit', async (e) => {
+					e.preventDefault();
+					mailMessage.textContent = '';
+					try {
+						const payload = {
+							MAIL_HOST: mail_host.value || null,
+							MAIL_PORT: mail_port.value ? Number(mail_port.value) : null,
+							MAIL_USER: mail_user.value || null,
+							// only send password if provided (avoid blanking stored pass)
+							...(mail_pass.value ? { MAIL_PASS: mail_pass.value } : {}),
+							MAIL_FROM: mail_from.value || null,
+							MAIL_TO: mail_to.value || null,
+							EMAIL_SUBJECT: email_subject.value || null,
+							EMAIL_BODY: email_body.value || null,
+							EMAIL_SIGNATURE: email_signature.value || null,
+						};
+						// normalize keys to backend's settings shape (lowercase keys expected elsewhere)
+						const normalized = {};
+						Object.keys(payload).forEach(k => { if (payload[k] !== null) normalized[k.toLowerCase()] = payload[k]; });
+						const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(normalized) });
+						if (!res.ok) throw new Error('Speichern fehlgeschlagen');
+						mailMessage.textContent = 'Gespeichert.';
+						setTimeout(()=>{ mailMessage.textContent = ''; mail_pass.value = ''; if (mailDetails) mailDetails.style.display = 'none'; }, 1000);
+					} catch (err) {
+						console.error(err);
+						mailMessage.textContent = 'Fehler beim Speichern.';
+					}
+				});
+
+				// Test SMTP button handler
+				const mailTestBtn = document.getElementById('mailTestBtn');
+				if (mailTestBtn) {
+					mailTestBtn.addEventListener('click', async () => {
+						mailMessage.textContent = 'Pruefe SMTP Verbindung...';
+						mailTestBtn.disabled = true;
+						try {
+							const res = await fetch('/api/mail/test', { method: 'POST' });
+							if (!res.ok) {
+								const txt = await res.text();
+								mailMessage.textContent = 'Verbindung fehlgeschlagen: ' + txt;
+								mailTestBtn.disabled = false;
+								return;
+							}
+							const data = await res.json();
+							mailMessage.textContent = data.message || 'OK';
+						} catch (err) {
+							console.error(err);
+							mailMessage.textContent = 'Fehler beim Testen.';
+						} finally {
+							mailTestBtn.disabled = false;
+							setTimeout(()=>{ mailMessage.textContent = ''; }, 3000);
+						}
+					});
+				}
+
+				// extend loadSettings to fill mail fields and templates (uses effective settings including env)
+				const originalLoadSettings = loadSettings;
+				loadSettings = async () => {
+					try {
+						const res = await fetch('/api/settings/effective');
+						const data = await res.json();
+						// call existing behavior for number fields
+						try { prefixInput.value = data.bestellnummer_prefix || ''; seqDigitsInput.value = data.bestellnummer_seq_digits || '3'; lastDigitsInput.value = ''; } catch(e){}
+						// mail settings
+						mail_host.value = data.mail_host || '';
+						mail_port.value = data.mail_port || '';
+						mail_user.value = data.mail_user || '';
+						// do not populate password for security
+						mail_from.value = data.mail_from || '';
+						mail_to.value = data.mail_to || '';
+						email_subject.value = data.email_subject || '';
+						email_body.value = data.email_body || '';
+						email_signature.value = data.email_signature || '';
+
+						// populate current SMTP summary (read-only)
+						document.getElementById('mailCurrentHost').textContent = data.mail_host || '-';
+						document.getElementById('mailCurrentPort').textContent = data.mail_port || '-';
+						document.getElementById('mailCurrentUser').textContent = data.mail_user || '-';
+						document.getElementById('mailCurrentFrom').textContent = data.mail_from || '-';
+						document.getElementById('mailCurrentTo').textContent = data.mail_to || '-';
+
+						// setup placeholder copy buttons (idempotent, with fallback)
+						Array.from(document.querySelectorAll('[data-copy]')).forEach(btn => {
+							try {
+								if (btn._hasCopyHandler) return;
+							} catch(e){}
+							btn._hasCopyHandler = true;
+							btn.addEventListener('click', async () => {
+								const val = btn.getAttribute('data-copy');
+								try {
+									if (navigator.clipboard && navigator.clipboard.writeText) {
+										await navigator.clipboard.writeText(val);
+									} else {
+										const ta = document.createElement('textarea');
+										ta.value = val;
+										document.body.appendChild(ta);
+										ta.select();
+										document.execCommand('copy');
+										ta.remove();
+									}
+									document.getElementById('placeholderMessage').textContent = `${val} kopiert.`;
+									setTimeout(()=>{ document.getElementById('placeholderMessage').textContent = ''; }, 1800);
+								} catch (e) {
+									console.error('copy failed', e);
+									alert('Kopieren nicht möglich');
+								}
+							});
+						});
+					} catch (err) {
+						console.error('loadSettings error', err);
+					}
+				};
+
+				// populate settings on page load so the SMTP summary is visible immediately
+				try { loadSettings(); } catch (e) { /* ignore */ }
+
+				// fallback: ensure SMTP summary is populated even if other scripts fail
+				document.addEventListener('DOMContentLoaded', async () => {
+					try {
+						const res = await fetch('/api/settings/effective');
+						if (!res.ok) return;
+						const data = await res.json();
+						document.getElementById('mailCurrentHost').textContent = data.mail_host || '-';
+						document.getElementById('mailCurrentPort').textContent = data.mail_port || '-';
+						document.getElementById('mailCurrentUser').textContent = data.mail_user || '-';
+						document.getElementById('mailCurrentFrom').textContent = data.mail_from || '-';
+						document.getElementById('mailCurrentTo').textContent = data.mail_to || '-';
+					} catch (e) { /* ignore */ }
+				});
+		</script>
+	</body>
+</html>
+

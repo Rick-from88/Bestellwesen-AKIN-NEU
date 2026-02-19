@@ -15,15 +15,14 @@
         </p>
         <div class="hero__actions">
           <a class="btn btn--primary" href="/bestellung-neu">Neue Bestellung</a>
-          <a class="btn btn--ghost" href="/lieferanten">Lieferanten</a>
         </div>
       </header>
 
       <section class="grid">
         <article class="card">
           <div class="card__label">Offene Bestellungen</div>
-          <div class="card__value">24</div>
-          <div class="card__trend">+5 seit letzter Woche</div>
+          <div class="card__value" id="offeneCount">0</div>
+          <div class="card__trend" id="offeneTrend">Noch keine Daten</div>
         </article>
         <article class="card">
           <div class="card__label">Gefaellige Lieferanten</div>
@@ -48,38 +47,40 @@
 
         <div class="panel">
           <div class="panel__header">
-            <h2>Heute wichtig</h2>
-            <button class="btn btn--link">Mehr</button>
+            <h2>Notizen</h2>
           </div>
-          <div class="alert">
-            <div class="alert__title">3 Angebote laufen aus</div>
-            <p>
-              Pruefe die Lieferantenpreise bis 16:00, um Staffelrabatte zu
-              sichern.
-            </p>
-          </div>
-          <div class="timeline">
-            <div class="timeline__item">
-              <div class="timeline__time">09:30</div>
-              <div>
-                <div class="timeline__title">Freigabe Einkauf IT</div>
-                <div class="timeline__meta">Budget: 18.400 EUR</div>
-              </div>
+          <div class="notes">
+            <textarea
+              id="dashboardNotes"
+              placeholder="Neue Notiz eingeben und auf 'Speichern' klicken"
+              rows="4"
+              style="
+                width: 100%;
+                box-sizing: border-box;
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+              "
+            ></textarea>
+            <div
+              style="
+                margin-top: 8px;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+              "
+            >
+              <button class="btn btn--primary" id="notesSaveBtn">
+                Hinzufügen
+              </button>
+              <button class="btn btn--link" id="notesClearBtn">Leeren</button>
+              <span
+                id="notesStatus"
+                style="color: #666; font-size: 0.9em"
+              ></span>
             </div>
-            <div class="timeline__item">
-              <div class="timeline__time">11:15</div>
-              <div>
-                <div class="timeline__title">Lieferantencheck</div>
-                <div class="timeline__meta">Datenimport abgeschlossen</div>
-              </div>
-            </div>
-            <div class="timeline__item">
-              <div class="timeline__time">15:00</div>
-              <div>
-                <div class="timeline__title">Bestellung versenden</div>
-                <div class="timeline__meta">Nachbearbeitung offen</div>
-              </div>
-            </div>
+
+            <div id="savedNotes" style="margin-top: 12px"></div>
           </div>
         </div>
       </section>
@@ -134,6 +135,11 @@
       const letzteBestellungenList = document.getElementById(
         "letzteBestellungenList",
       );
+      const dashboardNotesEl = document.getElementById("dashboardNotes");
+      const notesSaveBtn = document.getElementById("notesSaveBtn");
+      const notesClearBtn = document.getElementById("notesClearBtn");
+      const notesStatus = document.getElementById("notesStatus");
+      const savedNotesContainer = document.getElementById("savedNotes");
 
       const statusClass = (status) => {
         if (status === "geliefert") {
@@ -153,7 +159,11 @@
         return date.toLocaleDateString("de-DE");
       };
 
-      const renderLetzteBestellungen = (bestellungen, artikelMap, lieferantMap) => {
+      const renderLetzteBestellungen = (
+        bestellungen,
+        artikelMap,
+        lieferantMap,
+      ) => {
         letzteBestellungenList.innerHTML = "";
         if (!bestellungen.length) {
           const emptyRow = document.createElement("div");
@@ -163,7 +173,7 @@
           return;
         }
 
-        bestellungen.slice(0, 3).forEach((bestellung) => {
+        bestellungen.forEach((bestellung) => {
           const row = document.createElement("div");
           row.className = "list__row";
 
@@ -174,14 +184,16 @@
             ? bestellung.positionen[0]
             : null;
           const artikelName = erstePosition
-            ? artikelMap[erstePosition.artikelId] || `Artikel #${erstePosition.artikelId}`
+            ? artikelMap[erstePosition.artikelId] ||
+              `Artikel #${erstePosition.artikelId}`
             : `Bestellung #${bestellung.id}`;
           title.textContent = artikelName;
 
           const meta = document.createElement("div");
           meta.className = "list__meta";
           const lieferantName = erstePosition
-            ? lieferantMap[erstePosition.lieferantId] || `Lieferant #${erstePosition.lieferantId}`
+            ? lieferantMap[erstePosition.lieferantId] ||
+              `Lieferant #${erstePosition.lieferantId}`
             : "";
           const datum = formatDate(bestellung.bestellDatum);
           meta.textContent = lieferantName
@@ -248,11 +260,12 @@
 
       const loadLetzteBestellungen = async () => {
         try {
-          const [bestellungenRes, artikelRes, lieferantenRes] = await Promise.all([
-            fetch("/api/bestellungen"),
-            fetch("/api/artikel"),
-            fetch("/api/lieferanten"),
-          ]);
+          const [bestellungenRes, artikelRes, lieferantenRes] =
+            await Promise.all([
+              fetch("/api/bestellungen"),
+              fetch("/api/artikel"),
+              fetch("/api/lieferanten"),
+            ]);
 
           const bestellungen = await bestellungenRes.json();
           const artikel = await artikelRes.json();
@@ -268,9 +281,200 @@
             return acc;
           }, {});
 
-          renderLetzteBestellungen(bestellungen, artikelMap, lieferantMap);
+          // sortiere Bestellungen nach Bestelldatum (neueste zuerst) und
+          // zeige maximal 5 Einträge
+          bestellungen.sort((a, b) => {
+            const da = new Date(a.bestellDatum).getTime() || 0;
+            const db = new Date(b.bestellDatum).getTime() || 0;
+            return db - da;
+          });
+          const letzte5 = bestellungen.slice(0, 5);
+
+          renderLetzteBestellungen(letzte5, artikelMap, lieferantMap);
         } catch (error) {
           console.error("Fehler beim Laden der Bestellungen:", error);
+        }
+      };
+
+      const renderSavedNotes = (notes) => {
+        if (!savedNotesContainer) return;
+        savedNotesContainer.innerHTML = "";
+        if (!Array.isArray(notes) || notes.length === 0) {
+          const el = document.createElement("div");
+          el.className = "list__row";
+          el.textContent = "Keine Notizen.";
+          savedNotesContainer.appendChild(el);
+          return;
+        }
+
+        notes.forEach((note) => {
+          const row = document.createElement("div");
+          row.className = "list__row";
+          row.style.display = "flex";
+          row.style.justifyContent = "space-between";
+          row.style.alignItems = "center";
+          row.style.flexWrap = "wrap";
+
+          const left = document.createElement("div");
+          left.style.display = "flex";
+          left.style.alignItems = "center";
+          left.style.gap = "8px";
+          left.style.flex = "1";
+          left.style.minWidth = "0";
+
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = !!note.done;
+          cb.addEventListener("change", async () => {
+            note.done = cb.checked;
+            await saveNotesArray(notesGlobal);
+            renderSavedNotes(notesGlobal);
+          });
+
+          const txt = document.createElement("div");
+          txt.textContent = note.text;
+          // allow wrapping and preserve line breaks
+          txt.style.flex = "1";
+          txt.style.minWidth = "0";
+          txt.style.wordBreak = "break-word";
+          txt.style.whiteSpace = "pre-wrap";
+          txt.style.marginRight = "8px";
+          if (note.done) txt.style.textDecoration = "line-through";
+
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          meta.style.marginLeft = "12px";
+          meta.style.fontSize = "0.85em";
+          meta.style.color = "#666";
+          meta.textContent = note.createdAt
+            ? new Date(note.createdAt).toLocaleString("de-DE")
+            : "";
+
+          left.appendChild(cb);
+          left.appendChild(txt);
+          left.appendChild(meta);
+
+          const actions = document.createElement("div");
+          const del = document.createElement("button");
+          del.className = "btn btn--link";
+          del.textContent = "Löschen";
+          del.addEventListener("click", async () => {
+            const idx = notesGlobal.findIndex((n) => n.id === note.id);
+            if (idx >= 0) {
+              notesGlobal.splice(idx, 1);
+              await saveNotesArray(notesGlobal);
+              renderSavedNotes(notesGlobal);
+            }
+          });
+          actions.appendChild(del);
+
+          row.appendChild(left);
+          row.appendChild(actions);
+          savedNotesContainer.appendChild(row);
+        });
+      };
+
+      let notesGlobal = [];
+
+      const loadDashboardNotes = async () => {
+        try {
+          const res = await fetch("/api/dashboard/notes");
+          if (!res.ok) return;
+          const data = await res.json();
+          if (Array.isArray(data.notes)) {
+            notesGlobal = data.notes;
+            renderSavedNotes(notesGlobal);
+          }
+        } catch (e) {
+          console.error("Fehler beim Laden der Notizen", e);
+        }
+      };
+
+      const saveNotesArray = async (arr) => {
+        try {
+          if (notesStatus) notesStatus.textContent = "Speichern...";
+          const res = await fetch("/api/dashboard/notes", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notes: arr }),
+          });
+          if (res.ok) {
+            if (notesStatus) notesStatus.textContent = "Gespeichert";
+            setTimeout(() => {
+              if (notesStatus) notesStatus.textContent = "";
+            }, 1500);
+            return true;
+          }
+          if (notesStatus) notesStatus.textContent = "Fehler";
+        } catch (e) {
+          console.error("Fehler beim Speichern der Notizen", e);
+          if (notesStatus) notesStatus.textContent = "Fehler";
+        }
+        return false;
+      };
+
+      const addNewNote = async () => {
+        if (!dashboardNotesEl) return;
+        const t = dashboardNotesEl.value.trim();
+        if (!t) return;
+        if (notesStatus) notesStatus.textContent = "Hinzufügen...";
+        try {
+          const res = await fetch("/api/dashboard/notes", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ note: t }),
+          });
+          if (res.ok) {
+            let newNote = null;
+            try {
+              newNote = await res.json();
+            } catch (e) {
+              // server returned no JSON body; create a local note object as fallback
+              newNote = {
+                id: Date.now(),
+                text: t,
+                done: false,
+                createdAt: new Date().toISOString(),
+              };
+            }
+            notesGlobal.unshift(newNote);
+            dashboardNotesEl.value = "";
+            renderSavedNotes(notesGlobal);
+            if (notesStatus) notesStatus.textContent = "Hinzugefügt";
+            setTimeout(() => {
+              if (notesStatus) notesStatus.textContent = "";
+            }, 1500);
+          } else {
+            if (notesStatus) notesStatus.textContent = "Fehler";
+          }
+        } catch (e) {
+          console.error("Fehler beim Hinzufügen der Notiz", e);
+          if (notesStatus) notesStatus.textContent = "Fehler";
+        }
+      };
+
+      if (notesSaveBtn) notesSaveBtn.addEventListener("click", addNewNote);
+      if (notesClearBtn)
+        notesClearBtn.addEventListener("click", () => {
+          if (dashboardNotesEl) dashboardNotesEl.value = "";
+        });
+
+      const loadOffeneCount = async () => {
+        try {
+          const res = await fetch("/api/bestellungen");
+          const bestellungen = await res.json();
+          const offene = bestellungen.filter(
+            (b) => (b.status || "offen") === "offen",
+          );
+          const offeneCountEl = document.getElementById("offeneCount");
+          const offeneTrendEl = document.getElementById("offeneTrend");
+          if (offeneCountEl) offeneCountEl.textContent = String(offene.length);
+          // simple trend: compare with count from 7 days ago (if available via bestellDatum)
+          // fallback: no trend
+          offeneTrendEl &&
+            (offeneTrendEl.textContent = `${offene.length} offen`);
+        } catch (e) {
+          console.error("Fehler beim Laden der offenen Bestellungen", e);
         }
       };
 
@@ -279,6 +483,8 @@
       loadLieferanten();
       loadArtikel();
       loadLetzteBestellungen();
+      loadOffeneCount();
+      loadDashboardNotes();
     </script>
   </body>
 </html>

@@ -67,10 +67,35 @@
             <button class="btn btn--danger" type="button" id="editDelete">
               Loeschen
             </button>
-            <button id="modalSendBtn" type="button" class="btn btn--icon" title="Senden" style="display:none; align-items:center; gap:8px;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <path d="M22 2L11 13" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <button
+              id="modalSendBtn"
+              type="button"
+              class="btn btn--primary btn--small"
+              title="Senden"
+              style="display: none"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  d="M22 2L11 13"
+                  stroke="#fff"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M22 2L15 22L11 13L2 9L22 2Z"
+                  stroke="#fff"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
               </svg>
             </button>
             <button class="btn btn--ghost" type="button" id="editCancel">
@@ -107,7 +132,7 @@
       const editDelete = document.getElementById("editDelete");
       const editMessage = document.getElementById("editMessage");
       const modalTitle = document.getElementById("modalTitle");
-      const modalSendBtn = document.getElementById('modalSendBtn');
+      const modalSendBtn = document.getElementById("modalSendBtn");
 
       let bestellungenData = [];
       let artikelData = [];
@@ -177,6 +202,54 @@
         return select;
       };
 
+      const artikelCache = {};
+      const populateArtikelForLieferant = async (
+        artikelSelect,
+        lieferantId,
+        selectedId,
+      ) => {
+        artikelSelect.innerHTML = "";
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "Artikel";
+        artikelSelect.appendChild(defaultOption);
+        if (!lieferantId) {
+          artikelSelect.disabled = true;
+          return;
+        }
+        artikelSelect.disabled = false;
+        if (artikelCache[lieferantId]) {
+          const items = artikelCache[lieferantId];
+          items.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.id;
+            option.textContent = item.name || `#${item.id}`;
+            if (selectedId && Number(selectedId) === Number(item.id))
+              option.selected = true;
+            artikelSelect.appendChild(option);
+          });
+          return;
+        }
+        try {
+          const res = await fetch(
+            `/api/lieferanten/${encodeURIComponent(lieferantId)}/artikel`,
+          );
+          if (!res.ok) return;
+          const items = await res.json();
+          artikelCache[lieferantId] = items;
+          items.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.id;
+            option.textContent = item.name || `#${item.id}`;
+            if (selectedId && Number(selectedId) === Number(item.id))
+              option.selected = true;
+            artikelSelect.appendChild(option);
+          });
+        } catch (e) {
+          console.error("Fehler beim Laden der Artikel fuer Lieferant", e);
+        }
+      };
+
       const createPositionRow = (position = {}) => {
         const row = document.createElement("div");
         row.className = "position-row";
@@ -186,11 +259,21 @@
           "Lieferant",
           position.lieferantId,
         );
-        const artikelSelect = buildSelect(
-          artikelData,
-          "Artikel",
-          position.artikelId,
-        );
+        const artikelSelect = buildSelect([], "Artikel", position.artikelId);
+        artikelSelect.disabled = true;
+
+        lieferantSelect.addEventListener("change", async () => {
+          const lid = Number(lieferantSelect.value);
+          await populateArtikelForLieferant(artikelSelect, lid);
+        });
+        // populate if position already has supplier
+        if (position.lieferantId) {
+          populateArtikelForLieferant(
+            artikelSelect,
+            position.lieferantId,
+            position.artikelId,
+          );
+        }
 
         const mengeInput = document.createElement("input");
         mengeInput.type = "number";
@@ -241,33 +324,38 @@
         }
 
         // determine editability: not editable when delivered or cancelled
-        const editable = !(bestellung.status === 'geliefert' || bestellung.status === 'storniert');
+        const editable = !(
+          bestellung.status === "geliefert" || bestellung.status === "storniert"
+        );
         // enable/disable add button
         editAddPosition.disabled = !editable;
         // show/hide delete button
-        editDelete.style.display = editable ? '' : 'none';
+        editDelete.style.display = editable ? "" : "none";
 
         // disable remove buttons and inputs when not editable
         if (!editable) {
-          Array.from(editPositionen.querySelectorAll('select, input, button')).forEach(el => {
-            if (el.tagName.toLowerCase() === 'button') {
-              el.setAttribute('disabled', 'true');
+          Array.from(
+            editPositionen.querySelectorAll("select, input, button"),
+          ).forEach((el) => {
+            if (el.tagName.toLowerCase() === "button") {
+              el.setAttribute("disabled", "true");
             } else {
-              el.setAttribute('disabled', 'true');
+              el.setAttribute("disabled", "true");
             }
           });
-          editMessage.textContent = 'Diese Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden. Status kann jedoch geaendert werden.';
+          editMessage.textContent =
+            "Diese Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden. Status kann jedoch geaendert werden.";
         } else {
-          editMessage.textContent = '';
+          editMessage.textContent = "";
         }
 
         // show send button only when status is 'offen'
         if (modalSendBtn) {
-          if ((bestellung.status || 'offen') === 'offen') {
-            modalSendBtn.style.display = '';
+          if ((bestellung.status || "offen") === "offen") {
+            modalSendBtn.style.display = "";
             modalSendBtn.disabled = false;
           } else {
-            modalSendBtn.style.display = 'none';
+            modalSendBtn.style.display = "none";
           }
         }
 
@@ -339,9 +427,9 @@
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
           headerRow.appendChild(leftDiv);
-          const statusEl = document.createElement('div');
+          const statusEl = document.createElement("div");
           statusEl.className = statusClass(bestellung.status);
-          statusEl.textContent = (bestellung.status || 'offen').toUpperCase();
+          statusEl.textContent = (bestellung.status || "offen").toUpperCase();
           headerRow.appendChild(statusEl);
           group.appendChild(headerRow);
 
@@ -465,16 +553,25 @@
         // if positions are not editable, only change status via status endpoint
         if (editAddPosition.disabled) {
           try {
-            const res = await fetch(`/api/bestellungen/${currentBestellungId}/status`, {
-              method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: editStatus.value })
-            });
+            const res = await fetch(
+              `/api/bestellungen/${currentBestellungId}/status`,
+              {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: editStatus.value }),
+              },
+            );
             if (!res.ok) {
               const txt = await res.text();
               editMessage.textContent = `Fehler: ${txt}`;
               return;
             }
-            closeModal(); loadBestellungen();
-          } catch (e) { console.error(e); editMessage.textContent = 'Speichern fehlgeschlagen.' }
+            closeModal();
+            loadBestellungen();
+          } catch (e) {
+            console.error(e);
+            editMessage.textContent = "Speichern fehlgeschlagen.";
+          }
           return;
         }
 
@@ -551,17 +648,20 @@
       });
 
       if (modalSendBtn) {
-        modalSendBtn.addEventListener('click', async (e) => {
+        modalSendBtn.addEventListener("click", async (e) => {
           e.preventDefault();
           if (!currentBestellungId) return;
           modalSendBtn.disabled = true;
           const original = modalSendBtn.innerHTML;
-          modalSendBtn.innerHTML = 'Sende...';
+          modalSendBtn.innerHTML = "Sende...";
           try {
-            const res = await fetch(`/api/bestellungen/${currentBestellungId}/send`, { method: 'PUT' });
+            const res = await fetch(
+              `/api/bestellungen/${currentBestellungId}/send`,
+              { method: "PUT" },
+            );
             if (!res.ok) {
               const txt = await res.text();
-              alert('Senden fehlgeschlagen: ' + txt);
+              alert("Senden fehlgeschlagen: " + txt);
               modalSendBtn.disabled = false;
               modalSendBtn.innerHTML = original;
               return;
@@ -570,7 +670,7 @@
             await loadBestellungen();
           } catch (err) {
             console.error(err);
-            alert('Senden fehlgeschlagen');
+            alert("Senden fehlgeschlagen");
             modalSendBtn.disabled = false;
             modalSendBtn.innerHTML = original;
           }

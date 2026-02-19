@@ -1,186 +1,250 @@
 <!doctype html>
 <html lang="de">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Bestellung anlegen</title>
-        <link rel="stylesheet" href="/static/styles/uebersicht.css" />
-    </head>
-    <body>
-        <div class="page">
-            <header class="hero">
-                <h1>Bestellung anlegen</h1>
-                <p class="hero__subtitle">Neue Bestellung erfassen und speichern.</p>
-            </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bestellung anlegen</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <h1>Bestellung anlegen</h1>
+        <p class="hero__subtitle">Neue Bestellung erfassen und speichern.</p>
+      </header>
 
-            <section class="panel">
-                <form id="bestellungForm" class="form">
-                    <div class="form__row">
-                        <label>Positionen</label>
-                        <div id="positionenContainer" class="position-list"></div>
-                        <button class="btn btn--ghost" type="button" id="addPositionBtn">
-                            Position hinzufuegen
-                        </button>
-                    </div>
-                    <div class="form__row">
-                        <label for="bestellDatum">Bestelldatum</label>
-                        <input id="bestellDatum" name="bestellDatum" type="date" required />
-                        <div id="bestellnummerPreview" style="margin-top:8px;color:var(--ink-soft);"></div>
-                    </div>
-                    <div class="form__actions">
-                        <button class="btn btn--primary" type="submit">Speichern</button>
-                        <a class="btn btn--ghost" href="/uebersicht">Abbrechen</a>
-                    </div>
-                    <div id="formMessage" class="form__message" role="status"></div>
-                </form>
-            </section>
-        </div>
+      <section class="panel">
+        <form id="bestellungForm" class="form">
+          <div class="form__row">
+            <label>Positionen</label>
+            <div id="positionenContainer" class="position-list"></div>
+            <button class="btn btn--ghost" type="button" id="addPositionBtn">
+              Position hinzufuegen
+            </button>
+          </div>
+          <div class="form__row">
+            <label for="bestellDatum">Bestelldatum</label>
+            <input id="bestellDatum" name="bestellDatum" type="date" required />
+            <div
+              id="bestellnummerPreview"
+              style="margin-top: 8px; color: var(--ink-soft)"
+            ></div>
+          </div>
+          <div class="form__actions">
+            <button class="btn btn--primary" type="submit">Speichern</button>
+            <a class="btn btn--ghost" href="/uebersicht">Abbrechen</a>
+          </div>
+          <div id="formMessage" class="form__message" role="status"></div>
+        </form>
+      </section>
+    </div>
 
-        <nav class="navbar">
-            <a class="navbar__item" href="/uebersicht">Dashboard</a>
-            <a class="navbar__item is-active" href="/bestellung-neu">Neu</a>
-            <a class="navbar__item" href="/bestellungen">Bestellungen</a>
-            <a class="navbar__item" href="/lieferanten">Lieferanten</a>
-              <a class="navbar__item" href="/artikel">Artikel</a>
-            <a class="navbar__item" href="/einstellungen">Einstellungen</a>
-        </nav>
+    <nav class="navbar">
+      <a class="navbar__item" href="/uebersicht">Dashboard</a>
+      <a class="navbar__item is-active" href="/bestellung-neu">Neu</a>
+      <a class="navbar__item" href="/bestellungen">Bestellungen</a>
+      <a class="navbar__item" href="/lieferanten">Lieferanten</a>
+      <a class="navbar__item" href="/artikel">Artikel</a>
+      <a class="navbar__item" href="/einstellungen">Einstellungen</a>
+    </nav>
 
-        <script>
-            const form = document.getElementById('bestellungForm');
-            const message = document.getElementById('formMessage');
-            const bestellDatumInput = document.getElementById('bestellDatum');
-            const positionenContainer = document.getElementById('positionenContainer');
-            const addPositionBtn = document.getElementById('addPositionBtn');
-            let lieferanten = [];
-            let artikel = [];
+    <script>
+      const form = document.getElementById("bestellungForm");
+      const message = document.getElementById("formMessage");
+      const bestellDatumInput = document.getElementById("bestellDatum");
+      const positionenContainer = document.getElementById(
+        "positionenContainer",
+      );
+      const addPositionBtn = document.getElementById("addPositionBtn");
+      let lieferanten = [];
+      let artikel = [];
 
-            const buildSelect = (items, placeholder) => {
-                const select = document.createElement('select');
-                select.required = true;
-                select.setAttribute('aria-label', placeholder);
+      const buildSelect = (items, placeholder) => {
+        const select = document.createElement("select");
+        select.required = true;
+        select.setAttribute("aria-label", placeholder);
 
-                const defaultOption = document.createElement('option');
-                defaultOption.value = '';
-                defaultOption.textContent = placeholder;
-                select.appendChild(defaultOption);
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = placeholder;
+        select.appendChild(defaultOption);
 
-                items.forEach((item) => {
-                    const option = document.createElement('option');
-                    option.value = item.id;
-                    option.textContent = item.name || `#${item.id}`;
-                    select.appendChild(option);
-                });
+        items.forEach((item) => {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = item.name || `#${item.id}`;
+          select.appendChild(option);
+        });
 
-                return select;
-            };
+        return select;
+      };
 
-            const addPositionRow = () => {
-                const row = document.createElement('div');
-                row.className = 'position-row';
+      const artikelCache = {};
+      const populateArtikelForLieferant = async (
+        artikelSelect,
+        lieferantId,
+        selectedId,
+      ) => {
+        artikelSelect.innerHTML = "";
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "Artikel";
+        artikelSelect.appendChild(defaultOption);
+        if (!lieferantId) {
+          artikelSelect.disabled = true;
+          return;
+        }
+        artikelSelect.disabled = false;
+        if (artikelCache[lieferantId]) {
+          const items = artikelCache[lieferantId];
+          items.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.id;
+            option.textContent = item.name || `#${item.id}`;
+            if (selectedId && Number(selectedId) === Number(item.id))
+              option.selected = true;
+            artikelSelect.appendChild(option);
+          });
+          return;
+        }
+        try {
+          const res = await fetch(
+            `/api/lieferanten/${encodeURIComponent(lieferantId)}/artikel`,
+          );
+          if (!res.ok) return;
+          const items = await res.json();
+          artikelCache[lieferantId] = items;
+          items.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.id;
+            option.textContent = item.name || `#${item.id}`;
+            if (selectedId && Number(selectedId) === Number(item.id))
+              option.selected = true;
+            artikelSelect.appendChild(option);
+          });
+        } catch (e) {
+          console.error("Fehler beim Laden der Artikel fuer Lieferant", e);
+        }
+      };
 
-                const lieferantSelect = buildSelect(lieferanten, 'Lieferant');
-                const artikelSelect = buildSelect(artikel, 'Artikel');
+      const addPositionRow = () => {
+        const row = document.createElement("div");
+        row.className = "position-row";
 
-                const mengeInput = document.createElement('input');
-                mengeInput.type = 'number';
-                mengeInput.min = '1';
-                mengeInput.step = '1';
-                mengeInput.required = true;
-                mengeInput.placeholder = 'Menge';
-                mengeInput.setAttribute('aria-label', 'Menge');
+        const lieferantSelect = buildSelect(lieferanten, "Lieferant");
+        const artikelSelect = buildSelect([], "Artikel");
+        artikelSelect.disabled = true;
 
-                const removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.className = 'btn btn--link';
-                removeBtn.textContent = 'Entfernen';
-                removeBtn.addEventListener('click', () => {
-                    row.remove();
-                    if (!positionenContainer.children.length) {
-                        addPositionRow();
-                    }
-                });
+        lieferantSelect.addEventListener("change", async () => {
+          const lid = Number(lieferantSelect.value);
+          await populateArtikelForLieferant(artikelSelect, lid);
+        });
 
-                row.appendChild(lieferantSelect);
-                row.appendChild(artikelSelect);
-                row.appendChild(mengeInput);
-                row.appendChild(removeBtn);
-                positionenContainer.appendChild(row);
-            };
+        const mengeInput = document.createElement("input");
+        mengeInput.type = "number";
+        mengeInput.min = "1";
+        mengeInput.step = "1";
+        mengeInput.required = true;
+        mengeInput.placeholder = "Menge";
+        mengeInput.setAttribute("aria-label", "Menge");
 
-            const loadData = async () => {
-                const [lieferantenRes, artikelRes] = await Promise.all([
-                    fetch('/api/lieferanten'),
-                    fetch('/api/artikel'),
-                ]);
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn btn--link";
+        removeBtn.textContent = "Entfernen";
+        removeBtn.addEventListener("click", () => {
+          row.remove();
+          if (!positionenContainer.children.length) {
+            addPositionRow();
+          }
+        });
 
-                lieferanten = await lieferantenRes.json();
-                artikel = await artikelRes.json();
+        row.appendChild(lieferantSelect);
+        row.appendChild(artikelSelect);
+        row.appendChild(mengeInput);
+        row.appendChild(removeBtn);
+        positionenContainer.appendChild(row);
+      };
 
-                positionenContainer.innerHTML = '';
-                addPositionRow();
-                // load preview for bestellnummer
-                const previewEl = document.getElementById('bestellnummerPreview');
-                const loadPreview = async () => {
-                    try {
-                        const date = bestellDatumInput.value;
-                        const res = await fetch(`/api/bestellungen/next-number?date=${encodeURIComponent(date)}`);
-                        if (res.ok) {
-                            const j = await res.json();
-                            previewEl.textContent = `Voraussichtliche Bestellnummer: ${j.next}`;
-                        }
-                    } catch (err) {
-                        console.error(err);
-                    }
-                };
-                loadPreview();
-                bestellDatumInput.addEventListener('change', loadPreview);
-            };
+      const loadData = async () => {
+        const [lieferantenRes, artikelRes] = await Promise.all([
+          fetch("/api/lieferanten"),
+          fetch("/api/artikel"),
+        ]);
 
-            form.addEventListener('submit', async (event) => {
-                event.preventDefault();
-                message.textContent = '';
+        lieferanten = await lieferantenRes.json();
+        artikel = await artikelRes.json();
 
-                const positionen = Array.from(positionenContainer.children).map((row) => {
-                    const selects = row.querySelectorAll('select');
-                    const inputs = row.querySelectorAll('input');
-                    const lieferantId = Number(selects[0].value);
-                    const artikelId = Number(selects[1].value);
-                    const menge = Number(inputs[0].value);
-                    return { lieferantId, artikelId, menge };
-                });
+        positionenContainer.innerHTML = "";
+        addPositionRow();
+        // load preview for bestellnummer
+        const previewEl = document.getElementById("bestellnummerPreview");
+        const loadPreview = async () => {
+          try {
+            const date = bestellDatumInput.value;
+            const res = await fetch(
+              `/api/bestellungen/next-number?date=${encodeURIComponent(date)}`,
+            );
+            if (res.ok) {
+              const j = await res.json();
+              previewEl.textContent = `Voraussichtliche Bestellnummer: ${j.next}`;
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        };
+        loadPreview();
+        bestellDatumInput.addEventListener("change", loadPreview);
+      };
 
-                const payload = {
-                    bestellDatum: bestellDatumInput.value,
-                    positionen,
-                };
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        message.textContent = "";
 
-                const response = await fetch('/api/bestellungen', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
+        const positionen = Array.from(positionenContainer.children).map(
+          (row) => {
+            const selects = row.querySelectorAll("select");
+            const inputs = row.querySelectorAll("input");
+            const lieferantId = Number(selects[0].value);
+            const artikelId = Number(selects[1].value);
+            const menge = Number(inputs[0].value);
+            return { lieferantId, artikelId, menge };
+          },
+        );
 
-                if (response.ok) {
-                    const result = await response.json();
-                    const count = Array.isArray(result) ? result.length : 1;
-                    message.textContent = count > 1
-                        ? `${count} Bestellungen gespeichert.`
-                        : 'Bestellung gespeichert.';
-                    form.reset();
-                    bestellDatumInput.valueAsDate = new Date();
-                    positionenContainer.innerHTML = '';
-                    addPositionRow();
-                    return;
-                }
+        const payload = {
+          bestellDatum: bestellDatumInput.value,
+          positionen,
+        };
 
-                const errorText = await response.text();
-                message.textContent = `Fehler: ${errorText}`;
-            });
+        const response = await fetch("/api/bestellungen", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-            addPositionBtn.addEventListener('click', () => addPositionRow());
+        if (response.ok) {
+          const result = await response.json();
+          const count = Array.isArray(result) ? result.length : 1;
+          message.textContent =
+            count > 1
+              ? `${count} Bestellungen gespeichert.`
+              : "Bestellung gespeichert.";
+          form.reset();
+          bestellDatumInput.valueAsDate = new Date();
+          positionenContainer.innerHTML = "";
+          addPositionRow();
+          return;
+        }
 
-            bestellDatumInput.valueAsDate = new Date();
-            loadData();
-        </script>
-    </body>
+        const errorText = await response.text();
+        message.textContent = `Fehler: ${errorText}`;
+      });
+
+      addPositionBtn.addEventListener("click", () => addPositionRow());
+
+      bestellDatumInput.valueAsDate = new Date();
+      loadData();
+    </script>
+  </body>
 </html>
