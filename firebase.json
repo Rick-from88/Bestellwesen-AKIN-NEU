@@ -5,7 +5,10 @@
     "cleanUrls": true,
     "trailingSlash": false,
     "rewrites": [
-      { "source": "/api/**", "run": { "serviceId": "akin-api", "region": "europe-west1" } },
+      {
+        "source": "/api/**",
+        "run": { "serviceId": "akin-api", "region": "europe-west1" }
+      },
       { "source": "**", "destination": "/uebersicht.html" }
     ]
   }

@@ -359,7 +359,7 @@ body::before {
   gap: 12px;
 }
 
-.timeline__item { 
+.timeline__item {
   display: grid;
   grid-template-columns: 60px 1fr;
   gap: 12px;
@@ -411,7 +411,10 @@ body::before {
   border-radius: 999px;
   background: transparent;
   font-weight: 600;
-  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -419,17 +422,17 @@ body::before {
 
 .navbar__item:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(17,21,21,0.08);
+  box-shadow: 0 6px 18px rgba(17, 21, 21, 0.08);
 }
 
 .navbar__item.is-active {
   background: var(--ink);
   color: #fff;
-  box-shadow: 0 10px 30px rgba(17,21,21,0.16);
+  box-shadow: 0 10px 30px rgba(17, 21, 21, 0.16);
 }
 
 .navbar__item:focus {
-  outline: 2px solid rgba(0,0,0,0.08);
+  outline: 2px solid rgba(0, 0, 0, 0.08);
   outline-offset: 2px;
 }
 
@@ -448,7 +451,7 @@ body::before {
 .modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0,0,0,0.35);
+  background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(2px);
 }
 .modal__content {
@@ -488,7 +491,7 @@ body::before {
 .form__row textarea {
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(0,0,0,0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   background: #fff;
   font: inherit;
 }
