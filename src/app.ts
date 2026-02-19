@@ -192,12 +192,10 @@ app.put("/api/bestellungen/:id", async (req, res) => {
     );
     const curStatus = cur.rows[0]?.status;
     if (curStatus === "geliefert" || curStatus === "storniert") {
-      res
-        .status(409)
-        .json({
-          error:
-            "Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden.",
-        });
+      res.status(409).json({
+        error:
+          "Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden.",
+      });
       return;
     }
 
@@ -310,11 +308,9 @@ app.put("/api/bestellungen/:id/status", express.json(), async (req, res) => {
 
     // simple transition rules: delivered is final except it can be set to 'storniert'
     if (curStatus === "geliefert" && status !== "storniert") {
-      res
-        .status(409)
-        .json({
-          error: "Gelieferte Bestellungen koennen nur storniert werden.",
-        });
+      res.status(409).json({
+        error: "Gelieferte Bestellungen koennen nur storniert werden.",
+      });
       return;
     }
 
@@ -363,13 +359,11 @@ app.post("/api/mail/test", express.json(), async (req, res) => {
     if (result.ok) {
       res.json({ ok: true, message: "SMTP Verbindung OK", used: result.used });
     } else {
-      res
-        .status(502)
-        .json({
-          ok: false,
-          error: String(result.error || "unknown"),
-          used: result.used,
-        });
+      res.status(502).json({
+        ok: false,
+        error: String(result.error || "unknown"),
+        used: result.used,
+      });
     }
   } catch (err) {
     console.error("SMTP test error", err);
@@ -589,11 +583,9 @@ app.post("/api/artikel", async (req, res) => {
     lagerbestand === null ||
     lagerbestand < 0
   ) {
-    res
-      .status(400)
-      .json({
-        error: "lieferant, name, preis und lagerbestand sind Pflichtfelder.",
-      });
+    res.status(400).json({
+      error: "lieferant, name, preis und lagerbestand sind Pflichtfelder.",
+    });
     return;
   }
 
@@ -636,11 +628,9 @@ app.put("/api/artikel/:id", async (req, res) => {
   }
 
   if (!lieferantId || !name || preis === null || lagerbestand === null) {
-    res
-      .status(400)
-      .json({
-        error: "Lieferant, Name, Preis und Lagerbestand sind Pflichtfelder.",
-      });
+    res.status(400).json({
+      error: "Lieferant, Name, Preis und Lagerbestand sind Pflichtfelder.",
+    });
     return;
   }
 
@@ -940,12 +930,10 @@ app.put("/api/settings/sequence", express.json(), async (req, res) => {
     );
     const mx = maxRes.rows[0]?.mx ?? null;
     if (mx && Number(mx) >= desiredNext) {
-      res
-        .status(400)
-        .json({
-          error:
-            "Gewuenschte Zahl ist kleiner oder gleich bestehender Maximalnummer.",
-        });
+      res.status(400).json({
+        error:
+          "Gewuenschte Zahl ist kleiner oder gleich bestehender Maximalnummer.",
+      });
       return;
     }
 
@@ -1051,12 +1039,10 @@ app.get("/api/export/:entity", async (req, res) => {
   } catch (error) {
     const errAny = error as any;
     console.error("Export error", errAny && (errAny.stack || errAny));
-    res
-      .status(500)
-      .json({
-        error: "Export fehlgeschlagen",
-        detail: String(errAny && (errAny.stack || errAny)).slice(0, 1000),
-      });
+    res.status(500).json({
+      error: "Export fehlgeschlagen",
+      detail: String(errAny && (errAny.stack || errAny)).slice(0, 1000),
+    });
   }
 });
 
@@ -1224,12 +1210,10 @@ app.put("/api/bestellungen/:id/send", express.json(), async (req, res) => {
     } catch (err) {
       const e: any = err;
       console.error("Error during sendOrderEmail", e && (e.stack || e));
-      res
-        .status(500)
-        .json({
-          error: "E-Mail Versand fehlgeschlagen",
-          detail: String(e && (e.message || e)).slice(0, 1000),
-        });
+      res.status(500).json({
+        error: "E-Mail Versand fehlgeschlagen",
+        detail: String(e && (e.message || e)).slice(0, 1000),
+      });
       return;
     }
 
