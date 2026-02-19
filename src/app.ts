@@ -1260,6 +1260,26 @@ app.get("/", (req, res) => {
   res.redirect("/uebersicht");
 });
 
+// Debug: list registered routes
+app.get("/__routes", (req, res) => {
+  const routes: string[] = [];
+  const stack: any[] = (app as any)._router?.stack || [];
+  stack.forEach((layer: any) => {
+    if (layer.route && layer.route.path) {
+      const methods = Object.keys(layer.route.methods).join(",").toUpperCase();
+      routes.push(`${methods} ${layer.route.path}`);
+    } else if (layer.name === "router" && layer.handle && layer.handle.stack) {
+      layer.handle.stack.forEach((l: any) => {
+        if (l.route && l.route.path) {
+          const methods = Object.keys(l.route.methods).join(",").toUpperCase();
+          routes.push(`${methods} ${l.route.path}`);
+        }
+      });
+    }
+  });
+  res.json({ routes });
+});
+
 app.listen(PORT, () => {
   console.log(`Server läuft auf http://localhost:${PORT}`);
 });
