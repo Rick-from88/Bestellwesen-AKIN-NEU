@@ -1,0 +1,14 @@
+
+> bestellwesen-app@1.0.0 start
+> ts-node src/app.ts
+
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ‚öôÔ∏è  suppress all logs with { quiet: true }
+DB host raw: "localhost "
+DB host used: "localhost" [
+  108, 111,  99,  97,
+  108, 104, 111, 115,
+  116
+]
+Server l√§uft auf http://localhost:3000
+Batchvorgang abbrechen (J/N)? Batchvorgang abbrechen (J/N)? 
+^CDas System kann das angegebene GerÑt oder die angegebene Datei nicht îffnen.

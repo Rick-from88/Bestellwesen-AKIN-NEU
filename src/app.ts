@@ -1264,6 +1264,9 @@ app.get("/__routes", (req, res) => {
   res.json({ routes });
 });
 
+// Internal: run SQL schema from repo (temporary migration helper)
+// migration endpoint removed
+
 app.listen(PORT, () => {
   console.log(`Server läuft auf http://localhost:${PORT}`);
 });

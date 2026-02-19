@@ -21,6 +21,7 @@ RUN npm ci --production=true
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
 COPY --from=build /app/package.json ./package.json
+# include DB schema for optional migration endpoint
 
 EXPOSE 3000
 CMD ["node", "dist/app.js"]

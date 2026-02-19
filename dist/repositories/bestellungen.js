@@ -77,14 +77,14 @@ const getNextBestellnummer = (dateIso) => __awaiter(void 0, void 0, void 0, func
         const dateForNr = dateIso ? new Date(dateIso) : new Date();
         const year = Number(dateForNr.getFullYear());
         // settings: prefix (string) and seq_digits (number)
-        const prefixSetting = yield (0, settings_1.getSetting)('bestellnummer_prefix');
-        const seqDigitsSetting = yield (0, settings_1.getSetting)('bestellnummer_seq_digits');
+        const prefixSetting = yield (0, settings_1.getSetting)("bestellnummer_prefix");
+        const seqDigitsSetting = yield (0, settings_1.getSetting)("bestellnummer_seq_digits");
         let prefixStr;
         if (prefixSetting) {
             prefixStr = prefixSetting;
         }
         else {
-            prefixStr = String(year % 100).padStart(2, '0');
+            prefixStr = String(year % 100).padStart(2, "0");
         }
         const seqDigits = seqDigitsSetting ? Number(seqDigitsSetting) : 3;
         const multiplier = Math.pow(10, seqDigits);
@@ -99,7 +99,7 @@ const getNextBestellnummer = (dateIso) => __awaiter(void 0, void 0, void 0, func
                 return ov;
             }
         }
-        const maxRes = yield client.query('select max(bestellnummer) as mx from bestellungen where bestellnummer between $1 and $2', [lower, upper]);
+        const maxRes = yield client.query("select max(bestellnummer) as mx from bestellungen where bestellnummer between $1 and $2", [lower, upper]);
         const mx = (_b = (_a = maxRes.rows[0]) === null || _a === void 0 ? void 0 : _a.mx) !== null && _b !== void 0 ? _b : null;
         let next = lower;
         if (mx && Number(mx) >= lower) {
@@ -116,22 +116,24 @@ const createBestellung = (input) => __awaiter(void 0, void 0, void 0, function* 
     var _c, _d, _e;
     const client = yield (0, db_1.getClient)();
     try {
-        yield client.query('begin');
+        yield client.query("begin");
         const firstPosition = input.positionen[0];
         // compute bestellnummer: format YY + 3-digit sequence (YY * 1000 + seq)
         // determine next bestellnummer using shared logic (reads settings)
         const nextNr = yield (0, exports.getNextBestellnummer)(input.bestellDatum);
         // if there is an override setting for this prefix, advance it so next time counting continues
         try {
-            const dateForNr = input.bestellDatum ? new Date(input.bestellDatum) : new Date();
+            const dateForNr = input.bestellDatum
+                ? new Date(input.bestellDatum)
+                : new Date();
             const year = Number(dateForNr.getFullYear());
-            const prefixSetting = yield (0, settings_1.getSetting)('bestellnummer_prefix');
+            const prefixSetting = yield (0, settings_1.getSetting)("bestellnummer_prefix");
             let prefixStr;
             if (prefixSetting) {
                 prefixStr = prefixSetting;
             }
             else {
-                prefixStr = String(year % 100).padStart(2, '0');
+                prefixStr = String(year % 100).padStart(2, "0");
             }
             const overrideKey = `bestellnummer_next_${prefixStr}`;
             const override = yield (0, settings_1.getSetting)(overrideKey);
@@ -142,21 +144,26 @@ const createBestellung = (input) => __awaiter(void 0, void 0, void 0, function* 
         }
         catch (e) {
             // non-fatal: if updating the override fails, continue without blocking the creation
-            console.error('Warnung: konnte Override-Einstellung nicht aktualisieren', e);
+            console.error("Warnung: konnte Override-Einstellung nicht aktualisieren", e);
         }
         const bestellungResult = yield client.query('insert into bestellungen (bestellnummer, artikel_id, lieferant_id, menge, status, bestell_datum) values ($1, $2, $3, $4, $5, coalesce($6::timestamp, now())) returning id, bestellnummer, status, bestell_datum as "bestellDatum"', [
             nextNr,
             firstPosition.artikelId,
             firstPosition.lieferantId,
             firstPosition.menge,
-            (_c = input.status) !== null && _c !== void 0 ? _c : 'offen',
+            (_c = input.status) !== null && _c !== void 0 ? _c : "offen",
             (_d = input.bestellDatum) !== null && _d !== void 0 ? _d : null,
         ]);
         const bestellung = bestellungResult.rows[0];
         for (const position of input.positionen) {
-            yield client.query('insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) values ($1, $2, $3, $4)', [bestellung.id, position.artikelId, position.lieferantId, position.menge]);
+            yield client.query("insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) values ($1, $2, $3, $4)", [
+                bestellung.id,
+                position.artikelId,
+                position.lieferantId,
+                position.menge,
+            ]);
         }
-        yield client.query('commit');
+        yield client.query("commit");
         return {
             id: bestellung.id,
             bestellnummer: (_e = bestellung.bestellnummer) !== null && _e !== void 0 ? _e : undefined,
@@ -166,7 +173,7 @@ const createBestellung = (input) => __awaiter(void 0, void 0, void 0, function* 
         };
     }
     catch (error) {
-        yield client.query('rollback');
+        yield client.query("rollback");
         throw error;
     }
     finally {
@@ -178,27 +185,27 @@ const updateBestellung = (id, input) => __awaiter(void 0, void 0, void 0, functi
     var _f, _g, _h, _j;
     const client = yield (0, db_1.getClient)();
     try {
-        yield client.query('begin');
+        yield client.query("begin");
         const firstPosition = input.positionen[0];
         const bestellungResult = yield client.query('update bestellungen set artikel_id = $1, lieferant_id = $2, menge = $3, status = $4, bestell_datum = coalesce($5::timestamp, bestell_datum) where id = $6 returning id, status, bestell_datum as "bestellDatum"', [
             firstPosition.artikelId,
             firstPosition.lieferantId,
             firstPosition.menge,
-            (_f = input.status) !== null && _f !== void 0 ? _f : 'offen',
+            (_f = input.status) !== null && _f !== void 0 ? _f : "offen",
             (_g = input.bestellDatum) !== null && _g !== void 0 ? _g : null,
             id,
         ]);
         if (!bestellungResult.rows.length) {
-            throw new Error('Bestellung nicht gefunden');
+            throw new Error("Bestellung nicht gefunden");
         }
-        yield client.query('delete from bestellpositionen where bestellung_id = $1', [id]);
+        yield client.query("delete from bestellpositionen where bestellung_id = $1", [id]);
         for (const position of input.positionen) {
-            yield client.query('insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) values ($1, $2, $3, $4)', [id, position.artikelId, position.lieferantId, position.menge]);
+            yield client.query("insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) values ($1, $2, $3, $4)", [id, position.artikelId, position.lieferantId, position.menge]);
         }
-        yield client.query('commit');
+        yield client.query("commit");
         const bestellung = bestellungResult.rows[0];
         // fetch bestellnummer (was not changed by update)
-        const nrRes = yield client.query('select bestellnummer from bestellungen where id = $1', [id]);
+        const nrRes = yield client.query("select bestellnummer from bestellungen where id = $1", [id]);
         const bestellnummer = (_j = (_h = nrRes.rows[0]) === null || _h === void 0 ? void 0 : _h.bestellnummer) !== null && _j !== void 0 ? _j : undefined;
         return {
             id: bestellung.id,
@@ -209,7 +216,7 @@ const updateBestellung = (id, input) => __awaiter(void 0, void 0, void 0, functi
         };
     }
     catch (error) {
-        yield client.query('rollback');
+        yield client.query("rollback");
         throw error;
     }
     finally {
@@ -218,7 +225,7 @@ const updateBestellung = (id, input) => __awaiter(void 0, void 0, void 0, functi
 });
 exports.updateBestellung = updateBestellung;
 const deleteBestellung = (id) => __awaiter(void 0, void 0, void 0, function* () {
-    yield (0, db_1.query)('delete from bestellungen where id = $1', [id]);
+    yield (0, db_1.query)("delete from bestellungen where id = $1", [id]);
 });
 exports.deleteBestellung = deleteBestellung;
 const getBestellungById = (id) => __awaiter(void 0, void 0, void 0, function* () {

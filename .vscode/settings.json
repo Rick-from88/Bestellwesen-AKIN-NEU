@@ -3,6 +3,10 @@
     "/^bash -lc 'set -euo pipefail; PROJECT=\\$\\(gcloud config get-value project\\); BUCKET=gs://\\$\\{PROJECT\\}-sql-import; echo \"project=\\$PROJECT bucket=\\$BUCKET\"; if ! gsutil ls -b \"\\$BUCKET\" >/dev/null 2>&1; then echo \"creating bucket \\$BUCKET\"; gsutil mb -p \"\\$PROJECT\" \"\\$BUCKET\"; else echo \"bucket exists \\$BUCKET\"; fi; gsutil cp ~/Bestellwesen-AKIN-NEU/db/schema\\.sql \"\\$BUCKET/schema\\.sql\"; echo \"uploaded schema\\.sql to \\$BUCKET\"; OP=\\$\\(gcloud sql import sql akin-db \"\\$BUCKET/schema\\.sql\" --database=akindb --format=\"value\\(name\\)\"\\); echo \"started import operation: \\$OP\"; gcloud sql operations wait \"\\$OP\" --instance=akin-db --quiet; echo \"import finished\"; echo \"--- Cloud Run logs ---\"; gcloud run services logs read akin-api --region=europe-west1 --limit=200; echo \"--- CURL notes endpoint ---\"; curl -sS \"\\$\\(gcloud run services describe akin-api --region=europe-west1 --format='value\\(status\\.url\\)'\\)/api/dashboard/notes\" -w '\\\\nHTTP_CODE:%\\{http_code\\}\\\\n'$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^cmd /C \"set DB_HOST=localhost && set DB_USER=postgres && set DB_PASSWORD=localpass && set DB_NAME=akindb && npm start > server\\.log 2>&1 &\"$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   }
 }

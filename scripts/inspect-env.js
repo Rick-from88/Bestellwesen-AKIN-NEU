@@ -1,0 +1,10 @@
+const fs = require('fs');
+const path = '.env.local';
+const txt = fs.readFileSync(path, 'utf8');
+console.log('RAW FILE:');
+console.log(JSON.stringify(txt));
+const m = txt.split(/\r?\n/).find(l => l.startsWith('DB_HOST'));
+console.log('LINE:', JSON.stringify(m));
+const val = m ? m.split('=')[1] : undefined;
+console.log('VALUE:', JSON.stringify(val));
+if (val) console.log('CODES:', val.split('').map(c => c.charCodeAt(0)));
