@@ -31,6 +31,20 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use("/static", express.static(path.join(__dirname, "..", "public")));
 
+// Admin auth middleware: if `ADMIN_TOKEN` is set, require it via
+// `Authorization: Bearer <token>` header or `?admin_token=...` query.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
+const adminAuth = (req: any, res: any, next: any) => {
+  if (!ADMIN_TOKEN) {
+    // permissive if no token configured (avoid breaking dev environments)
+    return next();
+  }
+  const raw = String(req.headers["authorization"] || req.query?.admin_token || "");
+  const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
+  if (token === ADMIN_TOKEN) return next();
+  res.status(401).json({ error: "unauthorized" });
+};
+
 const parseNumber = (value: unknown): number | null => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -886,7 +900,7 @@ app.put("/api/settings", express.json(), async (req, res) => {
   }
 });
 
-app.put("/api/settings/sequence", express.json(), async (req, res) => {
+app.put("/api/settings/sequence", express.json(), adminAuth, async (req, res) => {
   try {
     const settingsRepo = await Promise.resolve(
       require("./repositories/settings"),
@@ -961,7 +975,7 @@ app.get("/api/bestellungen/next-number", async (req, res) => {
 });
 
 // Export endpoint (JSON or CSV)
-app.get("/api/export/:entity", async (req, res) => {
+app.get("/api/export/:entity", adminAuth, async (req, res) => {
   const entity = String(req.params.entity || "").toLowerCase();
   const format = String(req.query.format || "json").toLowerCase();
   try {
@@ -1047,7 +1061,7 @@ app.get("/api/export/:entity", async (req, res) => {
 });
 
 // One-click backup: return combined JSON of main entities
-app.get("/api/backup", async (req, res) => {
+app.get("/api/backup", adminAuth, async (req, res) => {
   try {
     const [
       { listLieferanten },

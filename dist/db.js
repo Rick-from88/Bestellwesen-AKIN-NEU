@@ -7,11 +7,22 @@ exports.getClient = exports.query = void 0;
 const pg_1 = require("pg");
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
-const host = process.env.DB_HOST || process.env.PGHOST || "localhost";
-const port = Number(process.env.DB_PORT || process.env.PGPORT || 5432);
-const user = process.env.DB_USER || process.env.PGUSER || "postgres";
-const password = process.env.DB_PASSWORD || process.env.PGPASSWORD || "postgres";
-const database = process.env.DB_NAME || process.env.PGDATABASE || "bestellwesen";
+const rawHostEnv = process.env.DB_HOST;
+const host = (process.env.DB_HOST || process.env.PGHOST || "localhost").toString().trim();
+const port = Number((process.env.DB_PORT || process.env.PGPORT || 5432).toString());
+const user = (process.env.DB_USER || process.env.PGUSER || "postgres")
+    .toString()
+    .trim();
+const password = (process.env.DB_PASSWORD ||
+    process.env.PGPASSWORD ||
+    "postgres")
+    .toString()
+    .trim();
+const database = (process.env.DB_NAME ||
+    process.env.PGDATABASE ||
+    "bestellwesen")
+    .toString()
+    .trim();
 const poolConfig = {
     user,
     password,

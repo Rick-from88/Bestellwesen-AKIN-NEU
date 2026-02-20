@@ -24,6 +24,21 @@ const PORT = process.env.PORT || 3000;
 app.use(body_parser_1.default.json());
 app.use(body_parser_1.default.urlencoded({ extended: true }));
 app.use("/static", express_1.default.static(path_1.default.join(__dirname, "..", "public")));
+// Admin auth middleware: if `ADMIN_TOKEN` is set, require it via
+// `Authorization: Bearer <token>` header or `?admin_token=...` query.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
+const adminAuth = (req, res, next) => {
+    var _a;
+    if (!ADMIN_TOKEN) {
+        // permissive if no token configured (avoid breaking dev environments)
+        return next();
+    }
+    const raw = String(req.headers["authorization"] || ((_a = req.query) === null || _a === void 0 ? void 0 : _a.admin_token) || "");
+    const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
+    if (token === ADMIN_TOKEN)
+        return next();
+    res.status(401).json({ error: "unauthorized" });
+};
 const parseNumber = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
@@ -753,7 +768,7 @@ app.put("/api/settings", express_1.default.json(), (req, res) => __awaiter(void 
         res.status(500).send("error");
     }
 }));
-app.put("/api/settings/sequence", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.put("/api/settings/sequence", express_1.default.json(), adminAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _h, _j, _k;
     try {
         const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
@@ -810,7 +825,7 @@ app.get("/api/bestellungen/next-number", (req, res) => __awaiter(void 0, void 0,
     }
 }));
 // Export endpoint (JSON or CSV)
-app.get("/api/export/:entity", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.get("/api/export/:entity", adminAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const entity = String(req.params.entity || "").toLowerCase();
     const format = String(req.query.format || "json").toLowerCase();
     try {
@@ -882,7 +897,7 @@ app.get("/api/export/:entity", (req, res) => __awaiter(void 0, void 0, void 0, f
     }
 }));
 // One-click backup: return combined JSON of main entities
-app.get("/api/backup", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.get("/api/backup", adminAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const [{ listLieferanten }, { listArtikel }, { listBestellungen }, { listSettings },] = yield Promise.all([
             Promise.resolve(require("./repositories/lieferanten")),

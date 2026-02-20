@@ -2,13 +2,432 @@
 > bestellwesen-app@1.0.0 start
 > ts-node src/app.ts
 
-[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
-DB host raw: "localhost "
+[dotenv@17.3.1] injecting env (5) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+DB host raw: "localhost"
 DB host used: "localhost" [
   108, 111,  99,  97,
   108, 104, 111, 115,
   116
 ]
-Server läuft auf http://localhost:3000
-Batchvorgang abbrechen (J/N)? Batchvorgang abbrechen (J/N)? 
-^CDas System kann das angegebene Ger�t oder die angegebene Datei nicht �ffnen.
+Error: listen EADDRINUSE: address already in use :::3000
+    at Server.setupListenHandle [as _listen2] (node:net:1898:16)
+    at listenInCluster (node:net:1946:12)
+    at Server.listen (node:net:2044:7)
+    at Function.listen (D:\Bestellwesen AKIN APP\node_modules\express\lib\application.js:635:24)
+    at Object.<anonymous> (D:\Bestellwesen AKIN APP\src\app.ts:1270:5)
+    at Module._compile (node:internal/modules/cjs/loader:1358:14)
+    at Module.m._compile (D:\Bestellwesen AKIN APP\node_modules\ts-node\src\index.ts:1618:23)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at Object.require.extensions.<computed> [as .ts] (D:\Bestellwesen AKIN APP\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1208:32) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+
+D:\Bestellwesen AKIN APP>Der Befehl "owershell" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>Der Befehl "owershell" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>{"notes":[]}
+HTTP_CODE:200
+
+D:\Bestellwesen AKIN APP>Der Befehl "url.exe" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>Der Befehl "asklist" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>/usr/lib/postgresql/14/bin/psql: invalid option -- 'i'
+Try "psql --help" for more information.
+
+D:\Bestellwesen AKIN APP>
+
+D:\Bestellwesen AKIN APP>Syntaxfehler.
+
+D:\Bestellwesen AKIN APP>
+
+D:\Bestellwesen AKIN APP>Der Befehl "owershell" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>Syntaxfehler.
+
+D:\Bestellwesen AKIN APP>
+
+D:\Bestellwesen AKIN APP>Der Befehl "url.exe" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>Der Befehl "url.exe" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>{}
+HTTP_CODE:200
+
+D:\Bestellwesen AKIN APP>=== http://localhost:3000/api/dashboard/notes ===
+{"notes":[]}
+HTTP_CODE:200
+
+=== http://localhost:3000/api/lieferanten ===
+[{"id":1,"name":"Miuster","kontaktPerson":"muster","email":"patrick@akin-pulverbeschichtungen.de","telefon":"0178929292","strasse":"alter weg4","plz":"56588","stadt":"Sinzig","land":"Deutschland"}]
+HTTP_CODE:200
+
+=== http://localhost:3000/api/settings/effective ===
+{}
+HTTP_CODE:200
+
+
+D:\Bestellwesen AKIN APP>=== http://localhost:3000/api/dashboard/notes ===
+{"notes":[]}
+HTTP_CODE:200
+
+=== http://localhost:3000/api/lieferanten ===
+[{"id":1,"name":"Miuster","kontaktPerson":"muster","email":"patrick@akin-pulverbeschichtungen.de","telefon":"0178929292","strasse":"alter weg4","plz":"56588","stadt":"Sinzig","land":"Deutschland"}]
+HTTP_CODE:200
+
+=== http://localhost:3000/api/settings/effective ===
+{}
+HTTP_CODE:200
+
+
+D:\Bestellwesen AKIN APP>Der Befehl "pm" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>
+> bestellwesen-app@1.0.0 build
+> node ./node_modules/typescript/bin/tsc
+
+
+D:\Bestellwesen AKIN APP>Syntaxfehler.
+
+D:\Bestellwesen AKIN APP>
+
+D:\Bestellwesen AKIN APP>Der Befehl "px" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>
+> bestellwesen-app@1.0.0 build
+> node ./node_modules/typescript/bin/tsc
+
+
+D:\Bestellwesen AKIN APP>Syntaxfehler.
+
+D:\Bestellwesen AKIN APP>
+
+D:\Bestellwesen AKIN APP>Syntaxfehler.
+
+D:\Bestellwesen AKIN APP>
+
+D:\Bestellwesen AKIN APP>Syntaxfehler.
+
+D:\Bestellwesen AKIN APP>[dotenv@17.3.1] injecting env (5) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+{"ok":true,"suppliers":[2,3]}
+
+D:\Bestellwesen AKIN APP>[dotenv@17.3.1] injecting env (5) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+{"ok":true,"suppliers":[4,5]}
+
+D:\Bestellwesen AKIN APP>
+D:\Bestellwesen AKIN APP>{
+    "value":  [
+                  {
+                      "id":  2,
+                      "lieferantId":  2,
+                      "name":  "Artikel Alpha",
+                      "beschreibung":  "Testartikel Alpha",
+                      "preis":  "12.50",
+                      "lagerbestand":  100,
+                      "minBestand":  5
+                  },
+                  {
+                      "id":  4,
+                      "lieferantId":  4,
+                      "name":  "Artikel Alpha",
+                      "beschreibung":  "Testartikel Alpha",
+                      "preis":  "12.50",
+                      "lagerbestand":  100,
+                      "minBestand":  5
+                  },
+                  {
+                      "id":  5,
+                      "lieferantId":  4,
+                      "name":  "Artikel Beta",
+                      "beschreibung":  "Testartikel Beta",
+                      "preis":  "7.90",
+                      "lagerbestand":  50,
+                      "minBestand":  2
+                  },
+                  {
+                      "id":  3,
+                      "lieferantId":  2,
+                      "name":  "Artikel Beta",
+                      "beschreibung":  "Testartikel Beta",
+                      "preis":  "7.90",
+                      "lagerbestand":  50,
+                      "minBestand":  2
+                  },
+                  {
+                      "id":  25,
+                      "lieferantId":  4,
+                      "name":  "Dübel 8mm (Lieferant Test A)",
+                      "beschreibung":  "Universaldübel 8x50",
+                      "preis":  "0.09",
+                      "lagerbestand":  900,
+                      "minBestand":  100
+                  },
+                  {
+                      "id":  29,
+                      "lieferantId":  5,
+                      "name":  "Dübel 8mm (Lieferant Test B)",
+                      "beschreibung":  "Universaldübel 8x50",
+                      "preis":  "0.09",
+                      "lagerbestand":  900,
+                      "minBestand":  100
+                  },
+                  {
+                      "id":  11,
+                      "lieferantId":  2,
+                      "name":  "Grundierung Spray (Lieferant Test A)",
+                      "beschreibung":  "Schnelltrocknende Grundierung 400ml",
+                      "preis":  "6.50",
+                      "lagerbestand":  150,
+                      "minBestand":  10
+                  },
+                  {
+                      "id":  7,
+                      "lieferantId":  1,
+                      "name":  "Grundierung Spray (Miuster)",
+                      "beschreibung":  "Schnelltrocknende Grundierung 400ml",
+                      "preis":  "6.50",
+                      "lagerbestand":  150,
+                      "minBestand":  10
+                  },
+                  {
+                      "id":  24,
+                      "lieferantId":  4,
+                      "name":  "Handschuhe Nitril (Lieferant Test A)",
+                      "beschreibung":  "Einweghandschuhe, 100er Box",
+                      "preis":  "7.50",
+                      "lagerbestand":  80,
+                      "minBestand":  8
+                  },
+                  {
+                      "id":  20,
+                      "lieferantId":  3,
+                      "name":  "Handschuhe Nitril (Lieferant Test B)",
+                      "beschreibung":  "Einweghandschuhe, 100er Box",
+                      "preis":  "7.50",
+                      "lagerbestand":  80,
+                      "minBestand":  8
+                  },
+                  {
+                      "id":  28,
+                      "lieferantId":  5,
+                      "name":  "Handschuhe Nitril (Lieferant Test B)",
+                      "beschreibung":  "Einweghandschuhe, 100er Box",
+                      "preis":  "7.50",
+                      "lagerbestand":  80,
+                      "minBestand":  8
+                  },
+                  {
+                      "id":  14,
+                      "lieferantId":  2,
+                      "name":  "Klebeband 50mm (Lieferant Test A)",
+                      "beschreibung":  "Hitzebeständiges Klebeband",
+                      "preis":  "3.20",
+                      "lagerbestand":  300,
+                      "minBestand":  20
+                  },
+                  {
+                      "id":  22,
+                      "lieferantId":  4,
+                      "name":  "Klebeband 50mm (Lieferant Test A)",
+                      "beschreibung":  "Hitzebeständiges Klebeband",
+                      "preis":  "3.20",
+                      "lagerbestand":  300,
+                      "minBestand":  20
+                  },
+                  {
+                      "id":  26,
+                      "lieferantId":  5,
+                      "name":  "Klebeband 50mm (Lieferant Test B)",
+                      "beschreibung":  "Hitzebeständiges Klebeband",
+                      "preis":  "3.20",
+                      "lagerbestand":  300,
+                      "minBestand":  20
+                  },
+                  {
+                      "id":  18,
+                      "lieferantId":  3,
+                      "name":  "Klebeband 50mm (Lieferant Test B)",
+                      "beschreibung":  "Hitzebeständiges Klebeband",
+                      "preis":  "3.20",
+                      "lagerbestand":  300,
+                      "minBestand":  20
+                  },
+                  {
+                      "id":  10,
+                      "lieferantId":  1,
+                      "name":  "Klebeband 50mm (Miuster)",
+                      "beschreibung":  "Hitzebeständiges Klebeband",
+                      "preis":  "3.20",
+                      "lagerbestand":  300,
+                      "minBestand":  20
+                  },
+                  {
+                      "id":  30,
+                      "lieferantId":  5,
+                      "name":  "Lagerrolle (Lieferant Test B)",
+                      "beschreibung":  "Industrierolle 50mm",
+                      "preis":  "12.00",
+                      "lagerbestand":  20,
+                      "minBestand":  2
+                  },
+                  {
+                      "id":  1,
+                      "lieferantId":  1,
+                      "name":  "Miuster",
+                      "beschreibung":  "fdafds",
+                      "preis":  "1.99",
+                      "lagerbestand":  0,
+                      "minBestand":  0
+                  },
+                  {
+                      "id":  6,
+                      "lieferantId":  1,
+                      "name":  "Muttern M6 (Miuster)",
+                      "beschreibung":  "Sechskantmutter verzinkt",
+                      "preis":  "0.05",
+                      "lagerbestand":  2000,
+                      "minBestand":  200
+                  },
+                  {
+                      "id":  12,
+                      "lieferantId":  2,
+                      "name":  "Pulverlack RAL7016 (Lieferant Test A)",
+                      "beschreibung":  "Pulverlack RAL7016 anthrazit 1kg",
+                      "preis":  "18.00",
+                      "lagerbestand":  40,
+                      "minBestand":  5
+                  },
+                  {
+                      "id":  16,
+                      "lieferantId":  3,
+                      "name":  "Pulverlack RAL7016 (Lieferant Test B)",
+                      "beschreibung":  "Pulverlack RAL7016 anthrazit 1kg",
+                      "preis":  "18.00",
+                      "lagerbestand":  40,
+                      "minBestand":  5
+                  },
+                  {
+                      "id":  8,
+                      "lieferantId":  1,
+                      "name":  "Pulverlack RAL7016 (Miuster)",
+                      "beschreibung":  "Pulverlack RAL7016 anthrazit 1kg",
+                      "preis":  "18.00",
+                      "lagerbestand":  40,
+                      "minBestand":  5
+                  },
+                  {
+                      "id":  13,
+                      "lieferantId":  2,
+                      "name":  "Reiniger 1L (Lieferant Test A)",
+                      "beschreibung":  "Lösungsmittel-freier Reiniger",
+                      "preis":  "9.99",
+                      "lagerbestand":  60,
+                      "minBestand":  6
+                  },
+                  {
+                      "id":  21,
+                      "lieferantId":  4,
+                      "name":  "Reiniger 1L (Lieferant Test A)",
+                      "beschreibung":  "Lösungsmittel-freier Reiniger",
+                      "preis":  "9.99",
+                      "lagerbestand":  60,
+                      "minBestand":  6
+                  },
+                  {
+                      "id":  17,
+                      "lieferantId":  3,
+                      "name":  "Reiniger 1L (Lieferant Test B)",
+                      "beschreibung":  "Lösungsmittel-freier Reiniger",
+                      "preis":  "9.99",
+                      "lagerbestand":  60,
+                      "minBestand":  6
+                  },
+                  {
+                      "id":  9,
+                      "lieferantId":  1,
+                      "name":  "Reiniger 1L (Miuster)",
+                      "beschreibung":  "Lösungsmittel-freier Reiniger",
+                      "preis":  "9.99",
+                      "lagerbestand":  60,
+                      "minBestand":  6
+                  },
+                  {
+                      "id":  15,
+                      "lieferantId":  2,
+                      "name":  "Schutzbrille (Lieferant Test A)",
+                      "beschreibung":  "Norm EN166 Schutzbrille",
+                      "preis":  "4.50",
+                      "lagerbestand":  120,
+                      "minBestand":  10
+                  },
+                  {
+                      "id":  23,
+                      "lieferantId":  4,
+                      "name":  "Schutzbrille (Lieferant Test A)",
+                      "beschreibung":  "Norm EN166 Schutzbrille",
+                      "preis":  "4.50",
+                      "lagerbestand":  120,
+                      "minBestand":  10
+                  },
+                  {
+                      "id":  19,
+                      "lieferantId":  3,
+                      "name":  "Schutzbrille (Lieferant Test B)",
+                      "beschreibung":  "Norm EN166 Schutzbrille",
+                      "preis":  "4.50",
+                      "lagerbestand":  120,
+                      "minBestand":  10
+                  },
+                  {
+                      "id":  27,
+                      "lieferantId":  5,
+                      "name":  "Schutzbrille (Lieferant Test B)",
+                      "beschreibung":  "Norm EN166 Schutzbrille",
+                      "preis":  "4.50",
+                      "lagerbestand":  120,
+                      "minBestand":  10
+                  }
+              ],
+    "Count":  30
+}
+
+D:\Bestellwesen AKIN APP>Der Befehl "owershell" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>Der Befehl "ash" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>Der Befehl "ash" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>Der Befehl "ash" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>Der Befehl "ash" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP><3>WSL (2018 - Relay) ERROR: CreateProcessCommon:800: execvpe(/bin/bash) failed: No such file or directory
+
+D:\Bestellwesen AKIN APP><3>WSL (2024 - Relay) ERROR: CreateProcessCommon:800: execvpe(/bin/bash) failed: No such file or directory
+
+D:\Bestellwesen AKIN APP><3>WSL (2029 - Relay) ERROR: CreateProcessCommon:800: execvpe(/bin/bash) failed: No such file or directory
+
+D:\Bestellwesen AKIN APP>Der Befehl "ash" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+
+D:\Bestellwesen AKIN APP>
