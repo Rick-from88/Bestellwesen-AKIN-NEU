@@ -6,7 +6,8 @@
   "scripts": {
     "start": "ts-node src/app.ts",
     "build": "node ./node_modules/typescript/bin/tsc",
-    "test": "jest"
+    "test": "jest",
+    "import-local": "node scripts/import-local.js"
   },
   "dependencies": {
     "dotenv": "^17.3.1",
