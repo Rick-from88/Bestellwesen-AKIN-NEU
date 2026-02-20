@@ -4,7 +4,9 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const rawHostEnv = process.env.DB_HOST;
-const host = (process.env.DB_HOST || process.env.PGHOST || "localhost").toString().trim();
+const host = (process.env.DB_HOST || process.env.PGHOST || "localhost")
+  .toString()
+  .trim();
 const port = Number(
   (process.env.DB_PORT || process.env.PGPORT || 5432).toString(),
 );

@@ -39,7 +39,9 @@ const adminAuth = (req: any, res: any, next: any) => {
     // permissive if no token configured (avoid breaking dev environments)
     return next();
   }
-  const raw = String(req.headers["authorization"] || req.query?.admin_token || "");
+  const raw = String(
+    req.headers["authorization"] || req.query?.admin_token || "",
+  );
   const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
   if (token === ADMIN_TOKEN) return next();
   res.status(401).json({ error: "unauthorized" });
@@ -900,65 +902,72 @@ app.put("/api/settings", express.json(), async (req, res) => {
   }
 });
 
-app.put("/api/settings/sequence", express.json(), adminAuth, async (req, res) => {
-  try {
-    const settingsRepo = await Promise.resolve(
-      require("./repositories/settings"),
-    );
-    const db = await Promise.resolve(require("./db"));
+app.put(
+  "/api/settings/sequence",
+  express.json(),
+  adminAuth,
+  async (req, res) => {
+    try {
+      const settingsRepo = await Promise.resolve(
+        require("./repositories/settings"),
+      );
+      const db = await Promise.resolve(require("./db"));
 
-    const prefixSetting = await settingsRepo.getSetting("bestellnummer_prefix");
-    const seqDigitsSetting = await settingsRepo.getSetting(
-      "bestellnummer_seq_digits",
-    );
+      const prefixSetting = await settingsRepo.getSetting(
+        "bestellnummer_prefix",
+      );
+      const seqDigitsSetting = await settingsRepo.getSetting(
+        "bestellnummer_seq_digits",
+      );
 
-    if (!prefixSetting || !seqDigitsSetting) {
-      res
-        .status(400)
-        .json({ error: "Prefix oder Anzahl Ziffern nicht konfiguriert." });
-      return;
+      if (!prefixSetting || !seqDigitsSetting) {
+        res
+          .status(400)
+          .json({ error: "Prefix oder Anzahl Ziffern nicht konfiguriert." });
+        return;
+      }
+
+      const prefix = String(prefixSetting);
+      const seqDigits = Number(seqDigitsSetting);
+      const lastDigits = Number(req.body?.lastDigits);
+      if (
+        !Number.isInteger(lastDigits) ||
+        lastDigits < 0 ||
+        lastDigits >= Math.pow(10, seqDigits)
+      ) {
+        res.status(400).json({ error: "ungueltige lastDigits" });
+        return;
+      }
+
+      const multiplier = Math.pow(10, seqDigits);
+      const lower = Number(prefix) * multiplier;
+      const upper = (Number(prefix) + 1) * multiplier - 1;
+
+      // we store the full next number; choose next = prefix*multiplier + lastDigits + 1
+      const desiredNext = Number(prefix) * multiplier + lastDigits + 1;
+
+      const maxRes = await db.query(
+        "select max(bestellnummer) as mx from bestellungen where bestellnummer between $1 and $2",
+        [lower, upper],
+      );
+      const mx = maxRes.rows[0]?.mx ?? null;
+      if (mx && Number(mx) >= desiredNext) {
+        res.status(400).json({
+          error:
+            "Gewuenschte Zahl ist kleiner oder gleich bestehender Maximalnummer.",
+        });
+        return;
+      }
+
+      const overrideKey = `bestellnummer_next_${prefix}`;
+      await settingsRepo.setSetting(overrideKey, String(desiredNext));
+      res.status(204).send();
+    } catch (error) {
+      console.error(error);
+      res.status(500).send("error");
     }
-
-    const prefix = String(prefixSetting);
-    const seqDigits = Number(seqDigitsSetting);
-    const lastDigits = Number(req.body?.lastDigits);
-    if (
-      !Number.isInteger(lastDigits) ||
-      lastDigits < 0 ||
-      lastDigits >= Math.pow(10, seqDigits)
-    ) {
-      res.status(400).json({ error: "ungueltige lastDigits" });
-      return;
-    }
-
-    const multiplier = Math.pow(10, seqDigits);
-    const lower = Number(prefix) * multiplier;
-    const upper = (Number(prefix) + 1) * multiplier - 1;
-
-    // we store the full next number; choose next = prefix*multiplier + lastDigits + 1
-    const desiredNext = Number(prefix) * multiplier + lastDigits + 1;
-
-    const maxRes = await db.query(
-      "select max(bestellnummer) as mx from bestellungen where bestellnummer between $1 and $2",
-      [lower, upper],
-    );
-    const mx = maxRes.rows[0]?.mx ?? null;
-    if (mx && Number(mx) >= desiredNext) {
-      res.status(400).json({
-        error:
-          "Gewuenschte Zahl ist kleiner oder gleich bestehender Maximalnummer.",
-      });
-      return;
-    }
-
-    const overrideKey = `bestellnummer_next_${prefix}`;
-    await settingsRepo.setSetting(overrideKey, String(desiredNext));
-    res.status(204).send();
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("error");
-  }
-});
+  },
+);
 
 app.get("/api/bestellungen/next-number", async (req, res) => {
   try {
