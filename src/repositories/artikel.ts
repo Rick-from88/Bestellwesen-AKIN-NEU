@@ -66,6 +66,6 @@ export const updateArtikel = async (
 };
 
 export const deleteArtikel = async (id: number): Promise<boolean> => {
-  const result = await query('delete from artikel where id = $1', [id]);
+  const result = await query("delete from artikel where id = $1", [id]);
   return (result.rowCount ?? 0) > 0;
 };

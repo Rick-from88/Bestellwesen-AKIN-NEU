@@ -62,9 +62,9 @@ async function seed() {
       {
         name: "Artikel Alpha",
         beschreibung: "Testartikel Alpha",
-        artikelnummer: 'A-ALPHA',
-        einheit: 'Stk',
-        verpackungseinheit: '1',
+        artikelnummer: "A-ALPHA",
+        einheit: "Stk",
+        verpackungseinheit: "1",
         preis: 12.5,
         lager: 100,
         minBest: 5,
@@ -72,9 +72,9 @@ async function seed() {
       {
         name: "Artikel Beta",
         beschreibung: "Testartikel Beta",
-        artikelnummer: 'B-BETA',
-        einheit: 'Stk',
-        verpackungseinheit: '10',
+        artikelnummer: "B-BETA",
+        einheit: "Stk",
+        verpackungseinheit: "10",
         preis: 7.9,
         lager: 50,
         minBest: 2,
@@ -84,7 +84,17 @@ async function seed() {
     for (const a of articles) {
       await client.query(
         "insert into artikel (lieferant_id, name, beschreibung, artikelnummer, einheit, verpackungseinheit, preis, lagerbestand, min_bestand) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-        [supplierIds[0], a.name, a.beschreibung, a.artikelnummer, a.einheit, a.verpackungseinheit, a.preis, a.lager, a.minBest],
+        [
+          supplierIds[0],
+          a.name,
+          a.beschreibung,
+          a.artikelnummer,
+          a.einheit,
+          a.verpackungseinheit,
+          a.preis,
+          a.lager,
+          a.minBest,
+        ],
       );
     }
 
