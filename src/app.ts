@@ -587,6 +587,16 @@ app.post("/api/artikel", async (req, res) => {
     typeof req.body.beschreibung === "string"
       ? req.body.beschreibung.trim()
       : undefined;
+  const artikelnummer =
+    typeof req.body.artikelnummer === "string"
+      ? req.body.artikelnummer.trim()
+      : undefined;
+  const einheit =
+    typeof req.body.einheit === "string" ? req.body.einheit.trim() : undefined;
+  const verpackungseinheit =
+    typeof req.body.verpackungseinheit === "string"
+      ? req.body.verpackungseinheit.trim()
+      : undefined;
   const preis = parseNumber(req.body.preis);
   const lagerbestand = parseInteger(req.body.lagerbestand);
   const minBestand = parseInteger(req.body.minBestand);
@@ -615,6 +625,9 @@ app.post("/api/artikel", async (req, res) => {
       lieferantId,
       name,
       beschreibung,
+      artikelnummer,
+      einheit,
+      verpackungseinheit,
       preis,
       lagerbestand,
       minBestand: minBestand ?? 0,
@@ -633,6 +646,16 @@ app.put("/api/artikel/:id", async (req, res) => {
   const beschreibung =
     typeof req.body.beschreibung === "string"
       ? req.body.beschreibung.trim()
+      : undefined;
+  const artikelnummer =
+    typeof req.body.artikelnummer === "string"
+      ? req.body.artikelnummer.trim()
+      : undefined;
+  const einheit =
+    typeof req.body.einheit === "string" ? req.body.einheit.trim() : undefined;
+  const verpackungseinheit =
+    typeof req.body.verpackungseinheit === "string"
+      ? req.body.verpackungseinheit.trim()
       : undefined;
   const preis = parseNumber(req.body.preis);
   const lagerbestand = parseInteger(req.body.lagerbestand);
@@ -655,6 +678,9 @@ app.put("/api/artikel/:id", async (req, res) => {
       lieferantId,
       name,
       beschreibung,
+      artikelnummer,
+      einheit,
+      verpackungseinheit,
       preis,
       lagerbestand,
       minBestand,

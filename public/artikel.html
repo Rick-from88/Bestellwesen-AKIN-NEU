@@ -53,6 +53,18 @@
             <input id="artikelNameInput" name="name" type="text" required />
           </div>
           <div class="form__row">
+            <label for="artikelNummerInput">Artikelnummer</label>
+            <input id="artikelNummerInput" name="artikelnummer" type="text" />
+          </div>
+          <div class="form__row">
+            <label for="artikelEinheitInput">Einheit</label>
+            <input id="artikelEinheitInput" name="einheit" type="text" />
+          </div>
+          <div class="form__row">
+            <label for="artikelVerpackungInput">Verpackungseinheit</label>
+            <input id="artikelVerpackungInput" name="verpackungseinheit" type="text" />
+          </div>
+          <div class="form__row">
             <label for="artikelBeschreibungInput">Beschreibung</label>
             <input id="artikelBeschreibungInput" name="beschreibung" type="text" />
           </div>
@@ -102,6 +114,9 @@
       const artikelMessage = document.getElementById("artikelMessage");
       const artikelLieferantInput = document.getElementById("artikelLieferantInput");
       const artikelNameInput = document.getElementById("artikelNameInput");
+      const artikelNummerInput = document.getElementById("artikelNummerInput");
+      const artikelEinheitInput = document.getElementById("artikelEinheitInput");
+      const artikelVerpackungInput = document.getElementById("artikelVerpackungInput");
       const artikelBeschreibungInput = document.getElementById("artikelBeschreibungInput");
       const artikelPreisInput = document.getElementById("artikelPreisInput");
       const artikelLagerInput = document.getElementById("artikelLagerInput");
@@ -112,6 +127,7 @@
       let currentArtikelId = null;
       let lieferantenData = [];
       let lastOpenedLieferantId = null;
+      let _modalOpener = null;
 
       const refreshLieferantSelect = (selectedId) => {
         artikelLieferantInput.innerHTML = "";
@@ -135,6 +151,9 @@
         currentArtikelId = artikel ? artikel.id : null;
         artikelMessage.textContent = "";
         artikelNameInput.value = artikel?.name || "";
+        artikelNummerInput.value = artikel?.artikelnummer || "";
+        artikelEinheitInput.value = artikel?.einheit || "";
+        artikelVerpackungInput.value = artikel?.verpackungseinheit || "";
         artikelBeschreibungInput.value = artikel?.beschreibung || "";
         artikelPreisInput.value = artikel?.preis ?? "";
         artikelLagerInput.value = artikel?.lagerbestand ?? "";
@@ -148,13 +167,36 @@
           lastOpenedLieferantId ??
           (lieferantenData[0] ? lieferantenData[0].id : null);
         refreshLieferantSelect(defaultLieferantId);
+        // accessibility: save opener, make main content inert if supported, focus first field
+        _modalOpener = document.activeElement;
+        const main = document.querySelector('.page');
+        if (main) main.inert = true;
         artikelModal.classList.add("is-open");
-        artikelModal.setAttribute("aria-hidden", "false");
+        // remove aria-hidden only after focus shift
+        artikelModal.removeAttribute('aria-hidden');
+        const firstFocusable = artikelLieferantInput || artikelNameInput;
+        if (firstFocusable && typeof firstFocusable.focus === 'function') {
+          firstFocusable.focus();
+        }
       };
 
       const closeArtikelModal = () => {
+        // if something inside modal still has focus, blur it before hiding
+        try {
+          if (artikelModal.contains(document.activeElement)) {
+            document.activeElement.blur();
+          }
+        } catch (e) {}
+
         artikelModal.classList.remove("is-open");
+        // hide modal from AT
         artikelModal.setAttribute("aria-hidden", "true");
+        const main = document.querySelector('.page');
+        if (main) main.inert = false;
+        // restore focus to opener
+        if (_modalOpener && typeof _modalOpener.focus === 'function') {
+          _modalOpener.focus();
+        }
         currentArtikelId = null;
       };
 
@@ -257,7 +299,10 @@
 
               const itemMeta = document.createElement("div");
               itemMeta.className = "list__meta";
-              itemMeta.textContent = `Preis: ${formatCurrency(artikel.preis)} | Lager: ${artikel.lagerbestand}`;
+              const nummer = artikel.artikelnummer ? `#${artikel.artikelnummer}` : "";
+              const unit = artikel.einheit ? ` | ${artikel.einheit}` : "";
+              const verpack = artikel.verpackungseinheit ? ` | VE: ${artikel.verpackungseinheit}` : "";
+              itemMeta.textContent = `${nummer} Preis: ${formatCurrency(artikel.preis)} | Lager: ${artikel.lagerbestand}${unit}${verpack}`;
 
               itemLeft.appendChild(itemTitle);
               itemLeft.appendChild(itemMeta);
@@ -317,6 +362,9 @@
         const payload = {
           lieferantId: Number(artikelLieferantInput.value),
           name: artikelNameInput.value.trim(),
+          artikelnummer: artikelNummerInput.value.trim() || undefined,
+          einheit: artikelEinheitInput.value.trim() || undefined,
+          verpackungseinheit: artikelVerpackungInput.value.trim() || undefined,
           beschreibung: artikelBeschreibungInput.value.trim(),
           preis: Number(artikelPreisInput.value),
           lagerbestand: Number(artikelLagerInput.value),

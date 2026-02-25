@@ -26,6 +26,9 @@ async function run() {
       {
         name: "Schraube M6",
         beschreibung: "Edelstahlschraube",
+        artikelnummer: 'SCH-M6',
+        einheit: 'Stk',
+        verpackungseinheit: '100',
         preis: 0.12,
         lager: 1000,
         minBest: 100,
@@ -102,8 +105,8 @@ async function run() {
         const s = samples[(i + sup.id) % samples.length];
         const name = `${s.name} (${sup.name})`;
         const r = await client.query(
-          "insert into artikel (lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand) values ($1,$2,$3,$4,$5,$6) returning id",
-          [sup.id, name, s.beschreibung, s.preis, s.lager, s.minBest],
+          "insert into artikel (lieferant_id, name, beschreibung, artikelnummer, einheit, verpackungseinheit, preis, lagerbestand, min_bestand) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id",
+          [sup.id, name, s.beschreibung, s.artikelnummer ?? null, s.einheit ?? null, s.verpackungseinheit ?? null, s.preis, s.lager, s.minBest],
         );
         total++;
       }

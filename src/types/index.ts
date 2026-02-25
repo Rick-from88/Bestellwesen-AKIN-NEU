@@ -17,6 +17,9 @@ export interface Artikel {
   lieferantId: number;
   name: string;
   beschreibung: string;
+  artikelnummer?: string;
+  einheit?: string;
+  verpackungseinheit?: string;
   preis: number;
   lagerbestand: number;
   minBestand: number;
