@@ -27,6 +27,8 @@ create table if not exists artikel (
 
 create table if not exists bestellungen (
     id serial primary key,
+    -- bestellnummer wurde in einer späteren Version ergänzt; für bestehende
+    -- Datenbanken wird die Spalte weiter unten per ALTER TABLE hinzugefügt.
     bestellnummer integer unique not null default 0,
     artikel_id integer not null references artikel(id) on delete restrict,
     lieferant_id integer not null references lieferanten(id) on delete restrict,
@@ -51,3 +53,8 @@ create table if not exists settings (
     key text primary key,
     value text
 );
+
+-- Migration für bestehende Datenbanken, bei denen die Spalte
+-- "bestellnummer" in "bestellungen" noch fehlt.
+alter table bestellungen
+    add column if not exists bestellnummer integer;
