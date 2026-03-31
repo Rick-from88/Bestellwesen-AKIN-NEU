@@ -13,6 +13,8 @@ export interface BestellungPositionInput {
 export interface CreateBestellungInput {
   status?: BestellungStatus;
   bestellDatum?: string;
+  createdByUid?: string;
+  createdByEmail?: string;
   positionen: BestellungPositionInput[];
 }
 
@@ -26,6 +28,8 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
   const result = await query(
     `select b.id,
                     b.bestellnummer as "bestellnummer",
+                    b.created_by_uid as "createdByUid",
+                    b.created_by_email as "createdByEmail",
                     b.status,
                     b.bestell_datum as "bestellDatum",
                     p.artikel_id as "artikelId",
@@ -36,6 +40,8 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
                 union all
                select b.id,
                     b.bestellnummer as "bestellnummer",
+                    b.created_by_uid as "createdByUid",
+                    b.created_by_email as "createdByEmail",
                     b.status,
                     b.bestell_datum as "bestellDatum",
                     b.artikel_id as "artikelId",
@@ -58,6 +64,8 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
       bestellungen.set(id, {
         id,
         bestellnummer: row.bestellnummer ?? undefined,
+        createdByUid: row.createdByUid ?? undefined,
+        createdByEmail: row.createdByEmail ?? undefined,
         status: row.status as BestellungStatus,
         bestellDatum: row.bestellDatum,
         positionen: [],
@@ -175,9 +183,11 @@ export const createBestellung = async (
     }
 
     const bestellungResult = await client.query(
-      'insert into bestellungen (bestellnummer, artikel_id, lieferant_id, menge, status, bestell_datum) values ($1, $2, $3, $4, $5, coalesce($6::timestamp, now())) returning id, bestellnummer, status, bestell_datum as "bestellDatum"',
+      'insert into bestellungen (bestellnummer, created_by_uid, created_by_email, artikel_id, lieferant_id, menge, status, bestell_datum) values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamp, now())) returning id, bestellnummer, created_by_uid as "createdByUid", created_by_email as "createdByEmail", status, bestell_datum as "bestellDatum"',
       [
         nextNr,
+        input.createdByUid ?? null,
+        input.createdByEmail ?? null,
         firstPosition.artikelId,
         firstPosition.lieferantId,
         firstPosition.menge,
@@ -205,6 +215,8 @@ export const createBestellung = async (
     return {
       id: bestellung.id,
       bestellnummer: bestellung.bestellnummer ?? undefined,
+      createdByUid: bestellung.createdByUid ?? undefined,
+      createdByEmail: bestellung.createdByEmail ?? undefined,
       status: bestellung.status as BestellungStatus,
       bestellDatum: bestellung.bestellDatum,
       positionen: input.positionen,
@@ -291,6 +303,8 @@ export const getBestellungById = async (
   const res = await query(
     `select b.id,
                 b.bestellnummer as "bestellnummer",
+                b.created_by_uid as "createdByUid",
+                b.created_by_email as "createdByEmail",
                 b.status,
                 b.bestell_datum as "bestellDatum",
                 p.artikel_id as "artikelId",
@@ -311,6 +325,8 @@ export const getBestellungById = async (
       bestellungenMap.set(bid, {
         id: bid,
         bestellnummer: row.bestellnummer ?? undefined,
+        createdByUid: row.createdByUid ?? undefined,
+        createdByEmail: row.createdByEmail ?? undefined,
         status: row.status as BestellungStatus,
         bestellDatum: row.bestellDatum,
         positionen: [],

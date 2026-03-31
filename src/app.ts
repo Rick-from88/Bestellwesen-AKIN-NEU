@@ -1,5 +1,8 @@
 import express from "express";
 import bodyParser from "body-parser";
+import cookieParser from "cookie-parser";
+import fs from "fs";
+import * as admin from "firebase-admin";
 import path from "path";
 import {
   createBestellung,
@@ -29,22 +32,176 @@ const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cookieParser());
 app.use("/static", express.static(path.join(__dirname, "..", "public")));
 
 // Admin auth middleware: if `ADMIN_TOKEN` is set, require it via
 // `Authorization: Bearer <token>` header or `?admin_token=...` query.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
-const adminAuth = (req: any, res: any, next: any) => {
-  if (!ADMIN_TOKEN) {
-    // permissive if no token configured (avoid breaking dev environments)
-    return next();
+const FB_SESSION_COOKIE = process.env.FB_SESSION_COOKIE || "fb_session";
+const ADMIN_UIDS = (process.env.ADMIN_UIDS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const initFirebaseAdmin = () => {
+  if (admin.apps.length) return admin;
+
+  const sdkJson = process.env.FIREBASE_ADMIN_SDK_JSON || "";
+  const sdkPath = process.env.FIREBASE_ADMIN_SDK_PATH || "";
+
+  if (sdkJson) {
+    const parsed = JSON.parse(sdkJson);
+    admin.initializeApp({
+      credential: admin.credential.cert(parsed),
+    });
+    return admin;
   }
-  const raw = String(
-    req.headers["authorization"] || req.query?.admin_token || "",
-  );
-  const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
-  if (token === ADMIN_TOKEN) return next();
-  res.status(401).json({ error: "unauthorized" });
+
+  if (sdkPath) {
+    const raw = fs.readFileSync(sdkPath, "utf8");
+    const parsed = JSON.parse(raw);
+    admin.initializeApp({
+      credential: admin.credential.cert(parsed),
+    });
+    return admin;
+  }
+
+  // If deployed (e.g. Cloud Run), application default credentials can work.
+  // For local development you typically need GOOGLE_APPLICATION_CREDENTIALS set.
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+  });
+  return admin;
+};
+
+let firebaseAdminReady = true;
+try {
+  initFirebaseAdmin();
+} catch (e) {
+  firebaseAdminReady = false;
+  console.error("Firebase Admin SDK konnte nicht initialisiert werden:", e);
+}
+
+type AuthedRequest = {
+  firebaseUser?: admin.auth.DecodedIdToken;
+};
+
+type AppRole = "admin" | "buero" | "produktion";
+
+const extractIdToken = (req: any): string => {
+  const fromHeader = String(req.headers["authorization"] || "");
+  if (fromHeader.startsWith("Bearer ")) return fromHeader.slice(7);
+  const fromCookie = req.cookies?.[FB_SESSION_COOKIE];
+  return typeof fromCookie === "string" ? fromCookie : "";
+};
+
+const requireUserApi = async (req: any, res: any, next: any) => {
+  if (!firebaseAdminReady) {
+    return res.status(503).json({
+      error: "firebase admin not configured",
+    });
+  }
+  const token = extractIdToken(req);
+  if (!token) return res.status(401).json({ error: "unauthorized" });
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    (req as AuthedRequest).firebaseUser = decoded;
+    return next();
+  } catch {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+};
+
+const isAdminUser = (user: admin.auth.DecodedIdToken): boolean => {
+  if (ADMIN_UIDS.includes(user.uid)) return true;
+  const email = user.email || "";
+  if (email && ADMIN_EMAILS.includes(email)) return true;
+  return false;
+};
+
+const getUserRole = (user: admin.auth.DecodedIdToken | undefined): AppRole => {
+  if (!user) return "produktion";
+  if (isAdminUser(user)) return "admin";
+  const claimRole = String((user as any).role || "");
+  if (
+    claimRole === "admin" ||
+    claimRole === "buero" ||
+    claimRole === "produktion"
+  ) {
+    return claimRole as AppRole;
+  }
+  return "produktion";
+};
+
+const requireAdminApi = async (req: any, res: any, next: any) => {
+  // Legacy allow-list via ADMIN_TOKEN (optional)
+  if (ADMIN_TOKEN) {
+    const raw = String(
+      req.headers["authorization"] || req.query?.admin_token || "",
+    );
+    const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
+    if (token === ADMIN_TOKEN) return next();
+  }
+
+  if (!firebaseAdminReady) {
+    return res.status(503).json({
+      error: "firebase admin not configured",
+    });
+  }
+
+  const token = extractIdToken(req);
+  if (!token) return res.status(401).json({ error: "unauthorized" });
+
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    (req as AuthedRequest).firebaseUser = decoded;
+    if (!isAdminUser(decoded)) return res.status(403).json({ error: "forbidden" });
+    return next();
+  } catch {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+};
+
+const requireUserPage = async (req: any, res: any, next: any) => {
+  if (!firebaseAdminReady) {
+    return res.redirect("/login");
+  }
+  const token = extractIdToken(req);
+  if (!token) return res.redirect("/login");
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    (req as AuthedRequest).firebaseUser = decoded;
+    return next();
+  } catch {
+    return res.redirect("/login");
+  }
+};
+
+const requireAdminPage = async (req: any, res: any, next: any) => {
+  await requireUserPage(req, res, async () => {
+    const u = (req as AuthedRequest).firebaseUser;
+    if (!u || !isAdminUser(u)) return res.redirect("/uebersicht");
+    return next();
+  });
+};
+
+const resolveActorEmail = async (
+  user: admin.auth.DecodedIdToken | undefined,
+): Promise<string | undefined> => {
+  if (!user?.uid) return undefined;
+  if (user.email) return user.email;
+  if (!firebaseAdminReady) return undefined;
+  try {
+    const record = await admin.auth().getUser(user.uid);
+    return record.email || undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 const parseNumber = (value: unknown): number | null => {
@@ -123,6 +280,220 @@ const parsePositionen = (value: unknown): BestellungPositionValid[] | null => {
   return positionen;
 };
 
+// -----------------------
+// Firebase Auth (Login)
+// -----------------------
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    if (!firebaseAdminReady) {
+      return res.status(503).json({ error: "firebase admin not configured" });
+    }
+
+    const idToken =
+      typeof req.body?.idToken === "string" ? req.body.idToken : "";
+    if (!idToken) return res.status(400).json({ error: "missing idToken" });
+
+    const decoded = await admin.auth().verifyIdToken(idToken);
+
+    // Use ID token as session payload; every request will be verified again.
+    const secure = process.env.NODE_ENV === "production";
+    res.cookie(FB_SESSION_COOKIE, idToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure,
+      maxAge: 60 * 60 * 1000, // ~1h (id token lifetime)
+      path: "/",
+    });
+
+    return res.json({ uid: decoded.uid, email: decoded.email || null });
+  } catch {
+    return res.status(401).json({ error: "invalid token" });
+  }
+});
+
+app.post("/api/auth/logout", async (req, res) => {
+  res.clearCookie(FB_SESSION_COOKIE, { path: "/" });
+  return res.status(204).send();
+});
+
+app.get("/api/auth/me", requireUserApi, async (req, res) => {
+  const u = (req as AuthedRequest).firebaseUser;
+  return res.json({
+    uid: u?.uid,
+    email: u?.email || null,
+    role: getUserRole(u),
+    claims: u?.claims || {},
+  });
+});
+
+// -----------------------
+// Nutzerverwaltung (Admin)
+// -----------------------
+app.get("/api/admin/users", requireAdminApi, async (req, res) => {
+  try {
+    const pageSize = Number(req.query.pageSize || 50);
+    const pageToken =
+      typeof req.query.pageToken === "string" ? req.query.pageToken : undefined;
+
+    const maxResults = Number.isFinite(pageSize) ? pageSize : 50;
+    const result = await admin.auth().listUsers(maxResults, pageToken);
+
+    return res.json({
+      users: result.users.map((u) => ({
+        uid: u.uid,
+        email: u.email || null,
+        disabled: u.disabled,
+        role:
+          isAdminUser(u as any) || (u.customClaims as any)?.role === "admin"
+            ? "admin"
+            : (u.customClaims as any)?.role === "buero"
+              ? "buero"
+              : "produktion",
+        displayName: u.displayName || null,
+        metadata: {
+          creationTime: u.metadata?.creationTime || null,
+          lastSignInTime: u.metadata?.lastSignInTime || null,
+        },
+      })),
+      pageToken: result.pageToken || null,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: "failed to list users", detail: String(e) });
+  }
+});
+
+app.post("/api/admin/users/:uid/role", requireAdminApi, async (req, res) => {
+  try {
+    const uid = String(req.params.uid || "");
+    const role = String(req.body?.role || "");
+    if (!uid || !["admin", "buero", "produktion"].includes(role)) {
+      return res.status(400).json({ error: "invalid role payload" });
+    }
+    await admin.auth().setCustomUserClaims(uid, { role });
+    return res.status(204).send();
+  } catch (e: any) {
+    return res.status(500).json({ error: "failed to set role", detail: String(e) });
+  }
+});
+
+app.post("/api/admin/users", requireAdminApi, async (req, res) => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    const password =
+      typeof req.body?.password === "string" ? req.body.password : "";
+    if (!email || !password) {
+      return res.status(400).json({ error: "email and password required" });
+    }
+
+    const userRecord = await admin.auth().createUser({
+      email,
+      password,
+    });
+
+    return res.status(201).json({
+      uid: userRecord.uid,
+      email: userRecord.email || null,
+      disabled: userRecord.disabled,
+    });
+  } catch (e: any) {
+    return res.status(500).json({ error: "failed to create user", detail: String(e) });
+  }
+});
+
+app.post("/api/admin/users/:uid/disable", requireAdminApi, async (req, res) => {
+  try {
+    const uid = String(req.params.uid || "");
+    await admin.auth().updateUser(uid, { disabled: true });
+    return res.status(204).send();
+  } catch (e: any) {
+    return res.status(500).json({ error: "failed to disable user", detail: String(e) });
+  }
+});
+
+app.post("/api/admin/users/:uid/enable", requireAdminApi, async (req, res) => {
+  try {
+    const uid = String(req.params.uid || "");
+    await admin.auth().updateUser(uid, { disabled: false });
+    return res.status(204).send();
+  } catch (e: any) {
+    return res.status(500).json({ error: "failed to enable user", detail: String(e) });
+  }
+});
+
+app.post("/api/admin/users/:uid/delete", requireAdminApi, async (req, res) => {
+  try {
+    const uid = String(req.params.uid || "");
+    await admin.auth().deleteUser(uid);
+    return res.status(204).send();
+  } catch (e: any) {
+    return res.status(500).json({ error: "failed to delete user", detail: String(e) });
+  }
+});
+
+// Protect all other /api routes with Firebase Auth cookie.
+app.use("/api", (req: any, res: any, next: any) => {
+  if (req.path.startsWith("/auth/")) return next();
+  if (req.path.startsWith("/admin/")) return next();
+  return requireUserApi(req, res, () => {
+    const role = getUserRole((req as AuthedRequest).firebaseUser);
+    const p = String(req.path || "");
+    const m = String(req.method || "GET").toUpperCase();
+
+    if (role === "admin") return next();
+
+    if (role === "buero") {
+      // Büro darf alles außer SMTP und Benutzerverwaltung.
+      if (p === "/mail/test") {
+        return res.status(403).json({ error: "forbidden for role buero" });
+      }
+      if (p === "/settings" && m === "PUT") {
+        const body = req.body || {};
+        const forbiddenMailKeys = [
+          "mail_host",
+          "mail_port",
+          "mail_user",
+          "mail_pass",
+          "mail_from",
+          "mail_to",
+          "email_subject",
+          "email_body",
+          "email_signature",
+          "email_recipient",
+        ];
+        const hasForbiddenKey = forbiddenMailKeys.some(
+          (k) => body[k] !== undefined,
+        );
+        if (hasForbiddenKey) {
+          return res
+            .status(403)
+            .json({ error: "smtp/mail settings forbidden for role buero" });
+        }
+      }
+      return next();
+    }
+
+    // produktion: anlegen/ansehen von Bestellungen, Artikeln, Lieferanten.
+    // Keine Bestellung auslösen, keine Einstellungen ändern.
+    const allow =
+      (m === "GET" &&
+        (p === "/bestellungen" ||
+          p === "/bestellungen/next-number" ||
+          p === "/lieferanten" ||
+          /^\/lieferanten\/\d+$/.test(p) ||
+          /^\/lieferanten\/\d+\/artikel$/.test(p) ||
+          p === "/artikel" ||
+          p === "/dashboard/notes" ||
+          p === "/settings" ||
+          p === "/settings/effective")) ||
+      (m === "POST" &&
+        (p === "/bestellungen" || p === "/lieferanten" || p === "/artikel")) ||
+      (m === "PUT" && p === "/dashboard/notes");
+
+    if (allow) return next();
+    return res.status(403).json({ error: "forbidden for role produktion" });
+  });
+});
+
 app.get("/api/bestellungen", async (req, res) => {
   try {
     const bestellungen = await listBestellungen();
@@ -137,6 +508,8 @@ app.get("/api/bestellungen", async (req, res) => {
 
 app.post("/api/bestellungen", async (req, res) => {
   const status = parseStatus(req.body.status) ?? "offen";
+  const actor = (req as AuthedRequest).firebaseUser;
+  const actorEmail = await resolveActorEmail(actor);
   const bestellDatum =
     typeof req.body.bestellDatum === "string"
       ? req.body.bestellDatum
@@ -166,6 +539,8 @@ app.post("/api/bestellungen", async (req, res) => {
       const bestellung = await createBestellung({
         status,
         bestellDatum,
+        createdByUid: actor?.uid,
+        createdByEmail: actorEmail,
         positionen: entry,
       });
       bestellungen.push(bestellung);
@@ -181,6 +556,8 @@ app.post("/api/bestellungen", async (req, res) => {
 app.put("/api/bestellungen/:id", async (req, res) => {
   const bestellungId = parseInteger(req.params.id);
   const status = parseStatus(req.body.status) ?? "offen";
+  const actor = (req as AuthedRequest).firebaseUser;
+  const actorEmail = await resolveActorEmail(actor);
   const bestellDatum =
     typeof req.body.bestellDatum === "string"
       ? req.body.bestellDatum
@@ -259,7 +636,13 @@ app.put("/api/bestellungen/:id", async (req, res) => {
       } else {
         // create a new order for this supplier
         try {
-          await createBestellung({ status, bestellDatum, positionen: poses });
+          await createBestellung({
+            status,
+            bestellDatum,
+            createdByUid: actor?.uid,
+            createdByEmail: actorEmail,
+            positionen: poses,
+          });
         } catch (e) {
           console.error(
             "Fehler beim Erstellen der neuen Bestellung fuer Lieferant",
@@ -728,20 +1111,28 @@ app.delete("/api/artikel/:id", async (req, res) => {
   }
 });
 
-app.get("/uebersicht", (req, res) => {
+app.get("/login", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "login.html"));
+});
+
+app.get("/uebersicht", requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "uebersicht.html"));
 });
 
-app.get("/bestellungen", (req, res) => {
+app.get("/bestellungen", requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "bestellungen.html"));
 });
 
-app.get("/einstellungen", (req, res) => {
+app.get("/einstellungen", requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "einstellungen.html"));
 });
 
-app.get("/bestellung-neu", (req, res) => {
+app.get("/bestellung-neu", requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "bestellung-neu.html"));
+});
+
+app.get("/nutzerverwaltung", requireAdminPage, (req, res) => {
+  res.redirect("/einstellungen");
 });
 app.get("/api/settings", async (req, res) => {
   try {
@@ -931,7 +1322,7 @@ app.put("/api/settings", express.json(), async (req, res) => {
 app.put(
   "/api/settings/sequence",
   express.json(),
-  adminAuth,
+  requireAdminApi,
   async (req, res) => {
     try {
       const settingsRepo = await Promise.resolve(
@@ -1010,7 +1401,7 @@ app.get("/api/bestellungen/next-number", async (req, res) => {
 });
 
 // Export endpoint (JSON or CSV)
-app.get("/api/export/:entity", adminAuth, async (req, res) => {
+app.get("/api/export/:entity", requireAdminApi, async (req, res) => {
   const entity = String(req.params.entity || "").toLowerCase();
   const format = String(req.query.format || "json").toLowerCase();
   try {
@@ -1096,7 +1487,7 @@ app.get("/api/export/:entity", adminAuth, async (req, res) => {
 });
 
 // One-click backup: return combined JSON of main entities
-app.get("/api/backup", adminAuth, async (req, res) => {
+app.get("/api/backup", requireAdminApi, async (req, res) => {
   try {
     const [
       { listLieferanten },
@@ -1278,14 +1669,14 @@ app.put("/api/bestellungen/:id/send", express.json(), async (req, res) => {
     res.status(500).send("error");
   }
 });
-app.get("/lieferanten", (req, res) => {
+app.get("/lieferanten", requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "lieferanten.html"));
 });
-app.get("/lieferanten/:id", (req, res) => {
+app.get("/lieferanten/:id", requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "lieferant-detail.html"));
 });
 
-app.get("/artikel", (req, res) => {
+app.get("/artikel", requireUserPage, (req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "artikel.html"));
 });
 

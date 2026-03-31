@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nutzerverwaltung</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <h1>Nutzerverwaltung</h1>
+        <p class="hero__subtitle">
+          Admin-Aktionen: Nutzer anzeigen, deaktivieren/aktivieren, löschen.
+        </p>
+        <div class="hero__actions">
+          <a class="btn btn--ghost" href="/uebersicht">Zurueck</a>
+        </div>
+      </header>
+
+      <section class="panel" style="margin-bottom: 20px">
+        <div class="panel__header" style="margin-bottom: 10px">
+          <h2 style="font-size: 1.2rem">Nutzer erstellen</h2>
+        </div>
+        <form id="createUserForm" class="form">
+          <div class="form__row">
+            <label for="newEmail">E-Mail</label>
+            <input id="newEmail" type="email" required />
+          </div>
+          <div class="form__row">
+            <label for="newPassword">Passwort</label>
+            <input id="newPassword" type="password" required />
+          </div>
+          <div class="form__actions">
+            <button class="btn btn--primary" type="submit">Anlegen</button>
+          </div>
+          <div id="createUserMsg" class="form__message" role="status"></div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2 style="font-size: 1.2rem">Alle Nutzer</h2>
+          <div id="usersCount" style="color: var(--ink-soft)">Laden...</div>
+        </div>
+        <div class="list" id="usersList"></div>
+      </section>
+    </div>
+
+    <script>
+      const usersList = document.getElementById("usersList");
+      const usersCount = document.getElementById("usersCount");
+      const createUserForm = document.getElementById("createUserForm");
+      const newEmail = document.getElementById("newEmail");
+      const newPassword = document.getElementById("newPassword");
+      const createUserMsg = document.getElementById("createUserMsg");
+
+      const setMsg = (txt) => {
+        if (createUserMsg) createUserMsg.textContent = txt || "";
+      };
+
+      const formatDateTime = (value) => {
+        if (!value) return "-";
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return "-";
+        return d.toLocaleString("de-DE");
+      };
+
+      const renderUsers = (users) => {
+        usersList.innerHTML = "";
+        usersCount.textContent = `${users.length} Nutzer`;
+
+        if (!users.length) {
+          const empty = document.createElement("div");
+          empty.className = "list__row";
+          empty.textContent = "Keine Nutzer gefunden.";
+          usersList.appendChild(empty);
+          return;
+        }
+
+        users.forEach((u) => {
+          const row = document.createElement("div");
+          row.className = "list__row";
+
+          const left = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = u.email || u.uid;
+
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          meta.textContent = `uid: ${u.uid} | erstellt: ${formatDateTime(
+            u.metadata?.creationTime,
+          )} `;
+
+          left.appendChild(title);
+          left.appendChild(meta);
+
+          const right = document.createElement("div");
+          right.style.display = "flex";
+          right.style.gap = "8px";
+          right.style.alignItems = "center";
+          right.style.justifyContent = "flex-end";
+
+          const statusPill = document.createElement("span");
+          statusPill.className = "pill " + (u.disabled ? "pill--rose" : "pill--mint");
+          statusPill.textContent = u.disabled ? "deaktiviert" : "aktiv";
+
+          const toggleBtn = document.createElement("button");
+          toggleBtn.type = "button";
+          toggleBtn.className = u.disabled ? "btn btn--primary btn--small" : "btn btn--link";
+          toggleBtn.textContent = u.disabled ? "Aktivieren" : "Deaktivieren";
+          toggleBtn.addEventListener("click", async () => {
+            const url = u.disabled
+              ? `/api/admin/users/${encodeURIComponent(u.uid)}/enable`
+              : `/api/admin/users/${encodeURIComponent(u.uid)}/disable`;
+            await fetch(url, { method: "POST" });
+            await loadUsers();
+          });
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.type = "button";
+          deleteBtn.className = "btn btn--danger btn--small";
+          deleteBtn.textContent = "Löschen";
+          deleteBtn.addEventListener("click", async () => {
+            const ok = window.confirm(`Nutzer ${u.email || u.uid} wirklich löschen?`);
+            if (!ok) return;
+            await fetch(`/api/admin/users/${encodeURIComponent(u.uid)}/delete`, { method: "POST" });
+            await loadUsers();
+          });
+
+          right.appendChild(statusPill);
+          right.appendChild(toggleBtn);
+          right.appendChild(deleteBtn);
+
+          row.appendChild(left);
+          row.appendChild(right);
+          usersList.appendChild(row);
+        });
+      };
+
+      const loadUsers = async () => {
+        try {
+          usersCount.textContent = "Laden...";
+          const res = await fetch("/api/admin/users?pageSize=200");
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          renderUsers(data.users || []);
+        } catch (e) {
+          console.error(e);
+          usersCount.textContent = "Fehler beim Laden";
+          usersList.innerHTML = "";
+          const empty = document.createElement("div");
+          empty.className = "list__row";
+          empty.textContent = "Nutzer konnten nicht geladen werden.";
+          usersList.appendChild(empty);
+        }
+      };
+
+      createUserForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        setMsg("Anlegen...");
+        try {
+          const email = newEmail.value.trim();
+          const password = newPassword.value;
+          const res = await fetch("/api/admin/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          newPassword.value = "";
+          setMsg("Nutzer angelegt");
+          await loadUsers();
+        } catch (err) {
+          console.error(err);
+          setMsg("Fehler: " + (err?.message || "unbekannt"));
+        }
+      });
+
+      loadUsers();
+    </script>
+  </body>
+</html>
+

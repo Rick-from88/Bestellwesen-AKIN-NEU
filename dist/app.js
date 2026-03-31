@@ -1,4 +1,27 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -14,6 +37,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const body_parser_1 = __importDefault(require("body-parser"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
+const fs_1 = __importDefault(require("fs"));
+const admin = __importStar(require("firebase-admin"));
 const path_1 = __importDefault(require("path"));
 const bestellungen_1 = require("./repositories/bestellungen");
 const lieferanten_1 = require("./repositories/lieferanten");
@@ -23,22 +49,169 @@ const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 app.use(body_parser_1.default.json());
 app.use(body_parser_1.default.urlencoded({ extended: true }));
+app.use((0, cookie_parser_1.default)());
 app.use("/static", express_1.default.static(path_1.default.join(__dirname, "..", "public")));
 // Admin auth middleware: if `ADMIN_TOKEN` is set, require it via
 // `Authorization: Bearer <token>` header or `?admin_token=...` query.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
-const adminAuth = (req, res, next) => {
+const FB_SESSION_COOKIE = process.env.FB_SESSION_COOKIE || "fb_session";
+const ADMIN_UIDS = (process.env.ADMIN_UIDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+const initFirebaseAdmin = () => {
+    if (admin.apps.length)
+        return admin;
+    const sdkJson = process.env.FIREBASE_ADMIN_SDK_JSON || "";
+    const sdkPath = process.env.FIREBASE_ADMIN_SDK_PATH || "";
+    if (sdkJson) {
+        const parsed = JSON.parse(sdkJson);
+        admin.initializeApp({
+            credential: admin.credential.cert(parsed),
+        });
+        return admin;
+    }
+    if (sdkPath) {
+        const raw = fs_1.default.readFileSync(sdkPath, "utf8");
+        const parsed = JSON.parse(raw);
+        admin.initializeApp({
+            credential: admin.credential.cert(parsed),
+        });
+        return admin;
+    }
+    // If deployed (e.g. Cloud Run), application default credentials can work.
+    // For local development you typically need GOOGLE_APPLICATION_CREDENTIALS set.
+    admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+    });
+    return admin;
+};
+let firebaseAdminReady = true;
+try {
+    initFirebaseAdmin();
+}
+catch (e) {
+    firebaseAdminReady = false;
+    console.error("Firebase Admin SDK konnte nicht initialisiert werden:", e);
+}
+const extractIdToken = (req) => {
     var _a;
-    if (!ADMIN_TOKEN) {
-        // permissive if no token configured (avoid breaking dev environments)
+    const fromHeader = String(req.headers["authorization"] || "");
+    if (fromHeader.startsWith("Bearer "))
+        return fromHeader.slice(7);
+    const fromCookie = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a[FB_SESSION_COOKIE];
+    return typeof fromCookie === "string" ? fromCookie : "";
+};
+const requireUserApi = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!firebaseAdminReady) {
+        return res.status(503).json({
+            error: "firebase admin not configured",
+        });
+    }
+    const token = extractIdToken(req);
+    if (!token)
+        return res.status(401).json({ error: "unauthorized" });
+    try {
+        const decoded = yield admin.auth().verifyIdToken(token);
+        req.firebaseUser = decoded;
         return next();
     }
-    const raw = String(req.headers["authorization"] || ((_a = req.query) === null || _a === void 0 ? void 0 : _a.admin_token) || "");
-    const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
-    if (token === ADMIN_TOKEN)
-        return next();
-    res.status(401).json({ error: "unauthorized" });
+    catch (_a) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+});
+const isAdminUser = (user) => {
+    if (ADMIN_UIDS.includes(user.uid))
+        return true;
+    const email = user.email || "";
+    if (email && ADMIN_EMAILS.includes(email))
+        return true;
+    return false;
 };
+const getUserRole = (user) => {
+    if (!user)
+        return "produktion";
+    if (isAdminUser(user))
+        return "admin";
+    const claimRole = String(user.role || "");
+    if (claimRole === "admin" ||
+        claimRole === "buero" ||
+        claimRole === "produktion") {
+        return claimRole;
+    }
+    return "produktion";
+};
+const requireAdminApi = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    var _b;
+    // Legacy allow-list via ADMIN_TOKEN (optional)
+    if (ADMIN_TOKEN) {
+        const raw = String(req.headers["authorization"] || ((_b = req.query) === null || _b === void 0 ? void 0 : _b.admin_token) || "");
+        const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
+        if (token === ADMIN_TOKEN)
+            return next();
+    }
+    if (!firebaseAdminReady) {
+        return res.status(503).json({
+            error: "firebase admin not configured",
+        });
+    }
+    const token = extractIdToken(req);
+    if (!token)
+        return res.status(401).json({ error: "unauthorized" });
+    try {
+        const decoded = yield admin.auth().verifyIdToken(token);
+        req.firebaseUser = decoded;
+        if (!isAdminUser(decoded))
+            return res.status(403).json({ error: "forbidden" });
+        return next();
+    }
+    catch (_c) {
+        return res.status(401).json({ error: "unauthorized" });
+    }
+});
+const requireUserPage = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!firebaseAdminReady) {
+        return res.redirect("/login");
+    }
+    const token = extractIdToken(req);
+    if (!token)
+        return res.redirect("/login");
+    try {
+        const decoded = yield admin.auth().verifyIdToken(token);
+        req.firebaseUser = decoded;
+        return next();
+    }
+    catch (_d) {
+        return res.redirect("/login");
+    }
+});
+const requireAdminPage = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    yield requireUserPage(req, res, () => __awaiter(void 0, void 0, void 0, function* () {
+        const u = req.firebaseUser;
+        if (!u || !isAdminUser(u))
+            return res.redirect("/uebersicht");
+        return next();
+    }));
+});
+const resolveActorEmail = (user) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!(user === null || user === void 0 ? void 0 : user.uid))
+        return undefined;
+    if (user.email)
+        return user.email;
+    if (!firebaseAdminReady)
+        return undefined;
+    try {
+        const record = yield admin.auth().getUser(user.uid);
+        return record.email || undefined;
+    }
+    catch (_e) {
+        return undefined;
+    }
+});
 const parseNumber = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
@@ -84,6 +257,209 @@ const parsePositionen = (value) => {
     }
     return positionen;
 };
+// -----------------------
+// Firebase Auth (Login)
+// -----------------------
+app.post("/api/auth/login", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _f;
+    try {
+        if (!firebaseAdminReady) {
+            return res.status(503).json({ error: "firebase admin not configured" });
+        }
+        const idToken = typeof ((_f = req.body) === null || _f === void 0 ? void 0 : _f.idToken) === "string" ? req.body.idToken : "";
+        if (!idToken)
+            return res.status(400).json({ error: "missing idToken" });
+        const decoded = yield admin.auth().verifyIdToken(idToken);
+        // Use ID token as session payload; every request will be verified again.
+        const secure = process.env.NODE_ENV === "production";
+        res.cookie(FB_SESSION_COOKIE, idToken, {
+            httpOnly: true,
+            sameSite: "lax",
+            secure,
+            maxAge: 60 * 60 * 1000,
+            path: "/",
+        });
+        return res.json({ uid: decoded.uid, email: decoded.email || null });
+    }
+    catch (_g) {
+        return res.status(401).json({ error: "invalid token" });
+    }
+}));
+app.post("/api/auth/logout", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    res.clearCookie(FB_SESSION_COOKIE, { path: "/" });
+    return res.status(204).send();
+}));
+app.get("/api/auth/me", requireUserApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const u = req.firebaseUser;
+    return res.json({
+        uid: u === null || u === void 0 ? void 0 : u.uid,
+        email: (u === null || u === void 0 ? void 0 : u.email) || null,
+        role: getUserRole(u),
+        claims: (u === null || u === void 0 ? void 0 : u.claims) || {},
+    });
+}));
+// -----------------------
+// Nutzerverwaltung (Admin)
+// -----------------------
+app.get("/api/admin/users", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const pageSize = Number(req.query.pageSize || 50);
+        const pageToken = typeof req.query.pageToken === "string" ? req.query.pageToken : undefined;
+        const maxResults = Number.isFinite(pageSize) ? pageSize : 50;
+        const result = yield admin.auth().listUsers(maxResults, pageToken);
+        return res.json({
+            users: result.users.map((u) => {
+                var _a, _b, _c, _d;
+                return ({
+                    uid: u.uid,
+                    email: u.email || null,
+                    disabled: u.disabled,
+                    role: isAdminUser(u) || ((_a = u.customClaims) === null || _a === void 0 ? void 0 : _a.role) === "admin"
+                        ? "admin"
+                        : ((_b = u.customClaims) === null || _b === void 0 ? void 0 : _b.role) === "buero"
+                            ? "buero"
+                            : "produktion",
+                    displayName: u.displayName || null,
+                    metadata: {
+                        creationTime: ((_c = u.metadata) === null || _c === void 0 ? void 0 : _c.creationTime) || null,
+                        lastSignInTime: ((_d = u.metadata) === null || _d === void 0 ? void 0 : _d.lastSignInTime) || null,
+                    },
+                });
+            }),
+            pageToken: result.pageToken || null,
+        });
+    }
+    catch (e) {
+        return res.status(500).json({ error: "failed to list users", detail: String(e) });
+    }
+}));
+app.post("/api/admin/users/:uid/role", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _h;
+    try {
+        const uid = String(req.params.uid || "");
+        const role = String(((_h = req.body) === null || _h === void 0 ? void 0 : _h.role) || "");
+        if (!uid || !["admin", "buero", "produktion"].includes(role)) {
+            return res.status(400).json({ error: "invalid role payload" });
+        }
+        yield admin.auth().setCustomUserClaims(uid, { role });
+        return res.status(204).send();
+    }
+    catch (e) {
+        return res.status(500).json({ error: "failed to set role", detail: String(e) });
+    }
+}));
+app.post("/api/admin/users", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _j, _k;
+    try {
+        const email = typeof ((_j = req.body) === null || _j === void 0 ? void 0 : _j.email) === "string" ? req.body.email.trim() : "";
+        const password = typeof ((_k = req.body) === null || _k === void 0 ? void 0 : _k.password) === "string" ? req.body.password : "";
+        if (!email || !password) {
+            return res.status(400).json({ error: "email and password required" });
+        }
+        const userRecord = yield admin.auth().createUser({
+            email,
+            password,
+        });
+        return res.status(201).json({
+            uid: userRecord.uid,
+            email: userRecord.email || null,
+            disabled: userRecord.disabled,
+        });
+    }
+    catch (e) {
+        return res.status(500).json({ error: "failed to create user", detail: String(e) });
+    }
+}));
+app.post("/api/admin/users/:uid/disable", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const uid = String(req.params.uid || "");
+        yield admin.auth().updateUser(uid, { disabled: true });
+        return res.status(204).send();
+    }
+    catch (e) {
+        return res.status(500).json({ error: "failed to disable user", detail: String(e) });
+    }
+}));
+app.post("/api/admin/users/:uid/enable", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const uid = String(req.params.uid || "");
+        yield admin.auth().updateUser(uid, { disabled: false });
+        return res.status(204).send();
+    }
+    catch (e) {
+        return res.status(500).json({ error: "failed to enable user", detail: String(e) });
+    }
+}));
+app.post("/api/admin/users/:uid/delete", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const uid = String(req.params.uid || "");
+        yield admin.auth().deleteUser(uid);
+        return res.status(204).send();
+    }
+    catch (e) {
+        return res.status(500).json({ error: "failed to delete user", detail: String(e) });
+    }
+}));
+// Protect all other /api routes with Firebase Auth cookie.
+app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/auth/"))
+        return next();
+    if (req.path.startsWith("/admin/"))
+        return next();
+    return requireUserApi(req, res, () => {
+        const role = getUserRole(req.firebaseUser);
+        const p = String(req.path || "");
+        const m = String(req.method || "GET").toUpperCase();
+        if (role === "admin")
+            return next();
+        if (role === "buero") {
+            // Büro darf alles außer SMTP und Benutzerverwaltung.
+            if (p === "/mail/test") {
+                return res.status(403).json({ error: "forbidden for role buero" });
+            }
+            if (p === "/settings" && m === "PUT") {
+                const body = req.body || {};
+                const forbiddenMailKeys = [
+                    "mail_host",
+                    "mail_port",
+                    "mail_user",
+                    "mail_pass",
+                    "mail_from",
+                    "mail_to",
+                    "email_subject",
+                    "email_body",
+                    "email_signature",
+                    "email_recipient",
+                ];
+                const hasForbiddenKey = forbiddenMailKeys.some((k) => body[k] !== undefined);
+                if (hasForbiddenKey) {
+                    return res
+                        .status(403)
+                        .json({ error: "smtp/mail settings forbidden for role buero" });
+                }
+            }
+            return next();
+        }
+        // produktion: anlegen/ansehen von Bestellungen, Artikeln, Lieferanten.
+        // Keine Bestellung auslösen, keine Einstellungen ändern.
+        const allow = (m === "GET" &&
+            (p === "/bestellungen" ||
+                p === "/bestellungen/next-number" ||
+                p === "/lieferanten" ||
+                /^\/lieferanten\/\d+$/.test(p) ||
+                /^\/lieferanten\/\d+\/artikel$/.test(p) ||
+                p === "/artikel" ||
+                p === "/dashboard/notes" ||
+                p === "/settings" ||
+                p === "/settings/effective")) ||
+            (m === "POST" &&
+                (p === "/bestellungen" || p === "/lieferanten" || p === "/artikel")) ||
+            (m === "PUT" && p === "/dashboard/notes");
+        if (allow)
+            return next();
+        return res.status(403).json({ error: "forbidden for role produktion" });
+    });
+});
 app.get("/api/bestellungen", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const bestellungen = yield (0, bestellungen_1.listBestellungen)();
@@ -97,8 +473,10 @@ app.get("/api/bestellungen", (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 }));
 app.post("/api/bestellungen", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
-    const status = (_a = parseStatus(req.body.status)) !== null && _a !== void 0 ? _a : "offen";
+    var _l;
+    const status = (_l = parseStatus(req.body.status)) !== null && _l !== void 0 ? _l : "offen";
+    const actor = req.firebaseUser;
+    const actorEmail = yield resolveActorEmail(actor);
     const bestellDatum = typeof req.body.bestellDatum === "string"
         ? req.body.bestellDatum
         : undefined;
@@ -122,6 +500,8 @@ app.post("/api/bestellungen", (req, res) => __awaiter(void 0, void 0, void 0, fu
             const bestellung = yield (0, bestellungen_1.createBestellung)({
                 status,
                 bestellDatum,
+                createdByUid: actor === null || actor === void 0 ? void 0 : actor.uid,
+                createdByEmail: actorEmail,
                 positionen: entry,
             });
             bestellungen.push(bestellung);
@@ -134,9 +514,11 @@ app.post("/api/bestellungen", (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
 }));
 app.put("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _b, _c;
+    var _m, _o;
     const bestellungId = parseInteger(req.params.id);
-    const status = (_b = parseStatus(req.body.status)) !== null && _b !== void 0 ? _b : "offen";
+    const status = (_m = parseStatus(req.body.status)) !== null && _m !== void 0 ? _m : "offen";
+    const actor = req.firebaseUser;
+    const actorEmail = yield resolveActorEmail(actor);
     const bestellDatum = typeof req.body.bestellDatum === "string"
         ? req.body.bestellDatum
         : undefined;
@@ -155,7 +537,7 @@ app.put("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0,
         // prevent editing positions if order is delivered or cancelled
         const db = yield Promise.resolve(require("./db"));
         const cur = yield db.query("select status from bestellungen where id = $1", [bestellungId]);
-        const curStatus = (_c = cur.rows[0]) === null || _c === void 0 ? void 0 : _c.status;
+        const curStatus = (_o = cur.rows[0]) === null || _o === void 0 ? void 0 : _o.status;
         if (curStatus === "geliefert" || curStatus === "storniert") {
             res.status(409).json({
                 error: "Bestellung ist abgeschlossen und kann nicht mehr bearbeitet werden.",
@@ -199,7 +581,13 @@ app.put("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0,
             else {
                 // create a new order for this supplier
                 try {
-                    yield createBestellung({ status, bestellDatum, positionen: poses });
+                    yield createBestellung({
+                        status,
+                        bestellDatum,
+                        createdByUid: actor === null || actor === void 0 ? void 0 : actor.uid,
+                        createdByEmail: actorEmail,
+                        positionen: poses,
+                    });
                 }
                 catch (e) {
                     console.error("Fehler beim Erstellen der neuen Bestellung fuer Lieferant", lid, e);
@@ -242,9 +630,9 @@ app.put("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0,
 }));
 // change status only (allows changing status even when positions are locked)
 app.put("/api/bestellungen/:id/status", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _d;
+    var _p;
     const id = parseInteger(req.params.id);
-    const status = parseStatus((_d = req.body) === null || _d === void 0 ? void 0 : _d.status);
+    const status = parseStatus((_p = req.body) === null || _p === void 0 ? void 0 : _p.status);
     if (!id || !status) {
         res.status(400).json({ error: "ungueltige anfrage" });
         return;
@@ -499,6 +887,13 @@ app.post("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, functio
     const beschreibung = typeof req.body.beschreibung === "string"
         ? req.body.beschreibung.trim()
         : undefined;
+    const artikelnummer = typeof req.body.artikelnummer === "string"
+        ? req.body.artikelnummer.trim()
+        : undefined;
+    const einheit = typeof req.body.einheit === "string" ? req.body.einheit.trim() : undefined;
+    const verpackungseinheit = typeof req.body.verpackungseinheit === "string"
+        ? req.body.verpackungseinheit.trim()
+        : undefined;
     const preis = parseNumber(req.body.preis);
     const lagerbestand = parseInteger(req.body.lagerbestand);
     const minBestand = parseInteger(req.body.minBestand);
@@ -522,6 +917,9 @@ app.post("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, functio
             lieferantId,
             name,
             beschreibung,
+            artikelnummer,
+            einheit,
+            verpackungseinheit,
             preis,
             lagerbestand,
             minBestand: minBestand !== null && minBestand !== void 0 ? minBestand : 0,
@@ -534,16 +932,23 @@ app.post("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, functio
     }
 }));
 app.put("/api/artikel/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _e;
+    var _q;
     const artikelId = parseInteger(req.params.id);
     const lieferantId = parseInteger(req.body.lieferantId);
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
     const beschreibung = typeof req.body.beschreibung === "string"
         ? req.body.beschreibung.trim()
         : undefined;
+    const artikelnummer = typeof req.body.artikelnummer === "string"
+        ? req.body.artikelnummer.trim()
+        : undefined;
+    const einheit = typeof req.body.einheit === "string" ? req.body.einheit.trim() : undefined;
+    const verpackungseinheit = typeof req.body.verpackungseinheit === "string"
+        ? req.body.verpackungseinheit.trim()
+        : undefined;
     const preis = parseNumber(req.body.preis);
     const lagerbestand = parseInteger(req.body.lagerbestand);
-    const minBestand = (_e = parseInteger(req.body.minBestand)) !== null && _e !== void 0 ? _e : 0;
+    const minBestand = (_q = parseInteger(req.body.minBestand)) !== null && _q !== void 0 ? _q : 0;
     if (!artikelId) {
         res.status(400).json({ error: "Ungueltige Artikel-ID." });
         return;
@@ -559,6 +964,9 @@ app.put("/api/artikel/:id", (req, res) => __awaiter(void 0, void 0, void 0, func
             lieferantId,
             name,
             beschreibung,
+            artikelnummer,
+            einheit,
+            verpackungseinheit,
             preis,
             lagerbestand,
             minBestand,
@@ -600,17 +1008,23 @@ app.delete("/api/artikel/:id", (req, res) => __awaiter(void 0, void 0, void 0, f
         res.status(500).json({ error: "Artikel konnte nicht geloescht werden." });
     }
 }));
-app.get("/uebersicht", (req, res) => {
+app.get("/login", (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, "..", "public", "login.html"));
+});
+app.get("/uebersicht", requireUserPage, (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "uebersicht.html"));
 });
-app.get("/bestellungen", (req, res) => {
+app.get("/bestellungen", requireUserPage, (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "bestellungen.html"));
 });
-app.get("/einstellungen", (req, res) => {
+app.get("/einstellungen", requireUserPage, (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "einstellungen.html"));
 });
-app.get("/bestellung-neu", (req, res) => {
+app.get("/bestellung-neu", requireUserPage, (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "bestellung-neu.html"));
+});
+app.get("/nutzerverwaltung", requireAdminPage, (req, res) => {
+    res.redirect("/einstellungen");
 });
 app.get("/api/settings", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -689,18 +1103,18 @@ app.get("/api/dashboard/notes", (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 app.put("/api/dashboard/notes", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _f, _g;
+    var _r, _s;
     try {
         const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
         // Accept either a single new note via { note: 'text' }
         // or a full replacement via { notes: [...] }
-        if (Array.isArray((_f = req.body) === null || _f === void 0 ? void 0 : _f.notes)) {
+        if (Array.isArray((_r = req.body) === null || _r === void 0 ? void 0 : _r.notes)) {
             const notesArr = req.body.notes;
             yield settingsRepo.setSetting("dashboard_notes", JSON.stringify(notesArr));
             res.status(204).send();
             return;
         }
-        if (typeof ((_g = req.body) === null || _g === void 0 ? void 0 : _g.note) === "string" && req.body.note.trim()) {
+        if (typeof ((_s = req.body) === null || _s === void 0 ? void 0 : _s.note) === "string" && req.body.note.trim()) {
             const noteText = req.body.note.trim();
             const existingRaw = yield settingsRepo.getSetting("dashboard_notes");
             let notesArr = [];
@@ -768,8 +1182,8 @@ app.put("/api/settings", express_1.default.json(), (req, res) => __awaiter(void 
         res.status(500).send("error");
     }
 }));
-app.put("/api/settings/sequence", express_1.default.json(), adminAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _h, _j, _k;
+app.put("/api/settings/sequence", express_1.default.json(), requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _t, _u, _v;
     try {
         const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
         const db = yield Promise.resolve(require("./db"));
@@ -783,7 +1197,7 @@ app.put("/api/settings/sequence", express_1.default.json(), adminAuth, (req, res
         }
         const prefix = String(prefixSetting);
         const seqDigits = Number(seqDigitsSetting);
-        const lastDigits = Number((_h = req.body) === null || _h === void 0 ? void 0 : _h.lastDigits);
+        const lastDigits = Number((_t = req.body) === null || _t === void 0 ? void 0 : _t.lastDigits);
         if (!Number.isInteger(lastDigits) ||
             lastDigits < 0 ||
             lastDigits >= Math.pow(10, seqDigits)) {
@@ -796,7 +1210,7 @@ app.put("/api/settings/sequence", express_1.default.json(), adminAuth, (req, res
         // we store the full next number; choose next = prefix*multiplier + lastDigits + 1
         const desiredNext = Number(prefix) * multiplier + lastDigits + 1;
         const maxRes = yield db.query("select max(bestellnummer) as mx from bestellungen where bestellnummer between $1 and $2", [lower, upper]);
-        const mx = (_k = (_j = maxRes.rows[0]) === null || _j === void 0 ? void 0 : _j.mx) !== null && _k !== void 0 ? _k : null;
+        const mx = (_v = (_u = maxRes.rows[0]) === null || _u === void 0 ? void 0 : _u.mx) !== null && _v !== void 0 ? _v : null;
         if (mx && Number(mx) >= desiredNext) {
             res.status(400).json({
                 error: "Gewuenschte Zahl ist kleiner oder gleich bestehender Maximalnummer.",
@@ -825,7 +1239,7 @@ app.get("/api/bestellungen/next-number", (req, res) => __awaiter(void 0, void 0,
     }
 }));
 // Export endpoint (JSON or CSV)
-app.get("/api/export/:entity", adminAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.get("/api/export/:entity", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const entity = String(req.params.entity || "").toLowerCase();
     const format = String(req.query.format || "json").toLowerCase();
     try {
@@ -897,7 +1311,7 @@ app.get("/api/export/:entity", adminAuth, (req, res) => __awaiter(void 0, void 0
     }
 }));
 // One-click backup: return combined JSON of main entities
-app.get("/api/backup", adminAuth, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.get("/api/backup", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const [{ listLieferanten }, { listArtikel }, { listBestellungen }, { listSettings },] = yield Promise.all([
             Promise.resolve(require("./repositories/lieferanten")),
@@ -926,7 +1340,7 @@ app.get("/api/backup", adminAuth, (req, res) => __awaiter(void 0, void 0, void 0
 }));
 // Send order by email and set status to 'bestellt'
 app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
+    var _w, _x, _y, _z, _0, _1, _2, _3, _4, _5;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -977,10 +1391,10 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
         }
         artikelHtml += "</tbody></table>";
         // prepare placeholder replacements
-        const firstLieferantName = ((_o = lieferantMap[(_m = (_l = bestellung.positionen) === null || _l === void 0 ? void 0 : _l[0]) === null || _m === void 0 ? void 0 : _m.lieferantId]) === null || _o === void 0 ? void 0 : _o.name) || "";
+        const firstLieferantName = ((_y = lieferantMap[(_x = (_w = bestellung.positionen) === null || _w === void 0 ? void 0 : _w[0]) === null || _x === void 0 ? void 0 : _x.lieferantId]) === null || _y === void 0 ? void 0 : _y.name) || "";
         const replacements = {
-            "{{bestellnummer}}": String((_p = bestellung.bestellnummer) !== null && _p !== void 0 ? _p : ""),
-            "{{datum}}": String((_q = bestellung.bestellDatum) !== null && _q !== void 0 ? _q : ""),
+            "{{bestellnummer}}": String((_z = bestellung.bestellnummer) !== null && _z !== void 0 ? _z : ""),
+            "{{datum}}": String((_0 = bestellung.bestellDatum) !== null && _0 !== void 0 ? _0 : ""),
             "{{lieferant}}": firstLieferantName,
             "{{artikel_liste}}": artikelHtml,
             "{{artikel_text}}": artikelText,
@@ -988,14 +1402,14 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
         // load templates from settings if present
         const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
         const subjTemplate = (yield settingsRepo.getSetting("email_subject")) ||
-            `Bestellung ${(_r = bestellung.bestellnummer) !== null && _r !== void 0 ? _r : ""}`;
+            `Bestellung ${(_1 = bestellung.bestellnummer) !== null && _1 !== void 0 ? _1 : ""}`;
         let bodyTemplate = (yield settingsRepo.getSetting("email_body")) ||
-            `<h2>Bestellung ${(_s = bestellung.bestellnummer) !== null && _s !== void 0 ? _s : ""}</h2><p>Datum: ${(_t = bestellung.bestellDatum) !== null && _t !== void 0 ? _t : ""}</p>{{artikel_liste}}`;
+            `<h2>Bestellung ${(_2 = bestellung.bestellnummer) !== null && _2 !== void 0 ? _2 : ""}</h2><p>Datum: ${(_3 = bestellung.bestellDatum) !== null && _3 !== void 0 ? _3 : ""}</p>{{artikel_liste}}`;
         const signature = (yield settingsRepo.getSetting("email_signature")) || "";
         // apply replacements in subject and body
         let subject = subjTemplate;
         let html = bodyTemplate;
-        let text = `Bestellung ${(_u = bestellung.bestellnummer) !== null && _u !== void 0 ? _u : ""}\nDatum: ${(_v = bestellung.bestellDatum) !== null && _v !== void 0 ? _v : ""}\n\n${artikelText}`;
+        let text = `Bestellung ${(_4 = bestellung.bestellnummer) !== null && _4 !== void 0 ? _4 : ""}\nDatum: ${(_5 = bestellung.bestellDatum) !== null && _5 !== void 0 ? _5 : ""}\n\n${artikelText}`;
         for (const key of Object.keys(replacements)) {
             const val = replacements[key];
             const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
@@ -1040,13 +1454,13 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
         res.status(500).send("error");
     }
 }));
-app.get("/lieferanten", (req, res) => {
+app.get("/lieferanten", requireUserPage, (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "lieferanten.html"));
 });
-app.get("/lieferanten/:id", (req, res) => {
+app.get("/lieferanten/:id", requireUserPage, (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "lieferant-detail.html"));
 });
-app.get("/artikel", (req, res) => {
+app.get("/artikel", requireUserPage, (req, res) => {
     res.sendFile(path_1.default.join(__dirname, "..", "public", "artikel.html"));
 });
 app.get("/", (req, res) => {

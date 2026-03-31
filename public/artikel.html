@@ -23,8 +23,28 @@
 
       <section class="panel">
         <div class="panel__header">
-          <h2>Artikelverzeichnis</h2>
-          <div id="artikelCount" style="color: var(--ink-soft)">Laden...</div>
+          <div>
+            <h2>Artikelverzeichnis</h2>
+            <div id="artikelCount" style="color: var(--ink-soft)">Laden...</div>
+          </div>
+          <div class="filter-bar">
+            <input
+              id="artikelSearch"
+              type="search"
+              placeholder="Suchen (Artikel, Nummer, Lieferant ...)"
+            />
+            <select id="artikelLieferantFilter">
+              <option value="">Lieferant: alle</option>
+            </select>
+            <select id="artikelSort">
+              <option value="name-asc">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
+              <option value="preis-asc">Preis aufsteigend</option>
+              <option value="preis-desc">Preis absteigend</option>
+              <option value="lager-asc">Lagerbestand aufsteigend</option>
+              <option value="lager-desc">Lagerbestand absteigend</option>
+            </select>
+          </div>
         </div>
         <div class="list" id="artikelList"></div>
       </section>
@@ -157,6 +177,11 @@
       const artikelMinInput = document.getElementById("artikelMinInput");
       const artikelCancel = document.getElementById("artikelCancel");
       const artikelDelete = document.getElementById("artikelDelete");
+      const artikelSearch = document.getElementById("artikelSearch");
+      const artikelLieferantFilter = document.getElementById(
+        "artikelLieferantFilter",
+      );
+      const artikelSort = document.getElementById("artikelSort");
 
       let currentArtikelId = null;
       let lieferantenData = [];
@@ -254,6 +279,8 @@
           currency: "EUR",
         }).format(amount);
       };
+
+      let artikelByLieferantGlobal = {};
 
       const renderArtikel = (lieferanten, artikelByLieferant) => {
         artikelList.innerHTML = "";
@@ -363,12 +390,92 @@
         });
       };
 
+      const applyArtikelFilterAndSort = () => {
+        const term = (artikelSearch?.value || "").toLowerCase().trim();
+        const filterLieferantId =
+          artikelLieferantFilter?.value || "";
+        const sort = artikelSort?.value || "name-asc";
+
+        const lieferanten = [...lieferantenData];
+        const artikelByLieferant = {};
+
+        lieferanten.forEach((l) => {
+          if (filterLieferantId && String(l.id) !== filterLieferantId) {
+            return;
+          }
+          const items = [...(artikelByLieferantGlobal[l.id] || [])];
+
+          let filtered = items;
+          if (term) {
+            filtered = items.filter((a) => {
+              const nummer = a.artikelnummer || "";
+              const text = [
+                a.name,
+                nummer,
+                l.name,
+                a.beschreibung,
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+              return text.includes(term);
+            });
+          }
+
+          filtered.sort((a, b) => {
+            const nameA = (a.name || "").toLowerCase();
+            const nameB = (b.name || "").toLowerCase();
+            const preisA = Number(a.preis || 0);
+            const preisB = Number(b.preis || 0);
+            const lagerA = Number(a.lagerbestand || 0);
+            const lagerB = Number(b.lagerbestand || 0);
+            switch (sort) {
+              case "name-desc":
+                return nameB.localeCompare(nameA);
+              case "preis-asc":
+                return preisA - preisB;
+              case "preis-desc":
+                return preisB - preisA;
+              case "lager-asc":
+                return lagerA - lagerB;
+              case "lager-desc":
+                return lagerB - lagerA;
+              default:
+                return nameA.localeCompare(nameB);
+            }
+          });
+
+          artikelByLieferant[l.id] = filtered;
+        });
+
+        renderArtikel(
+          filterLieferantId
+            ? lieferanten.filter((l) => String(l.id) === filterLieferantId)
+            : lieferanten,
+          artikelByLieferant,
+        );
+      };
+
       const loadArtikel = async () => {
         try {
           const response = await fetch("/api/lieferanten");
           const lieferantenResponse = await response.json();
           const lieferanten = normalizeList(lieferantenResponse);
           lieferantenData = lieferanten;
+          // Lieferanten-Filter befüllen
+          if (artikelLieferantFilter) {
+            artikelLieferantFilter.innerHTML = "";
+            const allOpt = document.createElement("option");
+            allOpt.value = "";
+            allOpt.textContent = "Lieferant: alle";
+            artikelLieferantFilter.appendChild(allOpt);
+            lieferanten.forEach((l) => {
+              const opt = document.createElement("option");
+              opt.value = String(l.id);
+              opt.textContent = l.name;
+              artikelLieferantFilter.appendChild(opt);
+            });
+          }
 
           const artikelRequests = lieferanten.map((lieferant) =>
             fetch(`/api/lieferanten/${lieferant.id}/artikel`).then((res) =>
@@ -382,14 +489,20 @@
             artikelByLieferant[lieferanten[index].id] = normalizeList(items);
           });
 
-          renderArtikel(lieferanten, artikelByLieferant);
+          artikelByLieferantGlobal = artikelByLieferant;
+          applyArtikelFilterAndSort();
         } catch (error) {
           console.error("Fehler beim Laden der Artikel:", error);
           artikelCount.textContent = "Fehler beim Laden";
         }
       };
 
-      artikelRefresh.addEventListener("click", loadArtikel);
+      artikelRefresh.addEventListener("click", () => {
+        if (artikelSearch) artikelSearch.value = "";
+        if (artikelLieferantFilter) artikelLieferantFilter.value = "";
+        if (artikelSort) artikelSort.value = "name-asc";
+        loadArtikel();
+      });
       addArtikelBtn.addEventListener("click", () => {
         openArtikelModal();
       });
@@ -480,7 +593,22 @@
       artikelModal
         .querySelector(".modal__backdrop")
         .addEventListener("click", closeArtikelModal);
+      if (artikelSearch) {
+        artikelSearch.addEventListener("input", applyArtikelFilterAndSort);
+      }
+      if (artikelLieferantFilter) {
+        artikelLieferantFilter.addEventListener(
+          "change",
+          applyArtikelFilterAndSort,
+        );
+      }
+      if (artikelSort) {
+        artikelSort.addEventListener("change", applyArtikelFilterAndSort);
+      }
       loadArtikel();
     </script>
+    <script src="/static/profile-widget.js"></script>
+    <script src="/static/mobile-nav.js"></script>
   </body>
 </html>
+

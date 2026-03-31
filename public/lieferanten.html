@@ -25,9 +25,24 @@
 
       <section class="panel">
         <div class="panel__header">
-          <h2>Alle Lieferanten</h2>
-          <div id="lieferantenCount" style="color: var(--ink-soft)">
-            Laden...
+          <div>
+            <h2>Alle Lieferanten</h2>
+            <div id="lieferantenCount" style="color: var(--ink-soft)">
+              Laden...
+            </div>
+          </div>
+          <div class="filter-bar">
+            <input
+              id="lieferantenSearch"
+              type="search"
+              placeholder="Suchen (Name, Kontakt, E-Mail, Ort ...)"
+            />
+            <select id="lieferantenSort">
+              <option value="name-asc">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
+              <option value="created-desc">Neueste zuerst</option>
+              <option value="created-asc">Älteste zuerst</option>
+            </select>
           </div>
         </div>
         <div class="list" id="lieferantenList"></div>
@@ -102,6 +117,8 @@
       const lieferantenList = document.getElementById("lieferantenList");
       const lieferantenCount = document.getElementById("lieferantenCount");
       const lieferantenRefresh = document.getElementById("lieferantenRefresh");
+      const lieferantenSearch = document.getElementById("lieferantenSearch");
+      const lieferantenSort = document.getElementById("lieferantenSort");
       const addLieferantBtn = document.getElementById("addLieferantBtn");
       const lieferantModal = document.getElementById("lieferantModal");
       const lieferantModalTitle = document.getElementById("lieferantModalTitle");
@@ -120,6 +137,7 @@
       const lieferantDelete = document.getElementById("lieferantDelete");
 
       let currentLieferantId = null;
+      let lieferantenData = [];
 
       const openModal = (lieferant = null) => {
         currentLieferantId = lieferant ? lieferant.id : null;
@@ -144,6 +162,51 @@
         lieferantModal.classList.remove("is-open");
         lieferantModal.setAttribute("aria-hidden", "true");
         currentLieferantId = null;
+      };
+
+      const applyLieferantenFilterAndSort = () => {
+        const term = (lieferantenSearch?.value || "").toLowerCase().trim();
+        const sort = lieferantenSort?.value || "name-asc";
+
+        let list = [...lieferantenData];
+
+        if (term) {
+          list = list.filter((l) => {
+            const parts = [
+              l.name,
+              l.kontaktPerson,
+              l.email,
+              l.telefon,
+              l.strasse,
+              l.plz,
+              l.stadt,
+              l.land,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+            return parts.includes(term);
+          });
+        }
+
+        list.sort((a, b) => {
+          const nameA = (a.name || "").toLowerCase();
+          const nameB = (b.name || "").toLowerCase();
+          const createdA = new Date(a.createdAt || a.created_at || 0).getTime();
+          const createdB = new Date(b.createdAt || b.created_at || 0).getTime();
+          switch (sort) {
+            case "name-desc":
+              return nameB.localeCompare(nameA);
+            case "created-desc":
+              return createdB - createdA;
+            case "created-asc":
+              return createdA - createdB;
+            default:
+              return nameA.localeCompare(nameB);
+          }
+        });
+
+        renderLieferanten(list);
       };
 
       const renderLieferanten = (lieferanten) => {
@@ -260,10 +323,10 @@
         try {
           const response = await fetch("/api/lieferanten");
           const lieferantenResponse = await response.json();
-          const lieferanten = Array.isArray(lieferantenResponse)
+          lieferantenData = Array.isArray(lieferantenResponse)
             ? lieferantenResponse
-            : (lieferantenResponse.value || []);
-          renderLieferanten(lieferanten);
+            : lieferantenResponse.value || [];
+          applyLieferantenFilterAndSort();
         } catch (error) {
           console.error("Fehler beim Laden der Lieferanten:", error);
           lieferantenCount.textContent = "Fehler beim Laden";
@@ -359,12 +422,25 @@
         closeModal,
       );
 
-      lieferantenRefresh.addEventListener("click", loadLieferanten);
+      lieferantenRefresh.addEventListener("click", () => {
+        if (lieferantenSearch) lieferantenSearch.value = "";
+        if (lieferantenSort) lieferantenSort.value = "name-asc";
+        loadLieferanten();
+      });
+      if (lieferantenSearch) {
+        lieferantenSearch.addEventListener("input", applyLieferantenFilterAndSort);
+      }
+      if (lieferantenSort) {
+        lieferantenSort.addEventListener("change", applyLieferantenFilterAndSort);
+      }
       addLieferantBtn.addEventListener("click", () => {
         openModal();
       });
 
       loadLieferanten();
     </script>
+    <script src="/static/profile-widget.js"></script>
+    <script src="/static/mobile-nav.js"></script>
   </body>
 </html>
+

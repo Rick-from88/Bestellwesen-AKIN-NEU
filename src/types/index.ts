@@ -1,6 +1,8 @@
 export interface Bestellung {
   id: number;
   bestellnummer?: number;
+  createdByUid?: string;
+  createdByEmail?: string;
   status: "offen" | "bestellt" | "geliefert" | "storniert";
   bestellDatum: Date;
   positionen: BestellungPosition[];

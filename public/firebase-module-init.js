@@ -4,6 +4,7 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD14Iwp8m6ivTTaA3Bft7I1-xL8tc7NUzk",
@@ -16,8 +17,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
 try {
   getAnalytics(app);
 } catch (e) {
   // analytics may require additional setup; ignore failures
 }
+
+export { firebaseConfig, app, auth };

@@ -309,11 +309,7 @@
 
         notes.forEach((note) => {
           const row = document.createElement("div");
-          row.className = "list__row";
-          row.style.display = "flex";
-          row.style.justifyContent = "space-between";
-          row.style.alignItems = "center";
-          row.style.flexWrap = "wrap";
+          row.className = "list__row notes__row";
 
           const left = document.createElement("div");
           left.style.display = "flex";
@@ -486,5 +482,8 @@
       loadOffeneCount();
       loadDashboardNotes();
     </script>
+    <script src="/static/profile-widget.js"></script>
+    <script src="/static/mobile-nav.js"></script>
   </body>
 </html>
+

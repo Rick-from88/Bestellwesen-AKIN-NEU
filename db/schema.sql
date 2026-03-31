@@ -30,6 +30,8 @@ create table if not exists bestellungen (
     -- bestellnummer wurde in einer späteren Version ergänzt; für bestehende
     -- Datenbanken wird die Spalte weiter unten per ALTER TABLE hinzugefügt.
     bestellnummer integer unique not null default 0,
+    created_by_uid text,
+    created_by_email text,
     artikel_id integer not null references artikel(id) on delete restrict,
     lieferant_id integer not null references lieferanten(id) on delete restrict,
     menge integer not null,
@@ -58,3 +60,15 @@ create table if not exists settings (
 -- "bestellnummer" in "bestellungen" noch fehlt.
 alter table bestellungen
     add column if not exists bestellnummer integer;
+alter table bestellungen
+    add column if not exists created_by_uid text;
+alter table bestellungen
+    add column if not exists created_by_email text;
+
+-- Migration für ältere Datenbanken ohne erweiterte Artikel-Felder.
+alter table artikel
+    add column if not exists artikelnummer text;
+alter table artikel
+    add column if not exists einheit text;
+alter table artikel
+    add column if not exists verpackungseinheit text;

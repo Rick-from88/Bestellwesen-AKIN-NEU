@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login</title>
+    <link rel="stylesheet" href="/static/styles/uebersicht.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <h1>Login</h1>
+        <p class="hero__subtitle">
+          Melden Sie sich an, um auf das Bestellwesen zuzugreifen.
+        </p>
+      </header>
+
+      <section class="panel" style="max-width: 560px; margin: 0 auto">
+        <div class="panel__header" style="margin-bottom: 8px">
+          <h2 style="font-size: 1.4rem">Zugang</h2>
+        </div>
+
+        <form id="loginForm" class="form">
+          <div class="form__row">
+            <label for="email">E-Mail</label>
+            <input id="email" type="email" required />
+          </div>
+          <div class="form__row">
+            <label for="password">Passwort</label>
+            <input id="password" type="password" required />
+          </div>
+
+          <div class="form__actions">
+            <button class="btn btn--primary" type="submit">Anmelden</button>
+            <button
+              class="btn btn--ghost"
+              type="button"
+              id="logoutBtn"
+              style="display: none"
+            >
+              Abmelden
+            </button>
+          </div>
+
+          <div id="loginMessage" class="form__message" role="status"></div>
+        </form>
+      </section>
+    </div>
+
+    <script type="module">
+      import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+      import { app as firebaseApp } from "/static/firebase-module-init.js";
+      import { auth as firebaseAuth } from "/static/firebase-module-init.js";
+
+      const form = document.getElementById("loginForm");
+      const emailEl = document.getElementById("email");
+      const passwordEl = document.getElementById("password");
+      const messageEl = document.getElementById("loginMessage");
+      const logoutBtn = document.getElementById("logoutBtn");
+
+      // ensure we use the same auth instance as in firebase-module-init.js
+      const auth = firebaseAuth || getAuth(firebaseApp);
+
+      const setMessage = (txt) => {
+        if (!messageEl) return;
+        messageEl.textContent = txt || "";
+      };
+
+      const doLogin = async (email, password) => {
+        setMessage("Anmeldung...");
+        const res = await signInWithEmailAndPassword(auth, email, password);
+        const user = res.user;
+        const idToken = await user.getIdToken();
+
+        const apiRes = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken }),
+        });
+
+        if (!apiRes.ok) {
+          const txt = await apiRes.text();
+          throw new Error(txt || "Login fehlgeschlagen");
+        }
+      };
+
+      const doLogout = async () => {
+        try {
+          await signOut(auth);
+        } catch (e) {
+          // ignore; backend logout will still clear cookie
+        }
+        await fetch("/api/auth/logout", { method: "POST" });
+        window.location.href = "/login";
+      };
+
+      const bootMe = async () => {
+        try {
+          const meRes = await fetch("/api/auth/me");
+          if (meRes.ok) {
+            if (logoutBtn) logoutBtn.style.display = "";
+            window.location.href = "/uebersicht";
+          }
+        } catch (e) {
+          // ignore
+        }
+      };
+
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        setMessage("");
+        try {
+          const email = emailEl.value.trim();
+          const password = passwordEl.value;
+          await doLogin(email, password);
+          window.location.href = "/uebersicht";
+        } catch (e) {
+          console.error(e);
+          setMessage("Login fehlgeschlagen. Bitte Daten prüfen.");
+        }
+      });
+
+      if (logoutBtn) logoutBtn.addEventListener("click", doLogout);
+
+      bootMe();
+    </script>
+  </body>
+</html>
+

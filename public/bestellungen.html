@@ -23,9 +23,31 @@
 
       <section class="panel">
         <div class="panel__header">
-          <h2>Alle Bestellungen</h2>
-          <div id="bestellungenCount" style="color: var(--ink-soft)">
-            Laden...
+          <div>
+            <h2>Alle Bestellungen</h2>
+            <div id="bestellungenCount" style="color: var(--ink-soft)">
+              Laden...
+            </div>
+          </div>
+          <div class="filter-bar">
+            <input
+              id="bestellungenSearch"
+              type="search"
+              placeholder="Suchen (Bestellnr., Artikel, Lieferant ...)"
+            />
+            <select id="bestellungenStatusFilter">
+              <option value="">Status: alle</option>
+              <option value="offen">offen</option>
+              <option value="bestellt">bestellt</option>
+              <option value="geliefert">geliefert</option>
+              <option value="storniert">storniert</option>
+            </select>
+            <select id="bestellungenSort">
+              <option value="date-desc">Datum neueste zuerst</option>
+              <option value="date-asc">Datum älteste zuerst</option>
+              <option value="nr-asc">Bestellnummer aufsteigend</option>
+              <option value="nr-desc">Bestellnummer absteigend</option>
+            </select>
           </div>
         </div>
         <div class="list" id="bestellungenList"></div>
@@ -121,6 +143,11 @@
       const bestellungenRefresh = document.getElementById(
         "bestellungenRefresh",
       );
+      const bestellungenSearch = document.getElementById("bestellungenSearch");
+      const bestellungenStatusFilter = document.getElementById(
+        "bestellungenStatusFilter",
+      );
+      const bestellungenSort = document.getElementById("bestellungenSort");
       const bestellungModal = document.getElementById("bestellungModal");
       const modalClose = document.getElementById("modalClose");
       const editForm = document.getElementById("bestellungEditForm");
@@ -137,6 +164,8 @@
       let bestellungenData = [];
       let artikelData = [];
       let lieferantenData = [];
+      let artikelMapGlobal = {};
+      let lieferantMapGlobal = {};
       let currentBestellungId = null;
 
       const statusClass = (status) => {
@@ -413,6 +442,8 @@
             ? artikelNamen.slice(0, 3).join(", ") +
               (artikelNamen.length > 3 ? ` +${artikelNamen.length - 3}` : "")
             : "-";
+          const createdBy =
+            bestellung.createdByEmail || bestellung.createdByUid || "-";
 
           // Gesamtpreis aller Positionen der Bestellung berechnen
           const totalBestellung = positionen.reduce((sum, pos) => {
@@ -422,7 +453,7 @@
             return sum + preis * menge;
           }, 0);
 
-          meta.innerHTML = `Datum: ${datum} | Lieferant: ${lieferantName} | Artikel: ${artikelSummary} | Gesamt: <span class="order-total">${formatCurrency(totalBestellung)}</span>`;
+          meta.innerHTML = `Datum: ${datum} | Erfasst von: ${createdBy} | Lieferant: ${lieferantName} | Artikel: ${artikelSummary} | Gesamt: <span class="order-total">${formatCurrency(totalBestellung)}</span>`;
 
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
@@ -490,6 +521,74 @@
         });
       };
 
+      const applyBestellungenFilterAndSort = () => {
+        const artikelMap = artikelMapGlobal;
+        const lieferantMap = lieferantMapGlobal;
+        const term = (bestellungenSearch?.value || "").toLowerCase().trim();
+        const statusFilter = bestellungenStatusFilter?.value || "";
+        const sort = bestellungenSort?.value || "date-desc";
+
+        // defensiv: je nach JSON-Form (Array vs. Objekt { value }) normalisieren
+        let list = Array.isArray(bestellungenData) ? [...bestellungenData] : [];
+
+        if (statusFilter) {
+          list = list.filter((b) => (b.status || "offen") === statusFilter);
+        }
+
+        if (term) {
+          list = list.filter((b) => {
+            // JS: `??` nicht ohne Klammern mit `||` mischen; daher nur `??`
+            const nr = String(b.bestellnummer ?? b.id ?? "").toLowerCase();
+            const status = String(b.status || "").toLowerCase();
+            const datum = String(b.bestellDatum || "").toLowerCase();
+            const positionen = Array.isArray(b.positionen) ? b.positionen : [];
+            const artikelNamen = positionen
+              .map((p) => artikelMap[p.artikelId]?.name || "")
+              .join(" ")
+              .toLowerCase();
+            const lieferantenNamen = positionen
+              .map((p) => lieferantMap[p.lieferantId] || "")
+              .join(" ")
+              .toLowerCase();
+            const createdBy = String(
+              b.createdByEmail || b.createdByUid || "",
+            ).toLowerCase();
+            const haystack =
+              nr +
+              " " +
+              status +
+              " " +
+              datum +
+              " " +
+              artikelNamen +
+              " " +
+              lieferantenNamen +
+              " " +
+              createdBy;
+            return haystack.includes(term);
+          });
+        }
+
+        list.sort((a, b) => {
+          const dateA = new Date(a.bestellDatum || 0).getTime();
+          const dateB = new Date(b.bestellDatum || 0).getTime();
+          const nrA = Number(a.bestellnummer ?? a.id ?? 0);
+          const nrB = Number(b.bestellnummer ?? b.id ?? 0);
+          switch (sort) {
+            case "date-asc":
+              return dateA - dateB;
+            case "nr-asc":
+              return nrA - nrB;
+            case "nr-desc":
+              return nrB - nrA;
+            default:
+              return dateB - dateA;
+          }
+        });
+
+        renderBestellungen(list, artikelMap, lieferantMap);
+      };
+
       const loadBestellungen = async () => {
         try {
           const [bestellungenRes, artikelRes, lieferantenRes] =
@@ -499,7 +598,12 @@
               fetch("/api/lieferanten"),
             ]);
 
-          bestellungenData = await bestellungenRes.json();
+          const rawBestellungen = await bestellungenRes.json();
+          bestellungenData = Array.isArray(rawBestellungen)
+            ? rawBestellungen
+            : (rawBestellungen?.value && Array.isArray(rawBestellungen.value)
+                ? rawBestellungen.value
+                : []);
           const artikelResponse = await artikelRes.json();
           const lieferantenResponse = await lieferantenRes.json();
 
@@ -510,17 +614,17 @@
             ? lieferantenResponse
             : lieferantenResponse.value || [];
 
-          const artikelMap = artikelData.reduce((acc, item) => {
+          artikelMapGlobal = artikelData.reduce((acc, item) => {
             acc[item.id] = { name: item.name, preis: item.preis };
             return acc;
           }, {});
 
-          const lieferantMap = lieferantenData.reduce((acc, item) => {
+          lieferantMapGlobal = lieferantenData.reduce((acc, item) => {
             acc[item.id] = item.name;
             return acc;
           }, {});
 
-          renderBestellungen(bestellungenData, artikelMap, lieferantMap);
+          applyBestellungenFilterAndSort();
         } catch (error) {
           console.error("Fehler beim Laden der Bestellungen:", error);
           bestellungenCount.textContent = "Fehler beim Laden";
@@ -677,8 +781,28 @@
         });
       }
 
-      bestellungenRefresh.addEventListener("click", loadBestellungen);
+      bestellungenRefresh.addEventListener("click", () => {
+        if (bestellungenSearch) bestellungenSearch.value = "";
+        if (bestellungenStatusFilter) bestellungenStatusFilter.value = "";
+        if (bestellungenSort) bestellungenSort.value = "date-desc";
+        loadBestellungen();
+      });
+      if (bestellungenSearch) {
+        bestellungenSearch.addEventListener("input", applyBestellungenFilterAndSort);
+      }
+      if (bestellungenStatusFilter) {
+        bestellungenStatusFilter.addEventListener(
+          "change",
+          applyBestellungenFilterAndSort,
+        );
+      }
+      if (bestellungenSort) {
+        bestellungenSort.addEventListener("change", applyBestellungenFilterAndSort);
+      }
       loadBestellungen();
     </script>
+    <script src="/static/profile-widget.js"></script>
+    <script src="/static/mobile-nav.js"></script>
   </body>
 </html>
+

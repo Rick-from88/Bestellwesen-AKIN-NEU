@@ -21,31 +21,6 @@
         </div>
 
         <div class="grid">
-          <a class="card" href="#" role="button">
-            <div style="display: flex; align-items: center; gap: 12px">
-              <svg
-                width="40"
-                height="40"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <circle cx="12" cy="8" r="3" stroke="#111" stroke-width="1.5" />
-                <path
-                  d="M4 20c0-3.3137 2.6863-6 6-6h4c3.3137 0 6 2.6863 6 6"
-                  stroke="#111"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-              <div>
-                <div class="card__label">Profil</div>
-                <div class="card__value">Benutzerinformationen bearbeiten</div>
-              </div>
-            </div>
-          </a>
-
           <a class="card" href="#" role="button" id="backupCard">
             <div style="display: flex; align-items: center; gap: 12px">
               <svg
@@ -151,7 +126,75 @@
               </div>
             </div>
           </a>
+
+          <a
+            class="card"
+            href="#"
+            role="button"
+            id="userMgmtCard"
+            style="display: none"
+          >
+            <div style="display: flex; align-items: center; gap: 12px">
+              <svg
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <circle cx="9" cy="8" r="3" stroke="#111" stroke-width="1.5" />
+                <path
+                  d="M3 18c0-2.7614 2.2386-5 5-5h2"
+                  stroke="#111"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+                <circle cx="17" cy="9" r="2.5" stroke="#111" stroke-width="1.5" />
+                <path
+                  d="M14.5 18h5"
+                  stroke="#111"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M17 15.5v5"
+                  stroke="#111"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <div>
+                <div class="card__label">Nutzerverwaltung</div>
+                <div class="card__value">Benutzer anlegen und verwalten</div>
+              </div>
+            </div>
+          </a>
         </div>
+        <section
+          id="userMgmtPanel"
+          class="panel"
+          style="margin-top: 18px; display: none"
+        >
+          <div class="panel__header">
+            <h2>Nutzerverwaltung</h2>
+            <div id="usersCount" style="color: var(--ink-soft)">Laden...</div>
+          </div>
+          <form id="createUserForm" class="form" style="padding: 8px 0 16px">
+            <div class="form__row">
+              <label for="newUserEmail">E-Mail</label>
+              <input id="newUserEmail" type="email" required />
+            </div>
+            <div class="form__row">
+              <label for="newUserPassword">Passwort</label>
+              <input id="newUserPassword" type="password" required />
+            </div>
+            <div class="form__actions">
+              <button class="btn btn--primary" type="submit">Nutzer anlegen</button>
+            </div>
+            <div id="createUserMsg" class="form__message" role="status"></div>
+          </form>
+          <div class="list" id="usersList"></div>
+        </section>
         <!-- Mail details (form + summary + placeholders) shown below the cards -->
         <div id="mailDetails" style="display: none">
           <section
@@ -1052,6 +1095,224 @@
           /* ignore */
         }
       });
+
+      // -----------------------
+      // Nutzerverwaltung (in Einstellungen integriert)
+      // -----------------------
+      const userMgmtCard = document.getElementById("userMgmtCard");
+      const userMgmtPanel = document.getElementById("userMgmtPanel");
+      const usersList = document.getElementById("usersList");
+      const usersCount = document.getElementById("usersCount");
+      const createUserForm = document.getElementById("createUserForm");
+      const createUserMsg = document.getElementById("createUserMsg");
+      const newUserEmail = document.getElementById("newUserEmail");
+      const newUserPassword = document.getElementById("newUserPassword");
+
+      const setCreateUserMsg = (txt) => {
+        if (createUserMsg) createUserMsg.textContent = txt || "";
+      };
+      let myRole = "produktion";
+
+      const fmtDate = (value) => {
+        if (!value) return "-";
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return "-";
+        return d.toLocaleString("de-DE");
+      };
+
+      const renderUsers = (users) => {
+        if (!usersList || !usersCount) return;
+        usersList.innerHTML = "";
+        usersCount.textContent = `${users.length} Nutzer`;
+
+        if (!users.length) {
+          const empty = document.createElement("div");
+          empty.className = "list__row";
+          empty.textContent = "Keine Nutzer vorhanden.";
+          usersList.appendChild(empty);
+          return;
+        }
+
+        users.forEach((u) => {
+          const row = document.createElement("div");
+          row.className = "list__row";
+
+          const left = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = u.email || u.uid;
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          meta.textContent = `uid: ${u.uid} | erstellt: ${fmtDate(u.metadata?.creationTime)} | letzter Login: ${fmtDate(u.metadata?.lastSignInTime)}`;
+          left.appendChild(title);
+          left.appendChild(meta);
+
+          const right = document.createElement("div");
+          right.style.display = "flex";
+          right.style.gap = "8px";
+          right.style.alignItems = "center";
+          right.style.justifyContent = "flex-end";
+
+          const statusPill = document.createElement("span");
+          statusPill.className = "pill " + (u.disabled ? "pill--rose" : "pill--mint");
+          statusPill.textContent = u.disabled ? "deaktiviert" : "aktiv";
+
+          const toggleBtn = document.createElement("button");
+          toggleBtn.type = "button";
+          toggleBtn.className = u.disabled
+            ? "btn btn--primary btn--small"
+            : "btn btn--ghost btn--small";
+          toggleBtn.textContent = u.disabled ? "Aktivieren" : "Deaktivieren";
+          toggleBtn.addEventListener("click", async () => {
+            const url = u.disabled
+              ? `/api/admin/users/${encodeURIComponent(u.uid)}/enable`
+              : `/api/admin/users/${encodeURIComponent(u.uid)}/disable`;
+            await fetch(url, { method: "POST" });
+            await loadUsers();
+          });
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.type = "button";
+          deleteBtn.className = "btn btn--danger btn--small";
+          deleteBtn.textContent = "Löschen";
+          deleteBtn.addEventListener("click", async () => {
+            const ok = window.confirm(
+              `Nutzer ${u.email || u.uid} wirklich löschen?`,
+            );
+            if (!ok) return;
+            await fetch(
+              `/api/admin/users/${encodeURIComponent(u.uid)}/delete`,
+              { method: "POST" },
+            );
+            await loadUsers();
+          });
+
+          right.appendChild(statusPill);
+          const roleSelect = document.createElement("select");
+          roleSelect.style.padding = "6px 8px";
+          roleSelect.style.borderRadius = "8px";
+          roleSelect.style.border = "1px solid rgba(0,0,0,0.12)";
+          [
+            { id: "admin", label: "Admin" },
+            { id: "buero", label: "Büro" },
+            { id: "produktion", label: "Produktion" },
+          ].forEach((opt) => {
+            const o = document.createElement("option");
+            o.value = opt.id;
+            o.textContent = opt.label;
+            if ((u.role || "produktion") === opt.id) o.selected = true;
+            roleSelect.appendChild(o);
+          });
+          const saveRoleBtn = document.createElement("button");
+          saveRoleBtn.type = "button";
+          saveRoleBtn.className = "btn btn--small";
+          saveRoleBtn.textContent = "Rolle speichern";
+          saveRoleBtn.addEventListener("click", async () => {
+            await fetch(`/api/admin/users/${encodeURIComponent(u.uid)}/role`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ role: roleSelect.value }),
+            });
+            await loadUsers();
+          });
+
+          right.appendChild(roleSelect);
+          right.appendChild(saveRoleBtn);
+          right.appendChild(toggleBtn);
+          right.appendChild(deleteBtn);
+          row.appendChild(left);
+          row.appendChild(right);
+          usersList.appendChild(row);
+        });
+      };
+
+      const loadUsers = async () => {
+        if (!usersCount) return;
+        usersCount.textContent = "Laden...";
+        try {
+          const res = await fetch("/api/admin/users?pageSize=200");
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          renderUsers(Array.isArray(data.users) ? data.users : []);
+        } catch (e) {
+          usersCount.textContent = "Nicht berechtigt";
+          if (usersList) {
+            usersList.innerHTML = "";
+            const err = document.createElement("div");
+            err.className = "list__row";
+            err.textContent = "Nutzer konnten nicht geladen werden.";
+            usersList.appendChild(err);
+          }
+        }
+      };
+
+      const initUserMgmt = async () => {
+        if (!userMgmtCard) return;
+        try {
+          const meRes = await fetch("/api/auth/me");
+          if (meRes.ok) {
+            const me = await meRes.json();
+            myRole = me.role || "produktion";
+          }
+
+          // SMTP card nur für Admin, nicht für Büro/Produktion.
+          if (myRole !== "admin" && mailCard) {
+            mailCard.style.display = "none";
+            if (mailDetails) mailDetails.style.display = "none";
+          }
+
+          // Bestellnummer-Konfiguration nur Admin/Büro (Produktion read-only).
+          if (myRole === "produktion" && configureBtn) {
+            configureBtn.style.display = "none";
+            if (configDiv) configDiv.style.display = "none";
+          }
+
+          // Nutzerverwaltung nur für Admin.
+          if (myRole === "admin") {
+            const res = await fetch("/api/admin/users?pageSize=1");
+            if (!res.ok) return;
+            userMgmtCard.style.display = "";
+            userMgmtCard.addEventListener("click", () => {
+              if (!userMgmtPanel) return;
+              const hidden = userMgmtPanel.style.display === "none";
+              userMgmtPanel.style.display = hidden ? "block" : "none";
+              if (hidden) loadUsers();
+            });
+          } else {
+            userMgmtCard.style.display = "none";
+            if (userMgmtPanel) userMgmtPanel.style.display = "none";
+          }
+        } catch (e) {
+          // ignore if not admin
+        }
+      };
+
+      if (createUserForm) {
+        createUserForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          setCreateUserMsg("Speichern...");
+          try {
+            const email = (newUserEmail?.value || "").trim();
+            const password = newUserPassword?.value || "";
+            const res = await fetch("/api/admin/users", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, password }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            if (newUserPassword) newUserPassword.value = "";
+            setCreateUserMsg("Nutzer angelegt.");
+            await loadUsers();
+          } catch (e) {
+            setCreateUserMsg("Fehler beim Anlegen.");
+          }
+        });
+      }
+
+      initUserMgmt();
     </script>
+    <script src="/static/profile-widget.js"></script>
+    <script src="/static/mobile-nav.js"></script>
   </body>
 </html>
+

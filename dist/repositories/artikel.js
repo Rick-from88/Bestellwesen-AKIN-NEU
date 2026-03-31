@@ -51,7 +51,7 @@ const updateArtikel = (id, input) => __awaiter(void 0, void 0, void 0, function*
 exports.updateArtikel = updateArtikel;
 const deleteArtikel = (id) => __awaiter(void 0, void 0, void 0, function* () {
     var _m;
-    const result = yield (0, db_1.query)('delete from artikel where id = $1', [id]);
+    const result = yield (0, db_1.query)("delete from artikel where id = $1", [id]);
     return ((_m = result.rowCount) !== null && _m !== void 0 ? _m : 0) > 0;
 });
 exports.deleteArtikel = deleteArtikel;
