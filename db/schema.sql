@@ -19,9 +19,9 @@ create table if not exists artikel (
     artikelnummer text,
     einheit text,
     verpackungseinheit text,
+    standard_bestellwert integer,
+    foto_url text,
     preis numeric(10, 2) not null,
-    lagerbestand integer not null default 0,
-    min_bestand integer not null default 0,
     created_at timestamp not null default now()
 );
 
@@ -31,6 +31,7 @@ create table if not exists bestellungen (
     -- Datenbanken wird die Spalte weiter unten per ALTER TABLE hinzugefügt.
     bestellnummer integer unique not null default 0,
     created_by_uid text,
+    created_by_name text,
     created_by_email text,
     artikel_id integer not null references artikel(id) on delete restrict,
     lieferant_id integer not null references lieferanten(id) on delete restrict,
@@ -44,7 +45,8 @@ create table if not exists bestellpositionen (
     bestellung_id integer not null references bestellungen(id) on delete cascade,
     artikel_id integer not null references artikel(id) on delete restrict,
     lieferant_id integer not null references lieferanten(id) on delete restrict,
-    menge integer not null
+    menge integer not null,
+    notiz text
 );
 
 create index if not exists idx_bestellungen_status on bestellungen(status);
@@ -63,7 +65,11 @@ alter table bestellungen
 alter table bestellungen
     add column if not exists created_by_uid text;
 alter table bestellungen
+    add column if not exists created_by_name text;
+alter table bestellungen
     add column if not exists created_by_email text;
+alter table bestellpositionen
+    add column if not exists notiz text;
 
 -- Migration für ältere Datenbanken ohne erweiterte Artikel-Felder.
 alter table artikel
@@ -72,3 +78,20 @@ alter table artikel
     add column if not exists einheit text;
 alter table artikel
     add column if not exists verpackungseinheit text;
+alter table artikel
+    add column if not exists standard_bestellwert integer;
+alter table artikel
+    add column if not exists foto_url text;
+
+-- Migration: veraltete Status-Constraint auf bestellungen aktualisieren
+alter table bestellungen
+    drop constraint if exists bestellungen_status_check;
+alter table bestellungen
+    add constraint bestellungen_status_check
+    check (status in ('offen', 'bestellt', 'geliefert', 'storniert'));
+
+-- Lagerbestand/Mindestbestand werden nicht mehr verwendet.
+alter table artikel
+    drop column if exists lagerbestand;
+alter table artikel
+    drop column if exists min_bestand;

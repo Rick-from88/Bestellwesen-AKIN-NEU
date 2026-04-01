@@ -80,6 +80,10 @@
       };
 
       const artikelCache = {};
+      const getArtikelByLieferantAndId = (lieferantId, artikelId) => {
+        const items = artikelCache[lieferantId] || [];
+        return items.find((i) => Number(i.id) === Number(artikelId));
+      };
       const populateArtikelForLieferant = async (
         artikelSelect,
         lieferantId,
@@ -147,6 +151,19 @@
         mengeInput.required = true;
         mengeInput.placeholder = "Menge";
         mengeInput.setAttribute("aria-label", "Menge");
+        artikelSelect.addEventListener("change", () => {
+          const lid = Number(lieferantSelect.value);
+          const aid = Number(artikelSelect.value);
+          const artikelInfo = getArtikelByLieferantAndId(lid, aid);
+          if (artikelInfo?.standardBestellwert && !Number(mengeInput.value)) {
+            mengeInput.value = String(artikelInfo.standardBestellwert);
+          }
+        });
+
+        const notizInput = document.createElement("input");
+        notizInput.type = "text";
+        notizInput.placeholder = "Notiz (optional)";
+        notizInput.setAttribute("aria-label", "Notiz");
 
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
@@ -162,6 +179,7 @@
         row.appendChild(lieferantSelect);
         row.appendChild(artikelSelect);
         row.appendChild(mengeInput);
+        row.appendChild(notizInput);
         row.appendChild(removeBtn);
         positionenContainer.appendChild(row);
       };
@@ -204,11 +222,13 @@
         const positionen = Array.from(positionenContainer.children).map(
           (row) => {
             const selects = row.querySelectorAll("select");
-            const inputs = row.querySelectorAll("input");
+            const mengeInput = row.querySelector('input[type="number"]');
+            const notizInput = row.querySelector('input[type="text"]');
             const lieferantId = Number(selects[0].value);
             const artikelId = Number(selects[1].value);
-            const menge = Number(inputs[0].value);
-            return { lieferantId, artikelId, menge };
+            const menge = Number(mengeInput?.value || 0);
+            const notiz = String(notizInput?.value || "").trim();
+            return { lieferantId, artikelId, menge, notiz };
           },
         );
 
@@ -225,15 +245,22 @@
 
         if (response.ok) {
           const result = await response.json();
-          const count = Array.isArray(result) ? result.length : 1;
-          message.textContent =
-            count > 1
-              ? `${count} Bestellungen gespeichert.`
-              : "Bestellung gespeichert.";
-          form.reset();
-          bestellDatumInput.valueAsDate = new Date();
-          positionenContainer.innerHTML = "";
-          addPositionRow();
+          const createdList = Array.isArray(result) ? result : [result];
+          const selected = createdList
+            .filter((item) => item && item.id)
+            .sort((a, b) => {
+              const nrA = Number(a.bestellnummer ?? a.id ?? 0);
+              const nrB = Number(b.bestellnummer ?? b.id ?? 0);
+              return nrB - nrA;
+            })[0];
+
+          if (selected?.id) {
+            window.location.href = `/bestellungen?open=${encodeURIComponent(selected.id)}`;
+            return;
+          }
+
+          // Fallback, falls API unerwartet kein ID-Objekt liefert.
+          message.textContent = "Bestellung gespeichert.";
           return;
         }
 

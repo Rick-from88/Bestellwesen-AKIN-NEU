@@ -48,6 +48,13 @@
           <div class="list" id="artikelList"></div>
         </div>
       </section>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2>Bestellverlauf</h2>
+        </div>
+        <div class="list" id="bestellverlaufList"></div>
+      </section>
     </div>
 
     <nav class="navbar">
@@ -63,9 +70,12 @@
       const lieferantMeta = document.getElementById("lieferantMeta");
       const kontaktList = document.getElementById("kontaktList");
       const artikelList = document.getElementById("artikelList");
+      const bestellverlaufList = document.getElementById("bestellverlaufList");
       const emailForm = document.getElementById("emailForm");
       const emailMessage = document.getElementById("emailMessage");
       const mailtoLink = document.getElementById("mailtoLink");
+      let imageModal = null;
+      let imageModalImage = null;
 
       const lieferantId = Number(window.location.pathname.split("/").pop());
 
@@ -94,24 +104,105 @@
         }
 
         artikel.forEach((item) => {
-          const row = document.createElement("div");
+          const row = document.createElement("a");
           row.className = "list__row";
+          row.href = `/artikel?open=${encodeURIComponent(item.id)}`;
+          const left = document.createElement("div");
+          left.style.display = "flex";
+          left.style.alignItems = "center";
+          left.style.gap = "10px";
+          if (item.fotoUrl) {
+            const thumb = document.createElement("img");
+            thumb.src = item.fotoUrl;
+            thumb.alt = item.name || "Artikelfoto";
+            thumb.style.width = "44px";
+            thumb.style.height = "44px";
+            thumb.style.objectFit = "cover";
+            thumb.style.borderRadius = "8px";
+            thumb.style.cursor = "zoom-in";
+            thumb.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              imageModalImage.src = item.fotoUrl;
+              imageModal.classList.add("is-open");
+              imageModal.setAttribute("aria-hidden", "false");
+            });
+            left.appendChild(thumb);
+          }
+          const textWrap = document.createElement("div");
           const title = document.createElement("div");
           title.className = "list__title";
           title.textContent = item.name;
           const meta = document.createElement("div");
           meta.className = "list__meta";
-          meta.textContent = `Lager: ${item.lagerbestand} | Min: ${item.minBestand}`;
-          row.appendChild(title);
-          row.appendChild(meta);
+          const nummer = item.artikelnummer ? `#${item.artikelnummer} | ` : "";
+          const ve = item.verpackungseinheit ? ` | VE: ${item.verpackungseinheit}` : "";
+          const std = item.standardBestellwert
+            ? ` | Std: ${item.standardBestellwert}`
+            : "";
+          meta.textContent = `${nummer}Preis: ${new Intl.NumberFormat("de-DE", {
+            style: "currency",
+            currency: "EUR",
+          }).format(Number(item.preis || 0))}${ve}${std}`;
+          textWrap.appendChild(title);
+          textWrap.appendChild(meta);
+          left.appendChild(textWrap);
+          row.appendChild(left);
           artikelList.appendChild(row);
         });
       };
 
+      const statusClass = (status) => {
+        if (status === "geliefert") return "pill pill--mint";
+        if (status === "storniert") return "pill pill--rose";
+        if (status === "bestellt") return "pill pill--blue";
+        return "pill pill--amber";
+      };
+
+      const renderBestellverlauf = (bestellungen) => {
+        bestellverlaufList.innerHTML = "";
+        if (!Array.isArray(bestellungen) || !bestellungen.length) {
+          const row = document.createElement("div");
+          row.className = "list__row";
+          row.textContent = "Noch keine Bestellungen für diesen Lieferanten.";
+          bestellverlaufList.appendChild(row);
+          return;
+        }
+
+        bestellungen.forEach((b) => {
+          const row = document.createElement("a");
+          row.className = "list__row";
+          row.href = `/bestellungen?open=${encodeURIComponent(b.id)}`;
+
+          const left = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = `Bestellung #${b.bestellnummer ?? b.id}`;
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          const author = b.createdByName || b.createdByEmail || "-";
+          const dateText = b.bestellDatum
+            ? new Date(b.bestellDatum).toLocaleDateString("de-DE")
+            : "-";
+          meta.textContent = `Erfasst von: ${author} | ${dateText} | Positionen: ${Number(b.positionenAnzahl || 0)}`;
+          left.appendChild(title);
+          left.appendChild(meta);
+
+          const right = document.createElement("span");
+          right.className = statusClass(String(b.status || "offen"));
+          right.textContent = String(b.status || "offen").toUpperCase();
+
+          row.appendChild(left);
+          row.appendChild(right);
+          bestellverlaufList.appendChild(row);
+        });
+      };
+
       const loadLieferant = async () => {
-        const [lieferantRes, artikelRes] = await Promise.all([
+        const [lieferantRes, artikelRes, bestellungenRes] = await Promise.all([
           fetch(`/api/lieferanten/${lieferantId}`),
           fetch(`/api/lieferanten/${lieferantId}/artikel`),
+          fetch(`/api/lieferanten/${lieferantId}/bestellungen`),
         ]);
 
         if (!lieferantRes.ok) {
@@ -122,6 +213,7 @@
 
         const lieferant = await lieferantRes.json();
         const artikel = await artikelRes.json();
+        const bestellungen = await bestellungenRes.json();
 
         lieferantName.textContent = lieferant.name;
         lieferantMeta.textContent = "";
@@ -144,6 +236,7 @@
         
         kontaktList.appendChild(formatValue("Anschrift", anschrift));
         renderArtikel(artikel);
+        renderBestellverlauf(bestellungen);
 
         if (lieferant.email) {
           mailtoLink.dataset.email = lieferant.email;
@@ -186,6 +279,20 @@
       });
 
       if (Number.isFinite(lieferantId)) {
+        imageModal = document.createElement("div");
+        imageModal.className = "modal";
+        imageModal.setAttribute("aria-hidden", "true");
+        imageModal.innerHTML = `<div class="modal__backdrop"></div><div class="modal__content" role="dialog" aria-modal="true"><div class="modal__header"><h2>Artikelfoto</h2><button class="btn btn--link" type="button" id="imageModalClose">Schliessen</button></div><img id="imageModalImage" alt="Artikelfoto Grossansicht" style="max-width:100%;width:100%;height:auto;border-radius:12px;" /></div>`;
+        document.body.appendChild(imageModal);
+        imageModalImage = imageModal.querySelector("#imageModalImage");
+        imageModal.querySelector("#imageModalClose").addEventListener("click", () => {
+          imageModal.classList.remove("is-open");
+          imageModal.setAttribute("aria-hidden", "true");
+        });
+        imageModal.querySelector(".modal__backdrop").addEventListener("click", () => {
+          imageModal.classList.remove("is-open");
+          imageModal.setAttribute("aria-hidden", "true");
+        });
         loadLieferant();
       } else {
         lieferantName.textContent = "Ungueltige Lieferanten-ID";

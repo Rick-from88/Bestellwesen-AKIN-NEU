@@ -2,6 +2,7 @@ export interface Bestellung {
   id: number;
   bestellnummer?: number;
   createdByUid?: string;
+  createdByName?: string;
   createdByEmail?: string;
   status: "offen" | "bestellt" | "geliefert" | "storniert";
   bestellDatum: Date;
@@ -12,6 +13,7 @@ export interface BestellungPosition {
   artikelId: number;
   lieferantId: number;
   menge: number;
+  notiz?: string;
 }
 
 export interface Artikel {
@@ -22,9 +24,9 @@ export interface Artikel {
   artikelnummer?: string;
   einheit?: string;
   verpackungseinheit?: string;
+  standardBestellwert?: number;
+  fotoUrl?: string;
   preis: number;
-  lagerbestand: number;
-  minBestand: number;
 }
 
 export interface Lieferant {

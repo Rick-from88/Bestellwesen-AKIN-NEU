@@ -15,6 +15,9 @@
         </p>
         <div class="hero__actions">
           <a class="btn btn--primary" href="/bestellung-neu">Neue Bestellung</a>
+          <button class="btn btn--primary" id="bestellungenBulkSend">
+            Offene Sammelbestellung ausfuehren
+          </button>
           <button class="btn btn--ghost" id="bestellungenRefresh">
             Aktualisieren
           </button>
@@ -35,6 +38,9 @@
               type="search"
               placeholder="Suchen (Bestellnr., Artikel, Lieferant ...)"
             />
+            <select id="bestellungenErfasserFilter">
+              <option value="">Erfasser: alle</option>
+            </select>
             <select id="bestellungenStatusFilter">
               <option value="">Status: alle</option>
               <option value="offen">offen</option>
@@ -129,6 +135,38 @@
       </div>
     </div>
 
+    <div class="modal" id="sammelModal" aria-hidden="true">
+      <div class="modal__backdrop"></div>
+      <div class="modal__content" role="dialog" aria-modal="true" style="max-width: 760px">
+        <div class="modal__header">
+          <h2>Sammelbestellung Auswahl</h2>
+          <button class="btn btn--link" type="button" id="sammelClose">
+            Schliessen
+          </button>
+        </div>
+        <div class="form" style="gap: 10px">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+            <button class="btn btn--ghost btn--small" type="button" id="sammelSelectAll">
+              Alle waehlen
+            </button>
+            <button class="btn btn--ghost btn--small" type="button" id="sammelSelectNone">
+              Alle abwaehlen
+            </button>
+            <div id="sammelSelectionInfo" style="color: var(--ink-soft)"></div>
+          </div>
+          <div id="sammelGroupsList" class="list" style="max-height: 380px; overflow-y: auto"></div>
+          <div class="form__actions">
+            <button class="btn btn--primary" type="button" id="sammelConfirm">
+              Ausgewaehlte senden
+            </button>
+            <button class="btn btn--ghost" type="button" id="sammelCancel">
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <nav class="navbar">
       <a class="navbar__item" href="/uebersicht">Dashboard</a>
       <a class="navbar__item is-active" href="/bestellungen">Bestellungen</a>
@@ -143,7 +181,13 @@
       const bestellungenRefresh = document.getElementById(
         "bestellungenRefresh",
       );
+      const bestellungenBulkSend = document.getElementById(
+        "bestellungenBulkSend",
+      );
       const bestellungenSearch = document.getElementById("bestellungenSearch");
+      const bestellungenErfasserFilter = document.getElementById(
+        "bestellungenErfasserFilter",
+      );
       const bestellungenStatusFilter = document.getElementById(
         "bestellungenStatusFilter",
       );
@@ -160,6 +204,14 @@
       const editMessage = document.getElementById("editMessage");
       const modalTitle = document.getElementById("modalTitle");
       const modalSendBtn = document.getElementById("modalSendBtn");
+      const sammelModal = document.getElementById("sammelModal");
+      const sammelGroupsList = document.getElementById("sammelGroupsList");
+      const sammelSelectionInfo = document.getElementById("sammelSelectionInfo");
+      const sammelConfirm = document.getElementById("sammelConfirm");
+      const sammelCancel = document.getElementById("sammelCancel");
+      const sammelClose = document.getElementById("sammelClose");
+      const sammelSelectAll = document.getElementById("sammelSelectAll");
+      const sammelSelectNone = document.getElementById("sammelSelectNone");
 
       let bestellungenData = [];
       let artikelData = [];
@@ -167,6 +219,33 @@
       let artikelMapGlobal = {};
       let lieferantMapGlobal = {};
       let currentBestellungId = null;
+      let sammelCurrentResolver = null;
+      let imageModal = null;
+      let imageModalImage = null;
+      const urlParams = new URLSearchParams(window.location.search);
+      let pendingOpenBestellungId = Number(urlParams.get("open") || "");
+
+      const ensureImageModal = () => {
+        if (imageModal) return;
+        imageModal = document.createElement("div");
+        imageModal.className = "modal";
+        imageModal.setAttribute("aria-hidden", "true");
+        imageModal.innerHTML = `<div class="modal__backdrop"></div><div class="modal__content" role="dialog" aria-modal="true"><div class="modal__header"><h2>Artikelfoto</h2><button class="btn btn--link" type="button" id="bestellungenImageModalClose">Schliessen</button></div><img id="bestellungenImageModalImage" alt="Artikelfoto Grossansicht" style="max-width:100%;width:100%;height:auto;border-radius:12px;" /></div>`;
+        document.body.appendChild(imageModal);
+        imageModalImage = imageModal.querySelector("#bestellungenImageModalImage");
+        imageModal
+          .querySelector("#bestellungenImageModalClose")
+          .addEventListener("click", () => {
+            imageModal.classList.remove("is-open");
+            imageModal.setAttribute("aria-hidden", "true");
+          });
+        imageModal
+          .querySelector(".modal__backdrop")
+          .addEventListener("click", () => {
+            imageModal.classList.remove("is-open");
+            imageModal.setAttribute("aria-hidden", "true");
+          });
+      };
 
       const statusClass = (status) => {
         if (status === "geliefert") {
@@ -198,6 +277,29 @@
           return "-";
         }
         return date.toLocaleDateString("de-DE");
+      };
+
+      const displayNameFromOrder = (bestellung) => {
+        const explicitName = String(bestellung?.createdByName || "").trim();
+        if (explicitName) return explicitName;
+
+        const email = String(bestellung?.createdByEmail || "").trim();
+        if (email && email.includes("@")) {
+          const local = email.split("@")[0] || "";
+          const firstToken = local
+            .split(/[.\-_+]/)
+            .map((s) => s.trim())
+            .filter(Boolean)[0];
+          if (firstToken) {
+            return (
+              firstToken.charAt(0).toUpperCase() +
+              firstToken.slice(1).toLowerCase()
+            );
+          }
+        }
+
+        const uid = String(bestellung?.createdByUid || "").trim();
+        return uid || "-";
       };
 
       const toInputDate = (value) => {
@@ -232,6 +334,10 @@
       };
 
       const artikelCache = {};
+      const getArtikelByLieferantAndId = (lieferantId, artikelId) => {
+        const items = artikelCache[lieferantId] || [];
+        return items.find((i) => Number(i.id) === Number(artikelId));
+      };
       const populateArtikelForLieferant = async (
         artikelSelect,
         lieferantId,
@@ -314,6 +420,22 @@
         if (position.menge) {
           mengeInput.value = position.menge;
         }
+        artikelSelect.addEventListener("change", () => {
+          const lid = Number(lieferantSelect.value);
+          const aid = Number(artikelSelect.value);
+          const artikelInfo = getArtikelByLieferantAndId(lid, aid);
+          if (artikelInfo?.standardBestellwert && !Number(mengeInput.value)) {
+            mengeInput.value = String(artikelInfo.standardBestellwert);
+          }
+        });
+
+        const notizInput = document.createElement("input");
+        notizInput.type = "text";
+        notizInput.placeholder = "Notiz (optional)";
+        notizInput.setAttribute("aria-label", "Notiz");
+        if (position.notiz) {
+          notizInput.value = position.notiz;
+        }
 
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
@@ -329,6 +451,7 @@
         row.appendChild(lieferantSelect);
         row.appendChild(artikelSelect);
         row.appendChild(mengeInput);
+        row.appendChild(notizInput);
         row.appendChild(removeBtn);
         return row;
       };
@@ -398,6 +521,122 @@
         currentBestellungId = null;
       };
 
+      const openSammelModal = () => {
+        if (!sammelModal) return;
+        sammelModal.classList.add("is-open");
+        sammelModal.setAttribute("aria-hidden", "false");
+      };
+
+      const closeSammelModal = () => {
+        if (!sammelModal) return;
+        sammelModal.classList.remove("is-open");
+        sammelModal.setAttribute("aria-hidden", "true");
+        if (sammelGroupsList) sammelGroupsList.innerHTML = "";
+        if (sammelSelectionInfo) sammelSelectionInfo.textContent = "";
+      };
+
+      const updateSammelSelectionInfo = () => {
+        if (!sammelSelectionInfo || !sammelGroupsList) return;
+        const all = Array.from(
+          sammelGroupsList.querySelectorAll('input[type="checkbox"][data-order-id]'),
+        );
+        const selected = all.filter((el) => el.checked).length;
+        sammelSelectionInfo.textContent = `${selected} von ${all.length} Bestellungen ausgewaehlt`;
+      };
+
+      const resolveSammelSelection = (value) => {
+        if (typeof sammelCurrentResolver === "function") {
+          sammelCurrentResolver(value);
+        }
+        sammelCurrentResolver = null;
+        closeSammelModal();
+      };
+
+      const openSammelSelectionDialog = (preview) =>
+        new Promise((resolve) => {
+          if (!sammelModal || !sammelGroupsList || !sammelConfirm) {
+            resolve(null);
+            return;
+          }
+          sammelCurrentResolver = resolve;
+          sammelGroupsList.innerHTML = "";
+          const groups = Array.isArray(preview?.groups) ? preview.groups : [];
+
+          groups.forEach((g) => {
+            const box = document.createElement("div");
+            box.className = "list__row";
+            box.style.display = "grid";
+            box.style.gap = "8px";
+            const header = document.createElement("div");
+            header.className = "list__title";
+            header.textContent = `${g.lieferantName} (${g.anzahlBestellungen} Bestellungen)`;
+            box.appendChild(header);
+
+            const orderWrap = document.createElement("div");
+            orderWrap.style.display = "grid";
+            orderWrap.style.gap = "6px";
+
+            const orders =
+              Array.isArray(g.orders) && g.orders.length
+                ? g.orders
+                : Array.isArray(g.orderIds)
+                  ? g.orderIds.map((id, idx) => ({
+                      orderId: Number(id),
+                      bestellnummer: Array.isArray(g.bestellnummern)
+                        ? String(g.bestellnummern[idx] || id)
+                        : String(id),
+                      anzahlPositionen: 0,
+                      summe: null,
+                      bestellDatum: null,
+                      createdByName: null,
+                    }))
+                  : [];
+            orders.forEach((o) => {
+              const row = document.createElement("label");
+              row.style.display = "grid";
+              row.style.gap = "8px";
+              row.style.cursor = "pointer";
+              row.style.padding = "8px 10px";
+              row.style.border = "1px solid rgba(0,0,0,0.08)";
+              row.style.borderRadius = "10px";
+              row.style.background = "#fff";
+              row.style.gridTemplateColumns = "20px 1fr";
+              row.style.alignItems = "start";
+              const cb = document.createElement("input");
+              cb.type = "checkbox";
+              cb.checked = true;
+              cb.setAttribute("data-order-id", String(o.orderId));
+              cb.addEventListener("change", updateSammelSelectionInfo);
+              cb.style.marginTop = "2px";
+
+              const info = document.createElement("div");
+              const title = document.createElement("div");
+              title.className = "list__title";
+              title.style.fontSize = "1rem";
+              title.textContent = `#${o.bestellnummer} (${o.anzahlPositionen} Positionen)`;
+              const meta = document.createElement("div");
+              meta.className = "list__meta";
+              const datumTxt = o.bestellDatum ? formatDate(o.bestellDatum) : "-";
+              const erfasserTxt = o.createdByName ? String(o.createdByName) : "-";
+              const sumTxt =
+                typeof o.summe === "number" ? formatCurrency(o.summe) : "-";
+              meta.textContent = `Datum: ${datumTxt} | Erfasst von: ${erfasserTxt} | Summe: ${sumTxt}`;
+              info.appendChild(title);
+              info.appendChild(meta);
+
+              row.appendChild(cb);
+              row.appendChild(info);
+              orderWrap.appendChild(row);
+            });
+
+            box.appendChild(orderWrap);
+            sammelGroupsList.appendChild(box);
+          });
+
+          updateSammelSelectionInfo();
+          openSammelModal();
+        });
+
       const renderBestellungen = (bestellungen, artikelMap, lieferantMap) => {
         bestellungenList.innerHTML = "";
         bestellungenCount.textContent = `${bestellungen.length} Bestellungen`;
@@ -442,8 +681,7 @@
             ? artikelNamen.slice(0, 3).join(", ") +
               (artikelNamen.length > 3 ? ` +${artikelNamen.length - 3}` : "")
             : "-";
-          const createdBy =
-            bestellung.createdByEmail || bestellung.createdByUid || "-";
+          const createdBy = displayNameFromOrder(bestellung);
 
           // Gesamtpreis aller Positionen der Bestellung berechnen
           const totalBestellung = positionen.reduce((sum, pos) => {
@@ -497,14 +735,38 @@
               const artikelInfo = artikelMap[position.artikelId];
               const artikelName =
                 artikelInfo?.name || `Artikel #${position.artikelId}`;
-              posTitle.textContent = artikelName;
+              if (artikelInfo?.fotoUrl) {
+                const thumb = document.createElement("img");
+                thumb.src = artikelInfo.fotoUrl;
+                thumb.alt = artikelName;
+                thumb.style.width = "36px";
+                thumb.style.height = "36px";
+                thumb.style.objectFit = "cover";
+                thumb.style.borderRadius = "8px";
+                thumb.style.marginRight = "8px";
+                thumb.style.verticalAlign = "middle";
+                thumb.style.cursor = "zoom-in";
+                thumb.addEventListener("click", (e) => {
+                  e.stopPropagation();
+                  ensureImageModal();
+                  imageModalImage.src = artikelInfo.fotoUrl;
+                  imageModal.classList.add("is-open");
+                  imageModal.setAttribute("aria-hidden", "false");
+                });
+                posTitle.appendChild(thumb);
+              }
+              posTitle.appendChild(document.createTextNode(artikelName));
 
               const posMeta = document.createElement("div");
               posMeta.className = "list__meta";
               const preis = artikelInfo?.preis ?? 0;
               const menge = Number(position.menge) || 0;
               const gesamtPos = preis * menge;
-              posMeta.innerHTML = `Artikelnummer: ${position.artikelId} | Preis: ${formatCurrency(preis)} | Menge: ${menge} | Gesamt: <span class="position-total">${formatCurrency(gesamtPos)}</span>`;
+              const notiz = String(position.notiz || "").trim();
+              const notizPart = notiz
+                ? ` | <strong>Notiz:</strong> <strong>${notiz}</strong>`
+                : "";
+              posMeta.innerHTML = `Artikelnummer: ${position.artikelId} | Preis: ${formatCurrency(preis)} | Menge: ${menge}${notizPart} | Gesamt: <span class="position-total">${formatCurrency(gesamtPos)}</span>`;
 
               posLeft.appendChild(posTitle);
               posLeft.appendChild(posMeta);
@@ -518,6 +780,18 @@
           // no per-row action buttons here (send moved to modal)
 
           bestellungenList.appendChild(group);
+
+          if (
+            Number.isFinite(pendingOpenBestellungId) &&
+            pendingOpenBestellungId > 0 &&
+            Number(bestellung.id) === pendingOpenBestellungId
+          ) {
+            group.classList.add("is-open");
+            openModal(bestellung);
+            pendingOpenBestellungId = NaN;
+            const cleanUrl = `${window.location.pathname}${window.location.hash || ""}`;
+            window.history.replaceState({}, "", cleanUrl);
+          }
         });
       };
 
@@ -525,6 +799,7 @@
         const artikelMap = artikelMapGlobal;
         const lieferantMap = lieferantMapGlobal;
         const term = (bestellungenSearch?.value || "").toLowerCase().trim();
+        const erfasserFilter = (bestellungenErfasserFilter?.value || "").trim();
         const statusFilter = bestellungenStatusFilter?.value || "";
         const sort = bestellungenSort?.value || "date-desc";
 
@@ -533,6 +808,11 @@
 
         if (statusFilter) {
           list = list.filter((b) => (b.status || "offen") === statusFilter);
+        }
+        if (erfasserFilter) {
+          list = list.filter(
+            (b) => displayNameFromOrder(b).toLowerCase() === erfasserFilter.toLowerCase(),
+          );
         }
 
         if (term) {
@@ -550,9 +830,11 @@
               .map((p) => lieferantMap[p.lieferantId] || "")
               .join(" ")
               .toLowerCase();
-            const createdBy = String(
-              b.createdByEmail || b.createdByUid || "",
-            ).toLowerCase();
+            const notizen = positionen
+              .map((p) => p.notiz || "")
+              .join(" ")
+              .toLowerCase();
+            const createdBy = displayNameFromOrder(b).toLowerCase();
             const haystack =
               nr +
               " " +
@@ -563,6 +845,8 @@
               artikelNamen +
               " " +
               lieferantenNamen +
+              " " +
+              notizen +
               " " +
               createdBy;
             return haystack.includes(term);
@@ -615,7 +899,12 @@
             : lieferantenResponse.value || [];
 
           artikelMapGlobal = artikelData.reduce((acc, item) => {
-            acc[item.id] = { name: item.name, preis: item.preis };
+            acc[item.id] = {
+              name: item.name,
+              preis: item.preis,
+              standardBestellwert: item.standardBestellwert,
+              fotoUrl: item.fotoUrl,
+            };
             return acc;
           }, {});
 
@@ -624,10 +913,113 @@
             return acc;
           }, {});
 
+          if (bestellungenErfasserFilter) {
+            const previous = bestellungenErfasserFilter.value || "";
+            const uniqueErfasser = Array.from(
+              new Set(
+                bestellungenData
+                  .map((b) => displayNameFromOrder(b))
+                  .filter((v) => String(v || "").trim() && v !== "-"),
+              ),
+            ).sort((a, b) => a.localeCompare(b, "de"));
+            bestellungenErfasserFilter.innerHTML =
+              '<option value="">Erfasser: alle</option>';
+            uniqueErfasser.forEach((name) => {
+              const option = document.createElement("option");
+              option.value = name;
+              option.textContent = `Erfasser: ${name}`;
+              if (previous && previous === name) option.selected = true;
+              bestellungenErfasserFilter.appendChild(option);
+            });
+          }
+
           applyBestellungenFilterAndSort();
         } catch (error) {
           console.error("Fehler beim Laden der Bestellungen:", error);
           bestellungenCount.textContent = "Fehler beim Laden";
+        }
+      };
+
+      const runSammelbestellung = async () => {
+        if (!bestellungenBulkSend) return;
+        try {
+          bestellungenBulkSend.disabled = true;
+          bestellungenBulkSend.textContent = "Pruefe offene Bestellungen...";
+          const previewRes = await fetch("/api/bestellungen/sammel/preview");
+          if (!previewRes.ok) {
+            const txt = await previewRes.text();
+            alert(`Sammelvorschau fehlgeschlagen: ${txt}`);
+            return;
+          }
+          const preview = await previewRes.json();
+          const groups = Array.isArray(preview.groups) ? preview.groups : [];
+          if (!groups.length) {
+            alert("Keine offenen Bestellungen fuer Sammelbestellung vorhanden.");
+            return;
+          }
+          const lines = groups
+            .slice(0, 10)
+            .map(
+              (g) =>
+                `- ${g.lieferantName}: ${g.anzahlBestellungen} Bestellungen, ${g.anzahlPositionen} Positionen`,
+            )
+            .join("\n");
+          const more = groups.length > 10 ? `\n... +${groups.length - 10} weitere` : "";
+          const preOk = window.confirm(
+            `Sammelbestellung vorbereiten?\n\nLieferanten: ${preview.totalGroups}\nBestellungen: ${preview.totalOrders}\n\n${lines}${more}\n\nDanach kannst du einzelne Bestellungen auswaehlen.`,
+          );
+          if (!preOk) return;
+
+          const selectedOrderIds = await openSammelSelectionDialog(preview);
+          if (!Array.isArray(selectedOrderIds)) return;
+          if (!selectedOrderIds.length) {
+            alert("Bitte mindestens eine Bestellung auswaehlen.");
+            return;
+          }
+
+          bestellungenBulkSend.textContent = "Sammelbestellung wird gesendet...";
+          const sendRes = await fetch("/api/bestellungen/sammel/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderIds: selectedOrderIds }),
+          });
+          const sendJson = await sendRes.json().catch(() => null);
+          if (!sendRes.ok) {
+            const detail = sendJson?.detail ? `\n${sendJson.detail}` : "";
+            alert(
+              `Sammelbestellung fehlgeschlagen: ${sendJson?.error || sendRes.status}${detail}`,
+            );
+            return;
+          }
+
+          alert(
+            `Sammelbestellung erfolgreich.\nVersendete Lieferanten: ${sendJson?.sentGroups || 0}\nAktualisierte Bestellungen: ${sendJson?.updatedOrders || 0}`,
+          );
+          await loadBestellungen();
+        } catch (e) {
+          console.error(e);
+          alert("Sammelbestellung konnte nicht ausgefuehrt werden.");
+        } finally {
+          if (bestellungenBulkSend) {
+            bestellungenBulkSend.disabled = false;
+            bestellungenBulkSend.textContent =
+              "Offene Sammelbestellung ausfuehren";
+          }
+        }
+      };
+
+      const initRoleBasedActions = async () => {
+        if (!bestellungenBulkSend) return;
+        try {
+          const res = await fetch("/api/auth/me");
+          if (!res.ok) return;
+          const me = await res.json();
+          const role = String(me?.role || "");
+          if (role === "produktion") {
+            bestellungenBulkSend.style.display = "none";
+          }
+        } catch {
+          // ignore
         }
       };
 
@@ -647,11 +1039,13 @@
 
         const positionen = Array.from(editPositionen.children).map((row) => {
           const selects = row.querySelectorAll("select");
-          const inputs = row.querySelectorAll("input");
+          const mengeInput = row.querySelector('input[type="number"]');
+          const notizInput = row.querySelector('input[type="text"]');
           return {
             lieferantId: Number(selects[0].value),
             artikelId: Number(selects[1].value),
-            menge: Number(inputs[0].value),
+            menge: Number(mengeInput?.value || 0),
+            notiz: String(notizInput?.value || "").trim(),
           };
         });
         // if positions are not editable, only change status via status endpoint
@@ -783,12 +1177,19 @@
 
       bestellungenRefresh.addEventListener("click", () => {
         if (bestellungenSearch) bestellungenSearch.value = "";
+        if (bestellungenErfasserFilter) bestellungenErfasserFilter.value = "";
         if (bestellungenStatusFilter) bestellungenStatusFilter.value = "";
         if (bestellungenSort) bestellungenSort.value = "date-desc";
         loadBestellungen();
       });
       if (bestellungenSearch) {
         bestellungenSearch.addEventListener("input", applyBestellungenFilterAndSort);
+      }
+      if (bestellungenErfasserFilter) {
+        bestellungenErfasserFilter.addEventListener(
+          "change",
+          applyBestellungenFilterAndSort,
+        );
       }
       if (bestellungenStatusFilter) {
         bestellungenStatusFilter.addEventListener(
@@ -799,6 +1200,61 @@
       if (bestellungenSort) {
         bestellungenSort.addEventListener("change", applyBestellungenFilterAndSort);
       }
+      if (bestellungenBulkSend) {
+        bestellungenBulkSend.addEventListener("click", runSammelbestellung);
+      }
+      if (sammelCancel) {
+        sammelCancel.addEventListener("click", () => resolveSammelSelection(null));
+      }
+      if (sammelClose) {
+        sammelClose.addEventListener("click", () => resolveSammelSelection(null));
+      }
+      if (sammelModal) {
+        const backdrop = sammelModal.querySelector(".modal__backdrop");
+        if (backdrop) {
+          backdrop.addEventListener("click", () => resolveSammelSelection(null));
+        }
+      }
+      if (sammelSelectAll) {
+        sammelSelectAll.addEventListener("click", () => {
+          if (!sammelGroupsList) return;
+          sammelGroupsList
+            .querySelectorAll('input[type="checkbox"][data-order-id]')
+            .forEach((el) => {
+              el.checked = true;
+            });
+          updateSammelSelectionInfo();
+        });
+      }
+      if (sammelSelectNone) {
+        sammelSelectNone.addEventListener("click", () => {
+          if (!sammelGroupsList) return;
+          sammelGroupsList
+            .querySelectorAll('input[type="checkbox"][data-order-id]')
+            .forEach((el) => {
+              el.checked = false;
+            });
+          updateSammelSelectionInfo();
+        });
+      }
+      if (sammelConfirm) {
+        sammelConfirm.addEventListener("click", () => {
+          if (!sammelGroupsList) {
+            resolveSammelSelection(null);
+            return;
+          }
+          const selected = Array.from(
+            sammelGroupsList.querySelectorAll(
+              'input[type="checkbox"][data-order-id]',
+            ),
+          )
+            .filter((el) => el.checked)
+            .map((el) => Number(el.getAttribute("data-order-id")))
+            .filter((v) => Number.isFinite(v) && v > 0);
+          resolveSammelSelection(selected);
+        });
+      }
+      initRoleBasedActions();
       loadBestellungen();
     </script>
     <script src="/static/profile-widget.js"></script>

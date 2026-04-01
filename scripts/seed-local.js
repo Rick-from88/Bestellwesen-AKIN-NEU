@@ -66,8 +66,6 @@ async function seed() {
         einheit: "Stk",
         verpackungseinheit: "1",
         preis: 12.5,
-        lager: 100,
-        minBest: 5,
       },
       {
         name: "Artikel Beta",
@@ -76,14 +74,12 @@ async function seed() {
         einheit: "Stk",
         verpackungseinheit: "10",
         preis: 7.9,
-        lager: 50,
-        minBest: 2,
       },
     ];
 
     for (const a of articles) {
       await client.query(
-        "insert into artikel (lieferant_id, name, beschreibung, artikelnummer, einheit, verpackungseinheit, preis, lagerbestand, min_bestand) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        "insert into artikel (lieferant_id, name, beschreibung, artikelnummer, einheit, verpackungseinheit, preis) values ($1,$2,$3,$4,$5,$6,$7)",
         [
           supplierIds[0],
           a.name,
@@ -92,8 +88,6 @@ async function seed() {
           a.einheit,
           a.verpackungseinheit,
           a.preis,
-          a.lager,
-          a.minBest,
         ],
       );
     }

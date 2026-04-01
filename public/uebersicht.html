@@ -32,7 +32,7 @@
         <article class="card">
           <div class="card__label">Artikel im Fokus</div>
           <div class="card__value" id="artikelCount">0</div>
-          <div class="card__trend" id="lowStockCount">Noch keine Daten</div>
+          <div class="card__trend" id="artikelTrend">Noch keine Daten</div>
         </article>
       </section>
 
@@ -88,33 +88,25 @@
       <section class="split">
         <div class="panel">
           <div class="panel__header">
-            <h2>Low-Stock Warnungen</h2>
-            <button class="btn btn--link" id="lowStockRefresh">
-              Aktualisieren
+            <h2>Team-Chat</h2>
+          </div>
+          <div
+            class="list"
+            id="chatList"
+            style="max-height: 320px; overflow-y: auto; padding-right: 4px"
+          ></div>
+          <div class="form__row" style="grid-template-columns: 1fr auto; margin-top: 10px">
+            <input id="chatInput" type="text" placeholder="Nachricht schreiben..." />
+            <button class="btn btn--primary" id="chatSendBtn" type="button">
+              Senden
             </button>
           </div>
-          <div class="list" id="lowStockList"></div>
-        </div>
-        <div class="panel">
-          <div class="panel__header">
-            <h2>Schnellzugriff</h2>
-          </div>
-          <div class="list">
-            <a class="list__row" href="/lieferanten">
-              <div>
-                <div class="list__title">Lieferanten verwalten</div>
-                <div class="list__meta">Alle Lieferanten anzeigen</div>
-              </div>
-            </a>
-            <a class="list__row" href="/bestellung-neu">
-              <div>
-                <div class="list__title">Neue Bestellung</div>
-                <div class="list__meta">Bestellung erfassen</div>
-              </div>
-            </a>
+          <div class="list__meta" id="chatStatus" style="margin-top: 8px">
+            &nbsp;
           </div>
         </div>
       </section>
+
     </div>
 
     <nav class="navbar">
@@ -129,9 +121,7 @@
       const lieferantenCount = document.getElementById("lieferantenCount");
       const lieferantenTrend = document.getElementById("lieferantenTrend");
       const artikelCount = document.getElementById("artikelCount");
-      const lowStockCount = document.getElementById("lowStockCount");
-      const lowStockList = document.getElementById("lowStockList");
-      const lowStockRefresh = document.getElementById("lowStockRefresh");
+      const artikelTrend = document.getElementById("artikelTrend");
       const letzteBestellungenList = document.getElementById(
         "letzteBestellungenList",
       );
@@ -140,6 +130,14 @@
       const notesClearBtn = document.getElementById("notesClearBtn");
       const notesStatus = document.getElementById("notesStatus");
       const savedNotesContainer = document.getElementById("savedNotes");
+      const chatList = document.getElementById("chatList");
+      const chatInput = document.getElementById("chatInput");
+      const chatSendBtn = document.getElementById("chatSendBtn");
+      const chatStatus = document.getElementById("chatStatus");
+      let knownChatMessageIds = new Set();
+      let isInitialChatLoad = true;
+      let chatPollHandle = null;
+      let chatLoadInFlight = false;
 
       const statusClass = (status) => {
         if (status === "geliefert") {
@@ -159,6 +157,29 @@
         return date.toLocaleDateString("de-DE");
       };
 
+      const displayNameFromOrder = (bestellung) => {
+        const explicitName = String(bestellung?.createdByName || "").trim();
+        if (explicitName) return explicitName;
+
+        const email = String(bestellung?.createdByEmail || "").trim();
+        if (email && email.includes("@")) {
+          const local = email.split("@")[0] || "";
+          const firstToken = local
+            .split(/[.\-_+]/)
+            .map((s) => s.trim())
+            .filter(Boolean)[0];
+          if (firstToken) {
+            return (
+              firstToken.charAt(0).toUpperCase() +
+              firstToken.slice(1).toLowerCase()
+            );
+          }
+        }
+
+        const uid = String(bestellung?.createdByUid || "").trim();
+        return uid || "-";
+      };
+
       const renderLetzteBestellungen = (
         bestellungen,
         artikelMap,
@@ -175,7 +196,9 @@
 
         bestellungen.forEach((bestellung) => {
           const row = document.createElement("div");
-          row.className = "list__row";
+          row.className = "list__row list__row--clickable";
+          row.setAttribute("role", "button");
+          row.setAttribute("tabindex", "0");
 
           const leftDiv = document.createElement("div");
           const title = document.createElement("div");
@@ -183,22 +206,21 @@
           const erstePosition = Array.isArray(bestellung.positionen)
             ? bestellung.positionen[0]
             : null;
-          const artikelName = erstePosition
-            ? artikelMap[erstePosition.artikelId] ||
-              `Artikel #${erstePosition.artikelId}`
-            : `Bestellung #${bestellung.id}`;
-          title.textContent = artikelName;
-
-          const meta = document.createElement("div");
-          meta.className = "list__meta";
           const lieferantName = erstePosition
             ? lieferantMap[erstePosition.lieferantId] ||
               `Lieferant #${erstePosition.lieferantId}`
             : "";
+          const artikelName = erstePosition
+            ? artikelMap[erstePosition.artikelId] ||
+              `Artikel #${erstePosition.artikelId}`
+            : `Bestellung #${bestellung.id}`;
+          title.textContent = lieferantName || artikelName;
+
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
           const datum = formatDate(bestellung.bestellDatum);
-          meta.textContent = lieferantName
-            ? `${lieferantName} | ${datum}`
-            : datum;
+          const erfasser = displayNameFromOrder(bestellung);
+          meta.textContent = `Erfasst von: ${erfasser} | ${datum}`;
 
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
@@ -209,32 +231,16 @@
 
           row.appendChild(leftDiv);
           row.appendChild(status);
+          row.addEventListener("click", () => {
+            window.location.href = `/bestellungen?open=${encodeURIComponent(bestellung.id)}`;
+          });
+          row.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              window.location.href = `/bestellungen?open=${encodeURIComponent(bestellung.id)}`;
+            }
+          });
           letzteBestellungenList.appendChild(row);
-        });
-      };
-
-      const renderLowStock = (artikel) => {
-        lowStockList.innerHTML = "";
-        if (!artikel.length) {
-          const emptyRow = document.createElement("div");
-          emptyRow.className = "list__row";
-          emptyRow.textContent = "Keine Low-Stock Artikel.";
-          lowStockList.appendChild(emptyRow);
-          return;
-        }
-
-        artikel.forEach((item) => {
-          const row = document.createElement("div");
-          row.className = "list__row";
-          const title = document.createElement("div");
-          title.className = "list__title";
-          title.textContent = item.name;
-          const meta = document.createElement("div");
-          meta.className = "list__meta";
-          meta.textContent = `Lager: ${item.lagerbestand} | Min: ${item.minBestand}`;
-          row.appendChild(title);
-          row.appendChild(meta);
-          lowStockList.appendChild(row);
         });
       };
 
@@ -251,11 +257,11 @@
         const response = await fetch("/api/artikel");
         const artikel = await response.json();
         artikelCount.textContent = artikel.length;
-        const lowStock = artikel.filter(
-          (item) => item.lagerbestand <= item.minBestand,
-        );
-        lowStockCount.textContent = `${lowStock.length} Low-Stock`;
-        renderLowStock(lowStock);
+        if (artikelTrend) {
+          artikelTrend.textContent = artikel.length
+            ? "Artikelstamm vorhanden"
+            : "Noch keine Daten";
+        }
       };
 
       const loadLetzteBestellungen = async () => {
@@ -474,13 +480,137 @@
         }
       };
 
-      lowStockRefresh.addEventListener("click", loadArtikel);
+      const renderChat = (messages) => {
+        if (!chatList) return;
+        const previousScrollTop = chatList.scrollTop;
+        const keepPinnedTop = previousScrollTop < 20;
+        chatList.innerHTML = "";
+        if (!Array.isArray(messages) || !messages.length) {
+          const row = document.createElement("div");
+          row.className = "list__row";
+          row.textContent = "Noch keine Chat-Nachrichten.";
+          chatList.appendChild(row);
+          isInitialChatLoad = false;
+          return;
+        }
+
+        messages.slice(0, 40).forEach((msg) => {
+          const row = document.createElement("div");
+          row.className = "list__row";
+          const msgId = String(
+            msg.id || `${msg.author || ""}-${msg.createdAt || ""}-${msg.text || ""}`,
+          );
+          const isNew = !isInitialChatLoad && !knownChatMessageIds.has(msgId);
+          if (isNew) {
+            row.classList.add("chat-row--new");
+          }
+          const left = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "list__title";
+          title.textContent = msg.author || "Unbekannt";
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          meta.textContent = msg.createdAt
+            ? new Date(msg.createdAt).toLocaleString("de-DE")
+            : "";
+          const text = document.createElement("div");
+          text.className = "list__meta";
+          text.style.marginTop = "4px";
+          text.style.whiteSpace = "pre-wrap";
+          text.style.wordBreak = "break-word";
+          text.textContent = msg.text || "";
+          left.appendChild(title);
+          left.appendChild(meta);
+          left.appendChild(text);
+          row.appendChild(left);
+          chatList.appendChild(row);
+        });
+        messages.forEach((msg) => {
+          const msgId = String(
+            msg.id || `${msg.author || ""}-${msg.createdAt || ""}-${msg.text || ""}`,
+          );
+          knownChatMessageIds.add(msgId);
+        });
+        isInitialChatLoad = false;
+        if (keepPinnedTop) {
+          chatList.scrollTop = 0;
+        } else {
+          chatList.scrollTop = previousScrollTop;
+        }
+      };
+
+      const loadChat = async () => {
+        if (chatLoadInFlight) return;
+        chatLoadInFlight = true;
+        try {
+          const res = await fetch("/api/dashboard/chat");
+          if (!res.ok) return;
+          const data = await res.json();
+          renderChat(data.messages || []);
+        } catch (e) {
+          console.error("Fehler beim Laden des Chats", e);
+        } finally {
+          chatLoadInFlight = false;
+        }
+      };
+
+      const sendChat = async () => {
+        const text = String(chatInput?.value || "").trim();
+        if (!text) return;
+        try {
+          if (chatStatus) chatStatus.textContent = "Sende...";
+          const res = await fetch("/api/dashboard/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (!res.ok) {
+            if (chatStatus) chatStatus.textContent = "Fehler beim Senden";
+            return;
+          }
+          try {
+            const created = await res.json();
+            const msgId = String(
+              created?.id ||
+                `${created?.author || ""}-${created?.createdAt || ""}-${created?.text || ""}`,
+            );
+            knownChatMessageIds.add(msgId);
+          } catch {
+            // ignore parse errors, next reload will reconcile.
+          }
+          if (chatInput) chatInput.value = "";
+          if (chatStatus) chatStatus.textContent = "Gesendet";
+          setTimeout(() => {
+            if (chatStatus) chatStatus.textContent = "";
+          }, 1200);
+          await loadChat();
+        } catch (e) {
+          console.error("Fehler beim Senden", e);
+          if (chatStatus) chatStatus.textContent = "Fehler beim Senden";
+        }
+      };
 
       loadLieferanten();
       loadArtikel();
       loadLetzteBestellungen();
       loadOffeneCount();
       loadDashboardNotes();
+      loadChat();
+      chatPollHandle = window.setInterval(loadChat, 5000);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          loadChat();
+        }
+      });
+      if (chatSendBtn) chatSendBtn.addEventListener("click", sendChat);
+      if (chatInput) {
+        chatInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            sendChat();
+          }
+        });
+      }
     </script>
     <script src="/static/profile-widget.js"></script>
     <script src="/static/mobile-nav.js"></script>

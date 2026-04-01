@@ -18,18 +18,18 @@ BEGIN
 END$$;
 
 -- Articles for Cloud suppliers
-INSERT INTO artikel (lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand)
-SELECT id, 'Schraube M8', 'Edelstahlschraube M8', 0.15, 1500, 200 FROM lieferanten WHERE name = 'Lieferant Cloud A';
-INSERT INTO artikel (lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand)
-SELECT id, 'Muttern M8', 'Sechskantmutter verzinkt', 0.06, 2500, 300 FROM lieferanten WHERE name = 'Lieferant Cloud A';
-INSERT INTO artikel (lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand)
-SELECT id, 'Pulverlack RAL9010 1kg', 'Pulverlack weiss, 1kg', 16.5, 80, 10 FROM lieferanten WHERE name = 'Lieferant Cloud B';
-INSERT INTO artikel (lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand)
-SELECT id, 'Grundierung 400ml', 'Schnelltrocknende Grundierung', 5.9, 220, 20 FROM lieferanten WHERE name = 'Lieferant Cloud B';
-INSERT INTO artikel (lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand)
-SELECT id, 'Reiniger 5L', 'Industriereiniger 5 Liter', 24.0, 40, 5 FROM lieferanten WHERE name = 'Lieferant Cloud C';
-INSERT INTO artikel (lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand)
-SELECT id, 'Klebeband 75mm', 'Hitzebeständiges Klebeband 75mm', 4.5, 180, 15 FROM lieferanten WHERE name = 'Lieferant Cloud C';
+INSERT INTO artikel (lieferant_id, name, beschreibung, preis)
+SELECT id, 'Schraube M8', 'Edelstahlschraube M8', 0.15 FROM lieferanten WHERE name = 'Lieferant Cloud A';
+INSERT INTO artikel (lieferant_id, name, beschreibung, preis)
+SELECT id, 'Muttern M8', 'Sechskantmutter verzinkt', 0.06 FROM lieferanten WHERE name = 'Lieferant Cloud A';
+INSERT INTO artikel (lieferant_id, name, beschreibung, preis)
+SELECT id, 'Pulverlack RAL9010 1kg', 'Pulverlack weiss, 1kg', 16.5 FROM lieferanten WHERE name = 'Lieferant Cloud B';
+INSERT INTO artikel (lieferant_id, name, beschreibung, preis)
+SELECT id, 'Grundierung 400ml', 'Schnelltrocknende Grundierung', 5.9 FROM lieferanten WHERE name = 'Lieferant Cloud B';
+INSERT INTO artikel (lieferant_id, name, beschreibung, preis)
+SELECT id, 'Reiniger 5L', 'Industriereiniger 5 Liter', 24.0 FROM lieferanten WHERE name = 'Lieferant Cloud C';
+INSERT INTO artikel (lieferant_id, name, beschreibung, preis)
+SELECT id, 'Klebeband 75mm', 'Hitzebeständiges Klebeband 75mm', 4.5 FROM lieferanten WHERE name = 'Lieferant Cloud C';
 
 -- Settings upsert
 INSERT INTO settings(key, value) VALUES ('currency', 'EUR') ON CONFLICT (key) DO UPDATE SET value = excluded.value;

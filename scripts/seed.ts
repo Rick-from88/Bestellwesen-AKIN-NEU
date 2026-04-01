@@ -36,31 +36,31 @@ async function seed() {
 
     // Artikel
     await client.query(
-      `INSERT INTO artikel (id, lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand) VALUES
-      ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO artikel (id, lieferant_id, name, beschreibung, preis) VALUES
+      ($1,$2,$3,$4,$5)
       ON CONFLICT (id) DO NOTHING`,
-      [1, 1, 'Bürostuhl Comfort', 'Ergonomischer Bürostuhl mit Höhenverstellung', 149.9, 25, 5]
+      [1, 1, 'Bürostuhl Comfort', 'Ergonomischer Bürostuhl mit Höhenverstellung', 149.9]
     );
 
     await client.query(
-      `INSERT INTO artikel (id, lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand) VALUES
-      ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO artikel (id, lieferant_id, name, beschreibung, preis) VALUES
+      ($1,$2,$3,$4,$5)
       ON CONFLICT (id) DO NOTHING`,
-      [2, 2, 'Schreibtisch Classic', 'Robuster Schreibtisch 160x80 cm, Eichenoptik', 249.0, 10, 2]
+      [2, 2, 'Schreibtisch Classic', 'Robuster Schreibtisch 160x80 cm, Eichenoptik', 249.0]
     );
 
     await client.query(
-      `INSERT INTO artikel (id, lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand) VALUES
-      ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO artikel (id, lieferant_id, name, beschreibung, preis) VALUES
+      ($1,$2,$3,$4,$5)
       ON CONFLICT (id) DO NOTHING`,
-      [3, 3, 'Tintenpatrone Schwarz', 'Original Tintenpatrone, 50ml', 19.5, 200, 20]
+      [3, 3, 'Tintenpatrone Schwarz', 'Original Tintenpatrone, 50ml', 19.5]
     );
 
     await client.query(
-      `INSERT INTO artikel (id, lieferant_id, name, beschreibung, preis, lagerbestand, min_bestand) VALUES
-      ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO artikel (id, lieferant_id, name, beschreibung, preis) VALUES
+      ($1,$2,$3,$4,$5)
       ON CONFLICT (id) DO NOTHING`,
-      [4, 4, 'Konferenzlampe LED', 'Dimmbar, 3000–6500K, energiesparend', 89.95, 15, 3]
+      [4, 4, 'Konferenzlampe LED', 'Dimmbar, 3000–6500K, energiesparend', 89.95]
     );
 
     // Bestellungen (bestellungen + bestellpositionen)

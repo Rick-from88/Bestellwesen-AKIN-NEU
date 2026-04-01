@@ -51,7 +51,7 @@
             </div>
           </a>
 
-          <a class="card" href="#" role="button">
+          <a class="card" href="#" role="button" id="mailCard">
             <div style="display: flex; align-items: center; gap: 12px">
               <svg
                 width="40"
@@ -85,7 +85,7 @@
             </div>
           </a>
 
-          <a class="card" href="#" role="button">
+          <a class="card" href="#" role="button" id="orderNumberCard">
             <div style="display: flex; align-items: center; gap: 12px">
               <svg
                 width="40"
@@ -117,11 +117,6 @@
                 <div class="card__label">Bestellnummer</div>
                 <div class="card__value">
                   Fortlaufende Nummern konfigurieren
-                </div>
-                <div style="margin-top: 8px">
-                  <button id="configureNumberBtn" class="btn btn--small">
-                    Konfigurieren
-                  </button>
                 </div>
               </div>
             </div>
@@ -409,117 +404,53 @@
           style="margin-top: 18px; display: none"
         >
           <div class="panel__header">
-            <h2>Daten Import / Export</h2>
+            <h2>Daten Backup / Import</h2>
           </div>
-          <div style="padding: 16px">
-            <div
-              style="
-                display: flex;
-                gap: 12px;
-                align-items: center;
-                margin-bottom: 8px;
-              "
-            >
-              <div
-                style="width: 160px; font-weight: 700; color: var(--ink-soft)"
-              >
-                Lieferanten
+          <div class="settings-backup-wrap">
+            <div class="settings-backup-box">
+              <div class="settings-backup-title">Vollständiges Backup</div>
+              <div class="settings-backup-subtitle">
+                Sichert und importiert den kompletten Stand (Lieferanten, Artikel,
+                Bestellungen, Einstellungen) mit Deduplizierung.
               </div>
-              <button id="exportLieferanten" class="btn">Export JSON</button>
-              <button id="exportLieferantenCsv" class="btn">Export CSV</button>
-              <input
-                id="importLieferantenFile"
-                type="file"
-                accept="application/json"
-              />
-              <button id="importLieferanten" class="btn btn--secondary">
-                Import
-              </button>
+              <div class="settings-backup-actions">
+                <button id="oneClickBackup" class="btn btn--primary">
+                  One-Click Backup (Download)
+                </button>
+                <input
+                  id="oneClickRestoreFile"
+                  type="file"
+                  accept="application/json"
+                />
+                <button id="oneClickRestore" class="btn btn--secondary">
+                  One-Click Import (Alles)
+                </button>
+              </div>
+              <div id="backupMessage" class="settings-backup-message"></div>
             </div>
 
-            <div
-              style="
-                display: flex;
-                gap: 12px;
-                align-items: center;
-                margin-bottom: 8px;
-              "
-            >
-              <div
-                style="width: 160px; font-weight: 700; color: var(--ink-soft)"
-              >
-                Artikel
+            <div class="settings-backup-box">
+              <div class="settings-backup-title">Katalog Import</div>
+              <div class="settings-backup-subtitle">
+                Importiert Lieferanten und Artikel aus JSON oder CSV.
               </div>
-              <button id="exportArtikel" class="btn">Export JSON</button>
-              <button id="exportArtikelCsv" class="btn">Export CSV</button>
-              <input
-                id="importArtikelFile"
-                type="file"
-                accept="application/json"
-              />
-              <button id="importArtikel" class="btn btn--secondary">
-                Import
-              </button>
-            </div>
-
-            <div
-              style="
-                display: flex;
-                gap: 12px;
-                align-items: center;
-                margin-bottom: 8px;
-              "
-            >
-              <div
-                style="width: 160px; font-weight: 700; color: var(--ink-soft)"
-              >
-                Bestellungen
+              <div class="settings-backup-actions">
+                <input
+                  id="catalogImportFile"
+                  type="file"
+                  accept=".json,.csv,application/json,text/csv"
+                />
+                <button id="catalogImportBtn" class="btn btn--secondary">
+                  Lieferanten + Artikel einspielen
+                </button>
               </div>
-              <button id="exportBestellungen" class="btn">Export JSON</button>
-              <button id="exportBestellungenCsv" class="btn">Export CSV</button>
-              <input
-                id="importBestellungenFile"
-                type="file"
-                accept="application/json"
-              />
-              <button id="importBestellungen" class="btn btn--secondary">
-                Import
-              </button>
-            </div>
-
-            <div
-              style="
-                display: flex;
-                gap: 12px;
-                align-items: center;
-                margin-bottom: 8px;
-              "
-            >
-              <div
-                style="width: 160px; font-weight: 700; color: var(--ink-soft)"
-              >
-                Einstellungen
+              <div class="settings-backup-hint">
+                CSV-Zuordnung über Spaltennamen, z.B. <code>Lieferant</code>,
+                <code>Artikelbezeichnung</code>, <code>Artikelnummer</code>,
+                <code>Einheit</code>, <code>VE</code>,
+                <code>Standardbestellwert</code>, <code>Preis</code>,
+                <code>Foto</code>.
               </div>
-              <button id="exportSettings" class="btn">Export JSON</button>
-              <button id="exportSettingsCsv" class="btn">Export CSV</button>
-              <input
-                id="importSettingsFile"
-                type="file"
-                accept="application/json"
-              />
-              <button id="importSettings" class="btn btn--secondary">
-                Import
-              </button>
-            </div>
-
-            <div style="margin-top: 12px">
-              <button id="oneClickBackup" class="btn btn--primary">
-                One-Click Backup (Download)
-              </button>
-              <span
-                id="backupMessage"
-                style="margin-left: 12px; color: var(--ink-soft)"
-              ></span>
             </div>
           </div>
         </section>
@@ -567,12 +498,51 @@
       <a class="navbar__item is-active" href="/einstellungen">Einstellungen</a>
     </nav>
     <script>
-      const configureBtn = document.getElementById("configureNumberBtn");
+      const orderNumberCard = document.getElementById("orderNumberCard");
       const configDiv = document.getElementById("bestellnummerConfig");
       const cancelConfig = document.getElementById("cancelConfig");
       const prefixInput = document.getElementById("prefix");
       const seqDigitsInput = document.getElementById("seqDigits");
       const configMessage = document.getElementById("configMessage");
+      const backupCard = document.getElementById("backupCard");
+      const backupPanel = document.getElementById("backupPanel");
+      const mailDetails = document.getElementById("mailDetails");
+      const mailCard = document.getElementById("mailCard");
+
+      const closeDetailPanels = (exceptId) => {
+        ["backupPanel", "mailDetails", "bestellnummerConfig", "userMgmtPanel"].forEach(
+          (id) => {
+            if (id === exceptId) return;
+            const el = document.getElementById(id);
+            if (el) el.style.display = "none";
+          },
+        );
+      };
+
+      const setActiveCard = (activeEl) => {
+        document.querySelectorAll(".settings-page .card").forEach((c) => {
+          c.classList.remove("is-active-card");
+        });
+        if (activeEl) activeEl.classList.add("is-active-card");
+      };
+
+      const toggleSinglePanel = (panelId, onOpen, activeCardEl) => {
+        const panel = document.getElementById(panelId);
+        if (!panel) return;
+        const isOpen = window.getComputedStyle(panel).display !== "none";
+        if (isOpen) {
+          panel.style.display = "none";
+          setActiveCard(null);
+          return;
+        }
+        closeDetailPanels(panelId);
+        setActiveCard(activeCardEl || null);
+        panel.style.display = "block";
+        if (typeof onOpen === "function") onOpen();
+        try {
+          panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch (e) {}
+      };
 
       let loadSettings = async () => {
         try {
@@ -586,14 +556,24 @@
         }
       };
 
-      configureBtn.addEventListener("click", () => {
-        configDiv.style.display =
-          configDiv.style.display === "none" ? "block" : "none";
-        loadSettings();
-      });
+      const openOrderNumberPanel = () => {
+        toggleSinglePanel(
+          "bestellnummerConfig",
+          () => loadSettings(),
+          orderNumberCard,
+        );
+      };
+
+      if (orderNumberCard) {
+        orderNumberCard.addEventListener("click", (e) => {
+          e.preventDefault();
+          openOrderNumberPanel();
+        });
+      }
 
       cancelConfig.addEventListener("click", () => {
         configDiv.style.display = "none";
+        setActiveCard(null);
       });
 
       document
@@ -659,88 +639,6 @@
         link.remove();
       };
 
-      document
-        .getElementById("exportLieferanten")
-        .addEventListener("click", async () => {
-          try {
-            await downloadJson("/api/export/lieferanten", "lieferanten.json");
-          } catch (e) {
-            alert("Export fehlgeschlagen");
-          }
-        });
-      document
-        .getElementById("exportLieferantenCsv")
-        .addEventListener("click", async () => {
-          try {
-            await downloadJson(
-              "/api/export/lieferanten?format=csv",
-              "lieferanten.csv",
-            );
-          } catch (e) {
-            alert("Export fehlgeschlagen");
-          }
-        });
-      document
-        .getElementById("exportArtikel")
-        .addEventListener("click", async () => {
-          try {
-            await downloadJson("/api/export/artikel", "artikel.json");
-          } catch (e) {
-            alert("Export fehlgeschlagen");
-          }
-        });
-      document
-        .getElementById("exportArtikelCsv")
-        .addEventListener("click", async () => {
-          try {
-            await downloadJson("/api/export/artikel?format=csv", "artikel.csv");
-          } catch (e) {
-            alert("Export fehlgeschlagen");
-          }
-        });
-      document
-        .getElementById("exportBestellungen")
-        .addEventListener("click", async () => {
-          try {
-            await downloadJson("/api/export/bestellungen", "bestellungen.json");
-          } catch (e) {
-            alert("Export fehlgeschlagen");
-          }
-        });
-      document
-        .getElementById("exportBestellungenCsv")
-        .addEventListener("click", async () => {
-          try {
-            await downloadJson(
-              "/api/export/bestellungen?format=csv",
-              "bestellungen.csv",
-            );
-          } catch (e) {
-            alert("Export fehlgeschlagen");
-          }
-        });
-      document
-        .getElementById("exportSettings")
-        .addEventListener("click", async () => {
-          try {
-            await downloadJson("/api/export/settings", "settings.json");
-          } catch (e) {
-            alert("Export fehlgeschlagen");
-          }
-        });
-      document
-        .getElementById("exportSettingsCsv")
-        .addEventListener("click", async () => {
-          try {
-            await downloadJson(
-              "/api/export/settings?format=csv",
-              "settings.csv",
-            );
-          } catch (e) {
-            alert("Export fehlgeschlagen");
-          }
-        });
-
       const readFileJson = (inputEl) =>
         new Promise((resolve, reject) => {
           const f = inputEl.files && inputEl.files[0];
@@ -757,85 +655,178 @@
           r.readAsText(f);
         });
 
-      document
-        .getElementById("importLieferanten")
-        .addEventListener("click", async () => {
-          try {
-            const data = await readFileJson(
-              document.getElementById("importLieferantenFile"),
-            );
-            const res = await fetch("/api/import/lieferanten", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error("import failed");
-            alert("Import erfolgreich");
-          } catch (e) {
-            console.error(e);
-            alert("Import fehlgeschlagen");
+      const readFileText = (inputEl) =>
+        new Promise((resolve, reject) => {
+          const f = inputEl.files && inputEl.files[0];
+          if (!f) return reject("no file");
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result || ""));
+          r.onerror = () => reject(r.error);
+          r.readAsText(f);
+        });
+
+      const normalizeHeader = (v) =>
+        String(v || "")
+          .trim()
+          .toLowerCase()
+          .replace(/ä/g, "ae")
+          .replace(/ö/g, "oe")
+          .replace(/ü/g, "ue")
+          .replace(/ß/g, "ss")
+          .replace(/[^a-z0-9]+/g, "");
+
+      const parseCsvRows = (text) => {
+        const cleaned = String(text || "").replace(/\r/g, "");
+        const lines = cleaned.split("\n").filter((l) => l.trim().length > 0);
+        if (lines.length < 2) return [];
+        const first = lines[0] || "";
+        const delimiters = [",", ";", "\t"];
+        let delimiter = ";";
+        let best = -1;
+        delimiters.forEach((d) => {
+          const c = (first.match(new RegExp(`\\${d}`, "g")) || []).length;
+          if (c > best) {
+            best = c;
+            delimiter = d;
           }
         });
 
-      document
-        .getElementById("importArtikel")
-        .addEventListener("click", async () => {
-          try {
-            const data = await readFileJson(
-              document.getElementById("importArtikelFile"),
-            );
-            const res = await fetch("/api/import/artikel", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error("import failed");
-            alert("Import erfolgreich");
-          } catch (e) {
-            console.error(e);
-            alert("Import fehlgeschlagen");
+        const parseLine = (line) => {
+          const out = [];
+          let cur = "";
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            const next = line[i + 1];
+            if (ch === '"') {
+              if (inQuotes && next === '"') {
+                cur += '"';
+                i++;
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if (ch === delimiter && !inQuotes) {
+              out.push(cur.trim());
+              cur = "";
+            } else {
+              cur += ch;
+            }
           }
+          out.push(cur.trim());
+          return out;
+        };
+
+        const header = parseLine(lines[0]).map(normalizeHeader);
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+          const vals = parseLine(lines[i]);
+          const row = {};
+          header.forEach((h, idx) => {
+            row[h] = vals[idx] ?? "";
+          });
+          rows.push(row);
+        }
+        return rows;
+      };
+
+      const firstValue = (row, aliases) => {
+        for (const key of aliases) {
+          const val = row[normalizeHeader(key)];
+          if (String(val || "").trim()) return String(val).trim();
+        }
+        return "";
+      };
+
+      const toNumberOrNull = (v) => {
+        const txt = String(v || "")
+          .trim()
+          .replace(/\./g, "")
+          .replace(",", ".");
+        const n = Number(txt);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      const buildCatalogPayloadFromFlatRows = (rows) => {
+        const supplierMap = new Map();
+        const artikel = [];
+
+        rows.forEach((row) => {
+          const lieferantName = firstValue(row, [
+            "lieferant",
+            "lieferantenname",
+            "supplier",
+            "vendor",
+            "firma",
+          ]);
+          const artikelbezeichnung = firstValue(row, [
+            "artikelbezeichnung",
+            "artikelname",
+            "artikel",
+            "name",
+          ]);
+          const preis = toNumberOrNull(firstValue(row, ["preis", "price"]));
+          if (!lieferantName || !artikelbezeichnung || preis === null) return;
+
+          if (!supplierMap.has(lieferantName.toLowerCase())) {
+            supplierMap.set(lieferantName.toLowerCase(), {
+              name: lieferantName,
+              kontaktPerson: firstValue(row, ["kontaktperson", "kontakt"]),
+              email: firstValue(row, ["email", "mail"]),
+              telefon: firstValue(row, ["telefon", "phone"]),
+              strasse: firstValue(row, ["strasse", "straße", "street"]),
+              plz: firstValue(row, ["plz", "zip"]),
+              stadt: firstValue(row, ["stadt", "city"]),
+              land: firstValue(row, ["land", "country"]),
+            });
+          }
+
+          artikel.push({
+            lieferantName,
+            name: artikelbezeichnung,
+            beschreibung: firstValue(row, [
+              "artikelbeschreibung",
+              "beschreibung",
+              "desc",
+            ]),
+            artikelnummer: firstValue(row, ["artikelnummer", "sku", "nummer"]),
+            einheit: firstValue(row, ["einheit", "unit"]),
+            verpackungseinheit: firstValue(row, ["ve", "verpackungseinheit"]),
+            standardBestellwert:
+              toNumberOrNull(
+                firstValue(row, ["standardbestellwert", "standardmenge"]),
+              ) ?? undefined,
+            preis,
+            fotoUrl: firstValue(row, ["foto", "fotourl", "image", "bild"]),
+          });
         });
 
-      document
-        .getElementById("importBestellungen")
-        .addEventListener("click", async () => {
-          try {
-            const data = await readFileJson(
-              document.getElementById("importBestellungenFile"),
-            );
-            const res = await fetch("/api/import/bestellungen", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error("import failed");
-            alert("Import erfolgreich");
-          } catch (e) {
-            console.error(e);
-            alert("Import fehlgeschlagen");
-          }
-        });
+        return {
+          lieferanten: Array.from(supplierMap.values()),
+          artikel,
+        };
+      };
 
-      document
-        .getElementById("importSettings")
-        .addEventListener("click", async () => {
-          try {
-            const data = await readFileJson(
-              document.getElementById("importSettingsFile"),
-            );
-            const res = await fetch("/api/import/settings", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(data),
-            });
-            if (!res.ok) throw new Error("import failed");
-            alert("Import erfolgreich");
-          } catch (e) {
-            console.error(e);
-            alert("Import fehlgeschlagen");
+      const readCatalogImportPayload = async (inputEl) => {
+        const f = inputEl.files && inputEl.files[0];
+        if (!f) throw new Error("Bitte Datei auswählen");
+        const name = String(f.name || "").toLowerCase();
+        if (name.endsWith(".json")) {
+          const data = await readFileJson(inputEl);
+          if (Array.isArray(data)) {
+            return buildCatalogPayloadFromFlatRows(data);
           }
-        });
+          if (data && (Array.isArray(data.lieferanten) || Array.isArray(data.artikel))) {
+            return data;
+          }
+          throw new Error("JSON muss lieferanten/artikel enthalten");
+        }
+        if (name.endsWith(".csv")) {
+          const text = await readFileText(inputEl);
+          const rows = parseCsvRows(text);
+          return buildCatalogPayloadFromFlatRows(rows);
+        }
+        throw new Error("Nur JSON oder CSV unterstützt");
+      };
 
       document
         .getElementById("oneClickBackup")
@@ -855,58 +846,71 @@
           }
         });
 
-      // Backup card toggles detailed backup panel (robust visibility fallback)
-      const backupCard = document.getElementById("backupCard");
-      const backupPanel = document.getElementById("backupPanel");
-      const mailPanel = document.getElementById("mailPanel");
-      const mailDetails = document.getElementById("mailDetails");
-      const mailCard = Array.from(document.querySelectorAll(".card")).find(
-        (c) =>
-          c.querySelector(".card__label") &&
-          c.querySelector(".card__label").textContent.trim() ===
-            "Maileinstellungen",
-      );
+      document
+        .getElementById("oneClickRestore")
+        .addEventListener("click", async () => {
+          const msg = document.getElementById("backupMessage");
+          msg.textContent = "Backup wird importiert...";
+          try {
+            const data = await readFileJson(
+              document.getElementById("oneClickRestoreFile"),
+            );
+            const res = await fetch("/api/backup/restore", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(data),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const json = await res.json();
+            msg.textContent = "Import abgeschlossen.";
+            alert(
+              `Backup-Import erfolgreich\nLieferanten: +${json?.lieferantenStats?.created || 0} / ~${json?.lieferantenStats?.updated || 0}\nArtikel: +${json?.artikelStats?.created || 0} / ~${json?.artikelStats?.updated || 0}\nBestellungen: +${json?.bestellungen?.created || 0} (übersprungen ${json?.bestellungen?.skipped || 0})${json?.orderErrors ? `\nBestell-Fehler: ${json.orderErrors}` : ""}${json?.warning ? `\nHinweis: ${json.warning}` : ""}`,
+            );
+          } catch (e) {
+            console.error(e);
+            msg.textContent = "Backup-Import fehlgeschlagen.";
+            alert("Backup-Import fehlgeschlagen");
+          }
+        });
+
+      document
+        .getElementById("catalogImportBtn")
+        .addEventListener("click", async () => {
+          try {
+            const data = await readCatalogImportPayload(
+              document.getElementById("catalogImportFile"),
+            );
+            if (!Array.isArray(data?.artikel) || data.artikel.length === 0) {
+              throw new Error(
+                "Keine importierbaren Artikel gefunden. Prüfe die CSV-Spaltennamen.",
+              );
+            }
+            const res = await fetch("/api/import/catalog", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(data),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const json = await res.json();
+            alert(
+              `Katalog-Import erfolgreich\nLieferanten: neu ${json?.lieferantenStats?.created || 0}, aktualisiert ${json?.lieferantenStats?.updated || 0}, übersprungen ${json?.lieferantenStats?.skipped || 0}\nArtikel: neu ${json?.artikelStats?.created || 0}, aktualisiert ${json?.artikelStats?.updated || 0}, übersprungen ${json?.artikelStats?.skipped || 0}`,
+            );
+          } catch (e) {
+            console.error(e);
+            alert("Katalog-Import fehlgeschlagen");
+          }
+        });
+
       if (backupCard && backupPanel) {
         backupCard.addEventListener("click", () => {
-          const comp = window.getComputedStyle(backupPanel);
-          const isHidden =
-            comp.display === "none" ||
-            comp.visibility === "hidden" ||
-            comp.height === "0px";
-          if (isHidden) {
-            backupPanel.style.display = "block";
-            backupPanel.style.visibility = "visible";
-            backupPanel.style.opacity = "1";
-            backupPanel.style.minHeight = "120px";
-            backupPanel.style.maxHeight = "2000px";
-            backupPanel.style.overflow = "visible";
-            try {
-              backupPanel.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              });
-            } catch (e) {}
-          } else {
-            backupPanel.style.display = "none";
-          }
+          toggleSinglePanel("backupPanel", null, backupCard);
         });
       }
 
       // Maileinstellungen card toggles detailed mail panel
       if (mailCard && mailDetails) {
         mailCard.addEventListener("click", () => {
-          const comp = window.getComputedStyle(mailDetails);
-          const isHidden =
-            comp.display === "none" ||
-            comp.visibility === "hidden" ||
-            comp.height === "0px";
-          if (isHidden) {
-            mailDetails.style.display = "block";
-            mailDetails.scrollIntoView({ behavior: "smooth", block: "start" });
-            loadSettings();
-          } else {
-            mailDetails.style.display = "none";
-          }
+          toggleSinglePanel("mailDetails", () => loadSettings(), mailCard);
         });
       }
 
@@ -1274,9 +1278,7 @@
             userMgmtCard.style.display = "";
             userMgmtCard.addEventListener("click", () => {
               if (!userMgmtPanel) return;
-              const hidden = userMgmtPanel.style.display === "none";
-              userMgmtPanel.style.display = hidden ? "block" : "none";
-              if (hidden) loadUsers();
+              toggleSinglePanel("userMgmtPanel", () => loadUsers(), userMgmtCard);
             });
           } else {
             userMgmtCard.style.display = "none";

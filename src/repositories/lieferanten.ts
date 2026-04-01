@@ -39,12 +39,58 @@ export const listLieferantArtikel = async (
                 a.lieferant_id as "lieferantId",
                 a.name,
                 a.beschreibung,
-                a.preis,
-                a.lagerbestand,
-                a.min_bestand as "minBestand"
+                a.artikelnummer,
+                a.einheit,
+                a.verpackungseinheit,
+                a.standard_bestellwert as "standardBestellwert",
+                a.foto_url as "fotoUrl",
+                a.preis
            from artikel a
           where a.lieferant_id = $1
           order by a.name`,
+    [lieferantId],
+  );
+
+  return result.rows;
+};
+
+export interface LieferantBestellverlaufEintrag {
+  id: number;
+  bestellnummer?: number;
+  status: "offen" | "bestellt" | "geliefert" | "storniert";
+  bestellDatum: string;
+  createdByName?: string;
+  createdByEmail?: string;
+  positionenAnzahl: number;
+}
+
+export const listLieferantBestellungen = async (
+  lieferantId: number,
+): Promise<LieferantBestellverlaufEintrag[]> => {
+  const result = await query(
+    `select b.id,
+                b.bestellnummer as "bestellnummer",
+                b.status,
+                b.bestell_datum as "bestellDatum",
+                b.created_by_name as "createdByName",
+                b.created_by_email as "createdByEmail",
+                coalesce(pos.positionen_anzahl, 1) as "positionenAnzahl"
+           from bestellungen b
+           left join (
+             select p.bestellung_id, count(*)::int as positionen_anzahl
+               from bestellpositionen p
+              group by p.bestellung_id
+           ) pos on pos.bestellung_id = b.id
+          where (
+            b.lieferant_id = $1
+            or exists (
+              select 1
+                from bestellpositionen p2
+               where p2.bestellung_id = b.id
+                 and p2.lieferant_id = $1
+            )
+          )
+          order by b.bestell_datum desc, b.id desc`,
     [lieferantId],
   );
 

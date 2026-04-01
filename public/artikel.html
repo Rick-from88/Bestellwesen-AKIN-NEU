@@ -37,12 +37,10 @@
               <option value="">Lieferant: alle</option>
             </select>
             <select id="artikelSort">
-              <option value="name-asc">Name A–Z</option>
-              <option value="name-desc">Name Z–A</option>
+              <option value="name-asc">Artikelbezeichnung A–Z</option>
+              <option value="name-desc">Artikelbezeichnung Z–A</option>
               <option value="preis-asc">Preis aufsteigend</option>
               <option value="preis-desc">Preis absteigend</option>
-              <option value="lager-asc">Lagerbestand aufsteigend</option>
-              <option value="lager-desc">Lagerbestand absteigend</option>
             </select>
           </div>
         </div>
@@ -69,8 +67,16 @@
             ></select>
           </div>
           <div class="form__row">
-            <label for="artikelNameInput">Name</label>
+            <label for="artikelNameInput">Artikelbezeichnung</label>
             <input id="artikelNameInput" name="name" type="text" required />
+          </div>
+          <div class="form__row">
+            <label for="artikelBeschreibungInput">Artikelbeschreibung</label>
+            <input
+              id="artikelBeschreibungInput"
+              name="beschreibung"
+              type="text"
+            />
           </div>
           <div class="form__row">
             <label for="artikelNummerInput">Artikelnummer</label>
@@ -81,7 +87,7 @@
             <input id="artikelEinheitInput" name="einheit" type="text" />
           </div>
           <div class="form__row">
-            <label for="artikelVerpackungInput">Verpackungseinheit</label>
+            <label for="artikelVerpackungInput">VE</label>
             <input
               id="artikelVerpackungInput"
               name="verpackungseinheit"
@@ -89,11 +95,13 @@
             />
           </div>
           <div class="form__row">
-            <label for="artikelBeschreibungInput">Beschreibung</label>
+            <label for="artikelStandardBestellwertInput">Standardbestellwert</label>
             <input
-              id="artikelBeschreibungInput"
-              name="beschreibung"
-              type="text"
+              id="artikelStandardBestellwertInput"
+              name="standardBestellwert"
+              type="number"
+              min="1"
+              step="1"
             />
           </div>
           <div class="form__row">
@@ -108,23 +116,43 @@
             />
           </div>
           <div class="form__row">
-            <label for="artikelLagerInput">Lagerbestand</label>
-            <input
-              id="artikelLagerInput"
-              name="lagerbestand"
-              type="number"
-              min="0"
-              required
-            />
-          </div>
-          <div class="form__row">
-            <label for="artikelMinInput">Mindestbestand</label>
-            <input
-              id="artikelMinInput"
-              name="minBestand"
-              type="number"
-              min="0"
-            />
+            <label for="artikelFotoCaptureBtn">Foto</label>
+            <div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                <button class="btn btn--small btn--ghost" type="button" id="artikelFotoCaptureBtn">
+                  Foto aufnehmen
+                </button>
+                <button class="btn btn--small btn--ghost" type="button" id="artikelFotoGalleryBtn">
+                  Aus Galerie waehlen
+                </button>
+              </div>
+              <input
+                id="artikelFotoCaptureInput"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style="display: none"
+              />
+              <input
+                id="artikelFotoGalleryInput"
+                type="file"
+                accept="image/*"
+                style="display: none"
+              />
+              <div id="artikelFotoFilename" class="list__meta" style="margin-top: 6px">
+                Kein Foto gewaehlt
+              </div>
+              <div style="margin-top: 8px; display: flex; gap: 8px; align-items: center">
+                <img
+                  id="artikelFotoPreview"
+                  alt="Artikelbild Vorschau"
+                  style="display: none; width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 1px solid rgba(0,0,0,0.08); cursor: zoom-in"
+                />
+                <button class="btn btn--small btn--ghost" type="button" id="artikelFotoClear">
+                  Foto entfernen
+                </button>
+              </div>
+            </div>
           </div>
           <div class="form__actions">
             <button class="btn btn--primary" type="submit">Speichern</button>
@@ -137,6 +165,23 @@
           </div>
           <div id="artikelMessage" class="form__message" role="status"></div>
         </form>
+      </div>
+    </div>
+
+    <div class="modal" id="artikelFotoModal" aria-hidden="true">
+      <div class="modal__backdrop"></div>
+      <div class="modal__content" role="dialog" aria-modal="true">
+        <div class="modal__header">
+          <h2>Artikelfoto</h2>
+          <button class="btn btn--link" type="button" id="artikelFotoModalClose">
+            Schliessen
+          </button>
+        </div>
+        <img
+          id="artikelFotoModalImage"
+          alt="Artikelfoto Grossansicht"
+          style="max-width: 100%; width: 100%; height: auto; border-radius: 12px"
+        />
       </div>
     </div>
 
@@ -169,12 +214,35 @@
       const artikelVerpackungInput = document.getElementById(
         "artikelVerpackungInput",
       );
+      const artikelStandardBestellwertInput = document.getElementById(
+        "artikelStandardBestellwertInput",
+      );
       const artikelBeschreibungInput = document.getElementById(
         "artikelBeschreibungInput",
       );
       const artikelPreisInput = document.getElementById("artikelPreisInput");
-      const artikelLagerInput = document.getElementById("artikelLagerInput");
-      const artikelMinInput = document.getElementById("artikelMinInput");
+      const artikelFotoCaptureBtn = document.getElementById(
+        "artikelFotoCaptureBtn",
+      );
+      const artikelFotoGalleryBtn = document.getElementById(
+        "artikelFotoGalleryBtn",
+      );
+      const artikelFotoCaptureInput = document.getElementById(
+        "artikelFotoCaptureInput",
+      );
+      const artikelFotoGalleryInput = document.getElementById(
+        "artikelFotoGalleryInput",
+      );
+      const artikelFotoFilename = document.getElementById("artikelFotoFilename");
+      const artikelFotoPreview = document.getElementById("artikelFotoPreview");
+      const artikelFotoClear = document.getElementById("artikelFotoClear");
+      const artikelFotoModal = document.getElementById("artikelFotoModal");
+      const artikelFotoModalClose = document.getElementById(
+        "artikelFotoModalClose",
+      );
+      const artikelFotoModalImage = document.getElementById(
+        "artikelFotoModalImage",
+      );
       const artikelCancel = document.getElementById("artikelCancel");
       const artikelDelete = document.getElementById("artikelDelete");
       const artikelSearch = document.getElementById("artikelSearch");
@@ -187,6 +255,79 @@
       let lieferantenData = [];
       let lastOpenedLieferantId = null;
       let _modalOpener = null;
+      let currentFotoUrl = "";
+      const artikelUrlParams = new URLSearchParams(window.location.search);
+      let pendingOpenArtikelId = Number(artikelUrlParams.get("open") || "");
+
+      const setFotoPreview = (url) => {
+        currentFotoUrl = String(url || "").trim();
+        if (!artikelFotoPreview) return;
+        if (!currentFotoUrl) {
+          artikelFotoPreview.style.display = "none";
+          artikelFotoPreview.removeAttribute("src");
+          return;
+        }
+        artikelFotoPreview.src = currentFotoUrl;
+        artikelFotoPreview.style.display = "block";
+      };
+
+      const readFileAsDataUrl = (file) =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
+          reader.readAsDataURL(file);
+        });
+
+      const loadImage = (src) =>
+        new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("Bild konnte nicht geladen werden."));
+          img.src = src;
+        });
+
+      const compressImageDataUrl = async (file) => {
+        const originalDataUrl = await readFileAsDataUrl(file);
+        if (!String(file.type || "").startsWith("image/")) {
+          return originalDataUrl;
+        }
+
+        const img = await loadImage(originalDataUrl);
+        const maxSide = 1600;
+        const scale = Math.min(maxSide / img.width, maxSide / img.height, 1);
+        const targetW = Math.max(1, Math.round(img.width * scale));
+        const targetH = Math.max(1, Math.round(img.height * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return originalDataUrl;
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+
+        // JPEG reduziert Datenmenge stark bei Fotos.
+        return canvas.toDataURL("image/jpeg", 0.82);
+      };
+
+      const readFotoFile = async (file) => {
+        if (!file) return;
+        try {
+          if (artikelFotoFilename) {
+            artikelFotoFilename.textContent = "Bild wird optimiert...";
+          }
+          const optimizedDataUrl = await compressImageDataUrl(file);
+          setFotoPreview(optimizedDataUrl);
+          if (artikelFotoFilename) {
+            artikelFotoFilename.textContent = file.name || "Foto ausgewaehlt";
+          }
+        } catch (e) {
+          console.error(e);
+          if (artikelFotoFilename) {
+            artikelFotoFilename.textContent = "Fehler beim Verarbeiten des Bildes";
+          }
+        }
+      };
 
       const refreshLieferantSelect = (selectedId) => {
         artikelLieferantInput.innerHTML = "";
@@ -213,10 +354,18 @@
         artikelNummerInput.value = artikel?.artikelnummer || "";
         artikelEinheitInput.value = artikel?.einheit || "";
         artikelVerpackungInput.value = artikel?.verpackungseinheit || "";
+        artikelStandardBestellwertInput.value =
+          artikel?.standardBestellwert ?? "";
         artikelBeschreibungInput.value = artikel?.beschreibung || "";
         artikelPreisInput.value = artikel?.preis ?? "";
-        artikelLagerInput.value = artikel?.lagerbestand ?? "";
-        artikelMinInput.value = artikel?.minBestand ?? "";
+        if (artikelFotoCaptureInput) artikelFotoCaptureInput.value = "";
+        if (artikelFotoGalleryInput) artikelFotoGalleryInput.value = "";
+        setFotoPreview(artikel?.fotoUrl || "");
+        if (artikelFotoFilename) {
+          artikelFotoFilename.textContent = artikel?.fotoUrl
+            ? "Vorhandenes Foto"
+            : "Kein Foto gewaehlt";
+        }
         artikelModalTitle.textContent = artikel
           ? "Artikel bearbeiten"
           : "Artikel hinzufuegen";
@@ -354,6 +503,27 @@
               });
 
               const itemLeft = document.createElement("div");
+              itemLeft.style.display = "flex";
+              itemLeft.style.alignItems = "center";
+              itemLeft.style.gap = "10px";
+              if (artikel.fotoUrl) {
+                const img = document.createElement("img");
+                img.src = artikel.fotoUrl;
+                img.alt = artikel.name || "Artikelfoto";
+                img.style.width = "42px";
+                img.style.height = "42px";
+                img.style.borderRadius = "8px";
+                img.style.objectFit = "cover";
+                img.style.cursor = "zoom-in";
+                img.addEventListener("click", (e) => {
+                  e.stopPropagation();
+                  artikelFotoModalImage.src = artikel.fotoUrl;
+                  artikelFotoModal.classList.add("is-open");
+                  artikelFotoModal.setAttribute("aria-hidden", "false");
+                });
+                itemLeft.appendChild(img);
+              }
+              const itemText = document.createElement("div");
               const itemTitle = document.createElement("div");
               itemTitle.className = "list__title";
               itemTitle.textContent = artikel.name;
@@ -367,21 +537,32 @@
               const verpack = artikel.verpackungseinheit
                 ? ` | VE: ${artikel.verpackungseinheit}`
                 : "";
-              itemMeta.textContent = `${nummer} Preis: ${formatCurrency(artikel.preis)} | Lager: ${artikel.lagerbestand}${unit}${verpack}`;
+              const standardBestellwert = artikel.standardBestellwert
+                ? ` | Std: ${artikel.standardBestellwert}`
+                : "";
+              itemMeta.textContent = `${nummer} Preis: ${formatCurrency(artikel.preis)}${unit}${verpack}${standardBestellwert}`;
 
-              itemLeft.appendChild(itemTitle);
-              itemLeft.appendChild(itemMeta);
-
-              const itemRight = document.createElement("div");
-              itemRight.style.textAlign = "right";
-              const minMeta = document.createElement("div");
-              minMeta.className = "list__meta";
-              minMeta.textContent = `Min: ${artikel.minBestand}`;
-              itemRight.appendChild(minMeta);
+              itemText.appendChild(itemTitle);
+              itemText.appendChild(itemMeta);
+              itemLeft.appendChild(itemText);
 
               row.appendChild(itemLeft);
-              row.appendChild(itemRight);
               itemsContainer.appendChild(row);
+
+              if (
+                Number.isFinite(pendingOpenArtikelId) &&
+                pendingOpenArtikelId > 0 &&
+                Number(artikel.id) === pendingOpenArtikelId
+              ) {
+                group.classList.add("is-open");
+                openArtikelModal({
+                  ...artikel,
+                  lieferantId: artikel.lieferantId ?? lieferant.id,
+                });
+                pendingOpenArtikelId = NaN;
+                const cleanUrl = `${window.location.pathname}${window.location.hash || ""}`;
+                window.history.replaceState({}, "", cleanUrl);
+              }
             });
           }
 
@@ -427,8 +608,6 @@
             const nameB = (b.name || "").toLowerCase();
             const preisA = Number(a.preis || 0);
             const preisB = Number(b.preis || 0);
-            const lagerA = Number(a.lagerbestand || 0);
-            const lagerB = Number(b.lagerbestand || 0);
             switch (sort) {
               case "name-desc":
                 return nameB.localeCompare(nameA);
@@ -436,10 +615,6 @@
                 return preisA - preisB;
               case "preis-desc":
                 return preisB - preisA;
-              case "lager-asc":
-                return lagerA - lagerB;
-              case "lager-desc":
-                return lagerB - lagerA;
               default:
                 return nameA.localeCompare(nameB);
             }
@@ -516,20 +691,15 @@
           artikelnummer: artikelNummerInput.value.trim() || undefined,
           einheit: artikelEinheitInput.value.trim() || undefined,
           verpackungseinheit: artikelVerpackungInput.value.trim() || undefined,
+          standardBestellwert: Number(artikelStandardBestellwertInput.value || 0) || undefined,
+          fotoUrl: currentFotoUrl || undefined,
           beschreibung: artikelBeschreibungInput.value.trim(),
           preis: Number(artikelPreisInput.value),
-          lagerbestand: Number(artikelLagerInput.value),
-          minBestand: Number(artikelMinInput.value || 0),
         };
 
-        if (
-          !payload.lieferantId ||
-          !payload.name ||
-          !Number.isFinite(payload.preis) ||
-          !Number.isFinite(payload.lagerbestand)
-        ) {
+        if (!payload.lieferantId || !payload.name || !Number.isFinite(payload.preis)) {
           artikelMessage.textContent =
-            "Lieferant, Name, Preis und Lagerbestand sind erforderlich.";
+            "Lieferant, Artikelbezeichnung und Preis sind erforderlich.";
           return;
         }
 
@@ -590,6 +760,56 @@
         }
       });
       artikelModalClose.addEventListener("click", closeArtikelModal);
+      if (artikelFotoCaptureBtn && artikelFotoCaptureInput) {
+        artikelFotoCaptureBtn.addEventListener("click", () => {
+          artikelFotoCaptureInput.click();
+        });
+      }
+      if (artikelFotoGalleryBtn && artikelFotoGalleryInput) {
+        artikelFotoGalleryBtn.addEventListener("click", () => {
+          artikelFotoGalleryInput.click();
+        });
+      }
+      if (artikelFotoCaptureInput) {
+        artikelFotoCaptureInput.addEventListener("change", (event) => {
+          const file = event.target.files?.[0];
+          readFotoFile(file);
+        });
+      }
+      if (artikelFotoGalleryInput) {
+        artikelFotoGalleryInput.addEventListener("change", (event) => {
+          const file = event.target.files?.[0];
+          readFotoFile(file);
+        });
+      }
+      if (artikelFotoClear) {
+        artikelFotoClear.addEventListener("click", () => {
+          if (artikelFotoCaptureInput) artikelFotoCaptureInput.value = "";
+          if (artikelFotoGalleryInput) artikelFotoGalleryInput.value = "";
+          setFotoPreview("");
+          if (artikelFotoFilename) artikelFotoFilename.textContent = "Kein Foto gewaehlt";
+        });
+      }
+      if (artikelFotoPreview) {
+        artikelFotoPreview.addEventListener("click", () => {
+          if (!currentFotoUrl) return;
+          artikelFotoModalImage.src = currentFotoUrl;
+          artikelFotoModal.classList.add("is-open");
+          artikelFotoModal.setAttribute("aria-hidden", "false");
+        });
+      }
+      if (artikelFotoModalClose) {
+        artikelFotoModalClose.addEventListener("click", () => {
+          artikelFotoModal.classList.remove("is-open");
+          artikelFotoModal.setAttribute("aria-hidden", "true");
+        });
+      }
+      artikelFotoModal
+        .querySelector(".modal__backdrop")
+        .addEventListener("click", () => {
+          artikelFotoModal.classList.remove("is-open");
+          artikelFotoModal.setAttribute("aria-hidden", "true");
+        });
       artikelModal
         .querySelector(".modal__backdrop")
         .addEventListener("click", closeArtikelModal);

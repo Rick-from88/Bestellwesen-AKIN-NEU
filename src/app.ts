@@ -16,10 +16,11 @@ import {
   deleteLieferant,
   getLieferantById,
   listLieferantArtikel,
+  listLieferantBestellungen,
   listLieferanten,
   updateLieferant,
 } from "./repositories/lieferanten";
-import { testSmtpConnection } from "./services/email";
+import { createTransporter, testSmtpConnection } from "./services/email";
 import {
   createArtikel,
   deleteArtikel,
@@ -30,8 +31,8 @@ import {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: "10mb" }));
+app.use(bodyParser.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 app.use("/static", express.static(path.join(__dirname, "..", "public")));
 
@@ -190,18 +191,116 @@ const requireAdminPage = async (req: any, res: any, next: any) => {
   });
 };
 
-const resolveActorEmail = async (
+const toDisplayNameFromEmail = (email: string | undefined): string | undefined => {
+  if (!email) return undefined;
+  const local = email.split("@")[0] || "";
+  const firstToken = local
+    .split(/[.\-_+]/)
+    .map((s) => s.trim())
+    .filter(Boolean)[0];
+  if (!firstToken) return undefined;
+  return firstToken.charAt(0).toUpperCase() + firstToken.slice(1).toLowerCase();
+};
+
+const resolveActorProfile = async (
   user: admin.auth.DecodedIdToken | undefined,
-): Promise<string | undefined> => {
-  if (!user?.uid) return undefined;
-  if (user.email) return user.email;
-  if (!firebaseAdminReady) return undefined;
+): Promise<{ uid?: string; email?: string; name?: string }> => {
+  if (!user?.uid) return {};
+  let email = user.email || undefined;
+  let name = ((user as any).name as string | undefined) || undefined;
+  if (name) name = name.trim() || undefined;
+
+  if (email && !name) {
+    name = toDisplayNameFromEmail(email);
+  }
+
+  if (!firebaseAdminReady) {
+    return { uid: user.uid, email, name };
+  }
+
   try {
     const record = await admin.auth().getUser(user.uid);
-    return record.email || undefined;
+    const recordEmail = record.email || undefined;
+    const recordName = record.displayName?.trim() || undefined;
+
+    email = email || recordEmail;
+    name = name || recordName || toDisplayNameFromEmail(email);
+
+    // Wenn noch kein Anzeigename in Firebase gepflegt ist, setzen wir ihn automatisch.
+    if (!recordName && name) {
+      try {
+        await admin.auth().updateUser(user.uid, { displayName: name });
+      } catch {
+        // Nicht kritisch fuer Bestellerfassung.
+      }
+    }
+
+    return { uid: user.uid, email, name };
   } catch {
-    return undefined;
+    return { uid: user.uid, email, name };
   }
+};
+
+const resolveConfiguredMailRecipient = async (
+  settingsRepo: { getSetting: (key: string) => Promise<string | null> },
+): Promise<string> => {
+  const configuredRecipient =
+    (await settingsRepo.getSetting("email_recipient")) ||
+    (await settingsRepo.getSetting("mail_to")) ||
+    (await settingsRepo.getSetting("mail_user")) ||
+    process.env.MAIL_TO ||
+    process.env.MAIL_USER ||
+    "";
+  return String(configuredRecipient || "").trim();
+};
+
+const sendMailUsingConfiguredSmtp = async (
+  settingsRepo: { getSetting: (key: string) => Promise<string | null> },
+  to: string,
+  subject: string,
+  text: string,
+  html?: string,
+) => {
+  const host =
+    (await settingsRepo.getSetting("mail_host")) ||
+    process.env.MAIL_HOST ||
+    process.env.SMTP_HOST ||
+    "";
+  const portRaw =
+    (await settingsRepo.getSetting("mail_port")) ||
+    process.env.MAIL_PORT ||
+    process.env.SMTP_PORT ||
+    "587";
+  const user =
+    (await settingsRepo.getSetting("mail_user")) ||
+    process.env.MAIL_USER ||
+    process.env.SMTP_USER ||
+    "";
+  const pass =
+    (await settingsRepo.getSetting("mail_pass")) ||
+    process.env.MAIL_PASS ||
+    process.env.SMTP_PASS ||
+    "";
+  const from =
+    (await settingsRepo.getSetting("mail_from")) ||
+    process.env.MAIL_FROM ||
+    user ||
+    "no-reply@example.com";
+
+  const transporter = createTransporter({
+    host: String(host || ""),
+    port: Number(portRaw || 587),
+    user: String(user || ""),
+    pass: String(pass || ""),
+  });
+  const mailOptions: any = {
+    from: `"Bestellwesen App" <${from}>`,
+    to,
+    subject,
+    text,
+  };
+  if (html) mailOptions.html = html;
+  return transporter.sendMail(mailOptions);
 };
 
 const parseNumber = (value: unknown): number | null => {
@@ -234,18 +333,21 @@ type BestellungPositionBody = {
   artikelId?: unknown;
   lieferantId?: unknown;
   menge?: unknown;
+  notiz?: unknown;
 };
 
 type BestellungPositionParsed = {
   artikelId: number | null;
   lieferantId: number | null;
   menge: number | null;
+  notiz?: string;
 };
 
 type BestellungPositionValid = {
   artikelId: number;
   lieferantId: number;
   menge: number;
+  notiz?: string;
 };
 
 const parsePositionen = (value: unknown): BestellungPositionValid[] | null => {
@@ -258,7 +360,8 @@ const parsePositionen = (value: unknown): BestellungPositionValid[] | null => {
       const artikelId = parseInteger(position?.artikelId);
       const lieferantId = parseInteger(position?.lieferantId);
       const menge = parseInteger(position?.menge);
-      return { artikelId, lieferantId, menge };
+      const notiz = parseString(position?.notiz);
+      return { artikelId, lieferantId, menge, notiz };
     })
     .filter(
       (position: BestellungPositionParsed) =>
@@ -271,6 +374,7 @@ const parsePositionen = (value: unknown): BestellungPositionValid[] | null => {
       artikelId: position.artikelId as number,
       lieferantId: position.lieferantId as number,
       menge: position.menge as number,
+      notiz: position.notiz,
     }));
 
   if (!positionen.length || positionen.length !== positionenInput.length) {
@@ -379,6 +483,9 @@ app.post("/api/admin/users/:uid/role", requireAdminApi, async (req, res) => {
 app.post("/api/admin/users", requireAdminApi, async (req, res) => {
   try {
     const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    const displayNameInput =
+      typeof req.body?.displayName === "string" ? req.body.displayName.trim() : "";
+    const displayName = displayNameInput || toDisplayNameFromEmail(email);
     const password =
       typeof req.body?.password === "string" ? req.body.password : "";
     if (!email || !password) {
@@ -388,11 +495,13 @@ app.post("/api/admin/users", requireAdminApi, async (req, res) => {
     const userRecord = await admin.auth().createUser({
       email,
       password,
+      displayName: displayName || undefined,
     });
 
     return res.status(201).json({
       uid: userRecord.uid,
       email: userRecord.email || null,
+      displayName: userRecord.displayName || null,
       disabled: userRecord.disabled,
     });
   } catch (e: any) {
@@ -481,12 +590,17 @@ app.use("/api", (req: any, res: any, next: any) => {
           p === "/lieferanten" ||
           /^\/lieferanten\/\d+$/.test(p) ||
           /^\/lieferanten\/\d+\/artikel$/.test(p) ||
+          /^\/lieferanten\/\d+\/bestellungen$/.test(p) ||
           p === "/artikel" ||
           p === "/dashboard/notes" ||
+          p === "/dashboard/chat" ||
           p === "/settings" ||
           p === "/settings/effective")) ||
       (m === "POST" &&
-        (p === "/bestellungen" || p === "/lieferanten" || p === "/artikel")) ||
+        (p === "/bestellungen" ||
+          p === "/lieferanten" ||
+          p === "/artikel" ||
+          p === "/dashboard/chat")) ||
       (m === "PUT" && p === "/dashboard/notes");
 
     if (allow) return next();
@@ -508,8 +622,9 @@ app.get("/api/bestellungen", async (req, res) => {
 
 app.post("/api/bestellungen", async (req, res) => {
   const status = parseStatus(req.body.status) ?? "offen";
-  const actor = (req as AuthedRequest).firebaseUser;
-  const actorEmail = await resolveActorEmail(actor);
+  const actorProfile = await resolveActorProfile(
+    (req as AuthedRequest).firebaseUser,
+  );
   const bestellDatum =
     typeof req.body.bestellDatum === "string"
       ? req.body.bestellDatum
@@ -539,8 +654,9 @@ app.post("/api/bestellungen", async (req, res) => {
       const bestellung = await createBestellung({
         status,
         bestellDatum,
-        createdByUid: actor?.uid,
-        createdByEmail: actorEmail,
+        createdByUid: actorProfile.uid,
+        createdByName: actorProfile.name,
+        createdByEmail: actorProfile.email,
         positionen: entry,
       });
       bestellungen.push(bestellung);
@@ -556,8 +672,9 @@ app.post("/api/bestellungen", async (req, res) => {
 app.put("/api/bestellungen/:id", async (req, res) => {
   const bestellungId = parseInteger(req.params.id);
   const status = parseStatus(req.body.status) ?? "offen";
-  const actor = (req as AuthedRequest).firebaseUser;
-  const actorEmail = await resolveActorEmail(actor);
+  const actorProfile = await resolveActorProfile(
+    (req as AuthedRequest).firebaseUser,
+  );
   const bestellDatum =
     typeof req.body.bestellDatum === "string"
       ? req.body.bestellDatum
@@ -620,6 +737,7 @@ app.put("/api/bestellungen/:id", async (req, res) => {
         artikelId: Number(pos.artikelId),
         lieferantId: lid,
         menge: Number(pos.menge),
+        notiz: pos.notiz,
       });
     }
 
@@ -639,8 +757,9 @@ app.put("/api/bestellungen/:id", async (req, res) => {
           await createBestellung({
             status,
             bestellDatum,
-            createdByUid: actor?.uid,
-            createdByEmail: actorEmail,
+            createdByUid: actorProfile.uid,
+            createdByName: actorProfile.name,
+            createdByEmail: actorProfile.email,
             positionen: poses,
           });
         } catch (e) {
@@ -953,6 +1072,25 @@ app.get("/api/lieferanten/:id/artikel", async (req, res) => {
   }
 });
 
+app.get("/api/lieferanten/:id/bestellungen", async (req, res) => {
+  const lieferantId = parseInteger(req.params.id);
+
+  if (!lieferantId) {
+    res.status(400).json({ error: "Ungueltige Lieferanten-ID." });
+    return;
+  }
+
+  try {
+    const bestellungen = await listLieferantBestellungen(lieferantId);
+    res.json(bestellungen);
+  } catch (error) {
+    console.error("Fehler beim Laden des Bestellverlaufs", error);
+    res
+      .status(500)
+      .json({ error: "Bestellverlauf konnte nicht geladen werden." });
+  }
+});
+
 app.get("/api/artikel", async (req, res) => {
   try {
     const artikel = await listArtikel();
@@ -980,26 +1118,21 @@ app.post("/api/artikel", async (req, res) => {
     typeof req.body.verpackungseinheit === "string"
       ? req.body.verpackungseinheit.trim()
       : undefined;
+  const standardBestellwert = parseInteger(req.body.standardBestellwert);
+  const fotoUrl =
+    typeof req.body.fotoUrl === "string" ? req.body.fotoUrl.trim() : undefined;
   const preis = parseNumber(req.body.preis);
-  const lagerbestand = parseInteger(req.body.lagerbestand);
-  const minBestand = parseInteger(req.body.minBestand);
 
-  if (
-    !lieferantId ||
-    !name ||
-    preis === null ||
-    preis < 0 ||
-    lagerbestand === null ||
-    lagerbestand < 0
-  ) {
+  if (!lieferantId || !name || preis === null || preis < 0) {
     res.status(400).json({
-      error: "lieferant, name, preis und lagerbestand sind Pflichtfelder.",
+      error: "lieferant, artikelbezeichnung und preis sind Pflichtfelder.",
     });
     return;
   }
-
-  if (minBestand !== null && minBestand < 0) {
-    res.status(400).json({ error: "minBestand muss 0 oder groesser sein." });
+  if (standardBestellwert !== null && standardBestellwert < 1) {
+    res
+      .status(400)
+      .json({ error: "standardBestellwert muss 1 oder groesser sein." });
     return;
   }
 
@@ -1011,9 +1144,9 @@ app.post("/api/artikel", async (req, res) => {
       artikelnummer,
       einheit,
       verpackungseinheit,
+      standardBestellwert: standardBestellwert ?? undefined,
+      fotoUrl,
       preis,
-      lagerbestand,
-      minBestand: minBestand ?? 0,
     });
     res.status(201).json(artikel);
   } catch (error) {
@@ -1040,19 +1173,26 @@ app.put("/api/artikel/:id", async (req, res) => {
     typeof req.body.verpackungseinheit === "string"
       ? req.body.verpackungseinheit.trim()
       : undefined;
+  const standardBestellwert = parseInteger(req.body.standardBestellwert);
+  const fotoUrl =
+    typeof req.body.fotoUrl === "string" ? req.body.fotoUrl.trim() : undefined;
   const preis = parseNumber(req.body.preis);
-  const lagerbestand = parseInteger(req.body.lagerbestand);
-  const minBestand = parseInteger(req.body.minBestand) ?? 0;
 
   if (!artikelId) {
     res.status(400).json({ error: "Ungueltige Artikel-ID." });
     return;
   }
 
-  if (!lieferantId || !name || preis === null || lagerbestand === null) {
+  if (!lieferantId || !name || preis === null) {
     res.status(400).json({
-      error: "Lieferant, Name, Preis und Lagerbestand sind Pflichtfelder.",
+      error: "Lieferant, Artikelbezeichnung und Preis sind Pflichtfelder.",
     });
+    return;
+  }
+  if (standardBestellwert !== null && standardBestellwert < 1) {
+    res
+      .status(400)
+      .json({ error: "standardBestellwert muss 1 oder groesser sein." });
     return;
   }
 
@@ -1064,9 +1204,9 @@ app.put("/api/artikel/:id", async (req, res) => {
       artikelnummer,
       einheit,
       verpackungseinheit,
+      standardBestellwert: standardBestellwert ?? undefined,
+      fotoUrl,
       preis,
-      lagerbestand,
-      minBestand,
     });
 
     if (!artikel) {
@@ -1258,6 +1398,69 @@ app.put("/api/dashboard/notes", express.json(), async (req, res) => {
   } catch (err) {
     console.error("Error saving dashboard notes", err);
     res.status(500).json({ error: "Konnte Notizen nicht speichern" });
+  }
+});
+
+// Dashboard chat endpoints: simple shared chat persisted in settings table
+app.get("/api/dashboard/chat", async (req, res) => {
+  try {
+    const settingsRepo = await Promise.resolve(
+      require("./repositories/settings"),
+    );
+    const raw = await settingsRepo.getSetting("dashboard_chat");
+    let messages: any[] = [];
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) messages = parsed;
+      } catch {
+        messages = [];
+      }
+    }
+    res.json({ messages });
+  } catch (err) {
+    console.error("Error loading dashboard chat", err);
+    res.status(500).json({ error: "Konnte Chat nicht laden" });
+  }
+});
+
+app.post("/api/dashboard/chat", express.json(), async (req, res) => {
+  try {
+    const text =
+      typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!text) {
+      res.status(400).json({ error: "text required" });
+      return;
+    }
+
+    const settingsRepo = await Promise.resolve(
+      require("./repositories/settings"),
+    );
+    const raw = await settingsRepo.getSetting("dashboard_chat");
+    let messages: any[] = [];
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) messages = parsed;
+      } catch {}
+    }
+
+    const actor = await resolveActorProfile((req as AuthedRequest).firebaseUser);
+    const msg = {
+      id: Date.now(),
+      text: text.slice(0, 2000),
+      author: actor.name || actor.email || actor.uid || "Unbekannt",
+      authorUid: actor.uid || null,
+      createdAt: new Date().toISOString(),
+    };
+    messages.unshift(msg);
+    if (messages.length > 200) messages = messages.slice(0, 200);
+
+    await settingsRepo.setSetting("dashboard_chat", JSON.stringify(messages));
+    res.status(201).json(msg);
+  } catch (err) {
+    console.error("Error saving dashboard chat", err);
+    res.status(500).json({ error: "Konnte Chat nicht speichern" });
   }
 });
 
@@ -1521,7 +1724,726 @@ app.get("/api/backup", requireAdminApi, async (req, res) => {
   }
 });
 
+const normText = (v: unknown): string =>
+  String(v ?? "")
+    .trim()
+    .toLowerCase();
+
+const nonEmptyOrNull = (v: unknown): string | null => {
+  const s = String(v ?? "").trim();
+  return s ? s : null;
+};
+
+type ImportStats = { created: number; updated: number; skipped: number };
+
+const upsertLieferantByName = async (
+  db: any,
+  item: any,
+): Promise<{ id: number; action: "created" | "updated" | "skipped" }> => {
+  const name = nonEmptyOrNull(item?.name);
+  if (!name) return { id: 0, action: "skipped" };
+
+  const existing = await db.query(
+    "select id from lieferanten where lower(trim(name)) = lower(trim($1)) limit 1",
+    [name],
+  );
+  const kontakt = nonEmptyOrNull(item?.kontaktPerson ?? item?.kontakt_person);
+  const email = nonEmptyOrNull(item?.email);
+  const telefon = nonEmptyOrNull(item?.telefon);
+  const strasse = nonEmptyOrNull(item?.strasse);
+  const plz = nonEmptyOrNull(item?.plz);
+  const stadt = nonEmptyOrNull(item?.stadt);
+  const land = nonEmptyOrNull(item?.land);
+
+  if (existing.rows[0]?.id) {
+    const id = Number(existing.rows[0].id);
+    const updated = await db.query(
+      `update lieferanten
+          set kontakt_person = coalesce($2, kontakt_person),
+              email = coalesce($3, email),
+              telefon = coalesce($4, telefon),
+              strasse = coalesce($5, strasse),
+              plz = coalesce($6, plz),
+              stadt = coalesce($7, stadt),
+              land = coalesce($8, land)
+        where id = $1`,
+      [id, kontakt, email, telefon, strasse, plz, stadt, land],
+    );
+    return {
+      id,
+      action: (updated.rowCount ?? 0) > 0 ? "updated" : "skipped",
+    };
+  }
+
+  const inserted = await db.query(
+    `insert into lieferanten (name, kontakt_person, email, telefon, strasse, plz, stadt, land)
+     values ($1,$2,$3,$4,$5,$6,$7,$8)
+     returning id`,
+    [name, kontakt, email, telefon, strasse, plz, stadt, land],
+  );
+  return { id: Number(inserted.rows[0].id), action: "created" };
+};
+
+const upsertArtikelForLieferant = async (
+  db: any,
+  lieferantId: number,
+  item: any,
+): Promise<{ id: number; action: "created" | "updated" | "skipped" }> => {
+  const name = nonEmptyOrNull(item?.name);
+  const preisNum = Number(item?.preis);
+  if (!lieferantId || !name || !Number.isFinite(preisNum)) {
+    return { id: 0, action: "skipped" };
+  }
+  const artikelnummer = nonEmptyOrNull(item?.artikelnummer);
+
+  let existing: any = { rows: [] };
+  if (artikelnummer) {
+    existing = await db.query(
+      `select id from artikel
+        where lieferant_id = $1
+          and lower(trim(coalesce(artikelnummer,''))) = lower(trim($2))
+        limit 1`,
+      [lieferantId, artikelnummer],
+    );
+  }
+  if (!existing.rows[0]?.id) {
+    existing = await db.query(
+      `select id from artikel
+        where lieferant_id = $1
+          and lower(trim(name)) = lower(trim($2))
+        limit 1`,
+      [lieferantId, name],
+    );
+  }
+
+  const beschreibung = nonEmptyOrNull(item?.beschreibung);
+  const einheit = nonEmptyOrNull(item?.einheit);
+  const ve = nonEmptyOrNull(item?.verpackungseinheit);
+  const standardBestellwertRaw = Number(item?.standardBestellwert);
+  const standardBestellwert = Number.isFinite(standardBestellwertRaw)
+    ? Math.max(1, Math.trunc(standardBestellwertRaw))
+    : null;
+  const fotoUrl = nonEmptyOrNull(item?.fotoUrl ?? item?.foto_url);
+
+  if (existing.rows[0]?.id) {
+    const id = Number(existing.rows[0].id);
+    const updated = await db.query(
+      `update artikel
+          set name = $2,
+              beschreibung = coalesce($3, beschreibung),
+              artikelnummer = coalesce($4, artikelnummer),
+              einheit = coalesce($5, einheit),
+              verpackungseinheit = coalesce($6, verpackungseinheit),
+              standard_bestellwert = coalesce($7, standard_bestellwert),
+              foto_url = coalesce($8, foto_url),
+              preis = $9
+        where id = $1`,
+      [
+        id,
+        name,
+        beschreibung,
+        artikelnummer,
+        einheit,
+        ve,
+        standardBestellwert,
+        fotoUrl,
+        preisNum,
+      ],
+    );
+    return {
+      id,
+      action: (updated.rowCount ?? 0) > 0 ? "updated" : "skipped",
+    };
+  }
+
+  const inserted = await db.query(
+    `insert into artikel
+      (lieferant_id, name, beschreibung, artikelnummer, einheit, verpackungseinheit, standard_bestellwert, foto_url, preis)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     returning id`,
+    [
+      lieferantId,
+      name,
+      beschreibung,
+      artikelnummer,
+      einheit,
+      ve,
+      standardBestellwert,
+      fotoUrl,
+      preisNum,
+    ],
+  );
+  return { id: Number(inserted.rows[0].id), action: "created" };
+};
+
+app.post("/api/import/catalog", requireAdminApi, express.json(), async (req, res) => {
+  try {
+    const db = await Promise.resolve(require("./db"));
+    const lieferanten = Array.isArray(req.body?.lieferanten)
+      ? req.body.lieferanten
+      : [];
+    const artikel = Array.isArray(req.body?.artikel) ? req.body.artikel : [];
+
+    const lieferantenStats: ImportStats = { created: 0, updated: 0, skipped: 0 };
+    const lieferantenIdMap = new Map<number, number>();
+    const lieferantenNameMap = new Map<string, number>();
+    for (const l of lieferanten) {
+      const out = await upsertLieferantByName(db, l);
+      if (Number.isFinite(Number(l?.id)) && out.id) {
+        lieferantenIdMap.set(Number(l.id), out.id);
+      }
+      if (l?.name && out.id) {
+        lieferantenNameMap.set(normText(l.name), out.id);
+      }
+      if (out.action === "created") lieferantenStats.created++;
+      else if (out.action === "updated") lieferantenStats.updated++;
+      else lieferantenStats.skipped++;
+    }
+
+    const artikelStats: ImportStats = { created: 0, updated: 0, skipped: 0 };
+    for (const a of artikel) {
+      let lid = Number(a?.lieferantId ?? a?.lieferant_id ?? 0);
+      if (lieferantenIdMap.has(lid)) lid = Number(lieferantenIdMap.get(lid));
+      if (!lid && a?.lieferantName) {
+        lid = Number(lieferantenNameMap.get(normText(a.lieferantName)) || 0);
+      }
+      const out = await upsertArtikelForLieferant(db, lid, a);
+      if (out.action === "created") artikelStats.created++;
+      else if (out.action === "updated") artikelStats.updated++;
+      else artikelStats.skipped++;
+    }
+
+    res.json({ success: true, lieferantenStats, artikelStats });
+  } catch (error) {
+    console.error("Import catalog error", error);
+    res.status(500).json({ error: "Katalog-Import fehlgeschlagen" });
+  }
+});
+
+app.post("/api/backup/restore", requireAdminApi, express.json(), async (req, res) => {
+  try {
+    const backup = req.body || {};
+    const db = await Promise.resolve(require("./db"));
+    const lieferanten = Array.isArray(backup.lieferanten) ? backup.lieferanten : [];
+    const artikel = Array.isArray(backup.artikel) ? backup.artikel : [];
+    const bestellungen = Array.isArray(backup.bestellungen)
+      ? backup.bestellungen
+      : [];
+    const settings = backup.settings && typeof backup.settings === "object"
+      ? backup.settings
+      : {};
+
+    const lieferantenIdMap = new Map<number, number>();
+    const lieferantenNameMap = new Map<string, number>();
+    const lieferantenStats: ImportStats = { created: 0, updated: 0, skipped: 0 };
+    for (const l of lieferanten) {
+      const out = await upsertLieferantByName(db, l);
+      if (Number.isFinite(Number(l?.id)) && out.id) {
+        lieferantenIdMap.set(Number(l.id), out.id);
+      }
+      if (l?.name && out.id) {
+        lieferantenNameMap.set(normText(l.name), out.id);
+      }
+      if (out.action === "created") lieferantenStats.created++;
+      else if (out.action === "updated") lieferantenStats.updated++;
+      else lieferantenStats.skipped++;
+    }
+
+    const artikelIdMap = new Map<number, number>();
+    const artikelStats: ImportStats = { created: 0, updated: 0, skipped: 0 };
+    for (const a of artikel) {
+      let lid = Number(a?.lieferantId ?? a?.lieferant_id ?? 0);
+      if (lieferantenIdMap.has(lid)) lid = Number(lieferantenIdMap.get(lid));
+      if (!lid && a?.lieferantName) {
+        lid = Number(lieferantenNameMap.get(normText(a.lieferantName)) || 0);
+      }
+      const out = await upsertArtikelForLieferant(db, lid, a);
+      if (Number.isFinite(Number(a?.id)) && out.id) {
+        artikelIdMap.set(Number(a.id), out.id);
+      }
+      if (out.action === "created") artikelStats.created++;
+      else if (out.action === "updated") artikelStats.updated++;
+      else artikelStats.skipped++;
+    }
+
+    let ordersCreated = 0;
+    let ordersSkipped = 0;
+    let orderErrors = 0;
+    let orderWarning = "";
+    const bestellungColsRes = await db.query(
+      `select column_name
+         from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'bestellungen'`,
+    );
+    const bestellungCols = new Set<string>(
+      (bestellungColsRes.rows || []).map((r: any) => String(r.column_name)),
+    );
+    const hasBestellnummer = bestellungCols.has("bestellnummer");
+    const hasCreatedByUid = bestellungCols.has("created_by_uid");
+    const hasCreatedByName = bestellungCols.has("created_by_name");
+    const hasCreatedByEmail = bestellungCols.has("created_by_email");
+    if (!hasBestellnummer && bestellungen.length) {
+      ordersSkipped = bestellungen.length;
+      orderWarning =
+        "Bestellungen wurden übersprungen, da die DB-Spalte 'bestellnummer' fehlt.";
+    }
+    for (const b of hasBestellnummer ? bestellungen : []) {
+      try {
+      const bestellnummer = Number(b?.bestellnummer);
+      const positionenRaw = Array.isArray(b?.positionen) ? b.positionen : [];
+      if (!Number.isFinite(bestellnummer) || !positionenRaw.length) {
+        ordersSkipped++;
+        continue;
+      }
+      const exists = await db.query(
+        "select id from bestellungen where bestellnummer = $1 limit 1",
+        [bestellnummer],
+      );
+      if (exists.rows[0]?.id) {
+        ordersSkipped++;
+        continue;
+      }
+
+      const mappedPos = positionenRaw
+        .map((p: any) => {
+          const oldAid = Number(p?.artikelId);
+          const oldLid = Number(p?.lieferantId);
+          let newAid = Number(artikelIdMap.get(oldAid) || oldAid);
+          let newLid = Number(lieferantenIdMap.get(oldLid) || oldLid);
+          if (!newLid && p?.lieferantName) {
+            newLid = Number(lieferantenNameMap.get(normText(p.lieferantName)) || 0);
+          }
+          return {
+            artikelId: newAid,
+            lieferantId: newLid,
+            menge: Number(p?.menge || 0),
+            notiz: nonEmptyOrNull(p?.notiz),
+          };
+        })
+        .filter((p: any) => p.artikelId && p.lieferantId && p.menge > 0);
+
+      if (!mappedPos.length) {
+        ordersSkipped++;
+        continue;
+      }
+
+      const statusCandidate = String(b?.status || "offen");
+      const status =
+        statusCandidate === "offen" ||
+        statusCandidate === "bestellt" ||
+        statusCandidate === "geliefert" ||
+        statusCandidate === "storniert"
+          ? statusCandidate
+          : "offen";
+      const first = mappedPos[0];
+      const insertCols = [
+        "bestellnummer",
+        "artikel_id",
+        "lieferant_id",
+        "menge",
+        "status",
+        "bestell_datum",
+      ];
+      const insertVals: Array<unknown> = [
+        bestellnummer,
+        first.artikelId,
+        first.lieferantId,
+        first.menge,
+        status,
+        b?.bestellDatum || null,
+      ];
+      if (hasCreatedByUid) {
+        insertCols.splice(1, 0, "created_by_uid");
+        insertVals.splice(1, 0, nonEmptyOrNull(b?.createdByUid));
+      }
+      if (hasCreatedByName) {
+        const idx = hasCreatedByUid ? 2 : 1;
+        insertCols.splice(idx, 0, "created_by_name");
+        insertVals.splice(idx, 0, nonEmptyOrNull(b?.createdByName));
+      }
+      if (hasCreatedByEmail) {
+        const idx = hasCreatedByUid && hasCreatedByName ? 3 : hasCreatedByUid || hasCreatedByName ? 2 : 1;
+        insertCols.splice(idx, 0, "created_by_email");
+        insertVals.splice(idx, 0, nonEmptyOrNull(b?.createdByEmail));
+      }
+      const placeholders = insertVals.map((_, i) => `$${i + 1}`).join(",");
+      const inserted = await db.query(
+        `insert into bestellungen (${insertCols.join(",")})
+         values (${placeholders})
+         returning id`,
+        insertVals,
+      );
+      const newId = Number(inserted.rows[0].id);
+      for (const p of mappedPos) {
+        await db.query(
+          `insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, notiz)
+           values ($1,$2,$3,$4,$5)`,
+          [newId, p.artikelId, p.lieferantId, p.menge, p.notiz],
+        );
+      }
+      ordersCreated++;
+      } catch (err) {
+        orderErrors++;
+        ordersSkipped++;
+      }
+    }
+
+    const settingsRepo = await Promise.resolve(require("./repositories/settings"));
+    const settingKeys = Object.keys(settings || {});
+    for (const key of settingKeys) {
+      await settingsRepo.setSetting(key, String(settings[key] ?? ""));
+    }
+
+    res.json({
+      success: true,
+      lieferantenStats,
+      artikelStats,
+      bestellungen: { created: ordersCreated, skipped: ordersSkipped },
+      settingsUpdated: settingKeys.length,
+      warning: orderWarning || undefined,
+      orderErrors: orderErrors || undefined,
+    });
+  } catch (error) {
+    console.error("Backup restore error", error);
+    res.status(500).json({ error: "Backup-Import fehlgeschlagen" });
+  }
+});
+
 // Send order by email and set status to 'bestellt'
+const buildOpenOrderGroups = async () => {
+  const { listBestellungen } = await Promise.resolve(
+    require("./repositories/bestellungen"),
+  );
+  const db = await Promise.resolve(require("./db"));
+
+  const allBestellungen = await listBestellungen();
+  const offene = (Array.isArray(allBestellungen) ? allBestellungen : []).filter(
+    (b: any) => String(b.status || "offen") === "offen",
+  );
+  const orderMetaById = new Map<
+    number,
+    { bestellDatum?: string; createdByName?: string }
+  >(
+    offene.map((b: any) => [
+      Number(b.id),
+      {
+        bestellDatum: b?.bestellDatum
+          ? new Date(b.bestellDatum).toISOString()
+          : undefined,
+        createdByName:
+          String(
+            b?.createdByName || b?.createdByEmail || b?.createdByUid || "",
+          ).trim() || undefined,
+      },
+    ]),
+  );
+
+  const artikelIds = Array.from(
+    new Set(
+      offene.flatMap((b: any) =>
+        Array.isArray(b.positionen) ? b.positionen.map((p: any) => p.artikelId) : [],
+      ),
+    ),
+  );
+  const lieferantIds = Array.from(
+    new Set(
+      offene.flatMap((b: any) =>
+        Array.isArray(b.positionen)
+          ? b.positionen.map((p: any) => p.lieferantId)
+          : [],
+      ),
+    ),
+  );
+
+  let artikelRows: any[] = [];
+  if (artikelIds.length) {
+    const res = await db.query(
+      "select id, name, preis from artikel where id = ANY($1)",
+      [artikelIds],
+    );
+    artikelRows = res.rows || [];
+  }
+  let lieferantRows: any[] = [];
+  if (lieferantIds.length) {
+    const res = await db.query(
+      "select id, name from lieferanten where id = ANY($1)",
+      [lieferantIds],
+    );
+    lieferantRows = res.rows || [];
+  }
+
+  const artikelMap: Record<number, any> = {};
+  artikelRows.forEach((r) => {
+    artikelMap[Number(r.id)] = r;
+  });
+  const lieferantMap: Record<number, any> = {};
+  lieferantRows.forEach((r) => {
+    lieferantMap[Number(r.id)] = r;
+  });
+
+  const groups = new Map<
+    number,
+    {
+      lieferantId: number;
+      lieferantName: string;
+      orderIds: Set<number>;
+      bestellnummern: Set<string>;
+      positionen: Array<{
+        orderId: number;
+        bestellnummer: string;
+        artikelName: string;
+        menge: number;
+        preis: number;
+        notiz?: string;
+        bestellDatum?: string;
+        createdByName?: string;
+      }>;
+      gesamt: number;
+    }
+  >();
+
+  for (const b of offene) {
+    const orderId = Number(b.id);
+    const nr = String(b.bestellnummer ?? b.id ?? "");
+    const pos = Array.isArray(b.positionen) ? b.positionen : [];
+    for (const p of pos) {
+      const lid = Number(p.lieferantId);
+      if (!Number.isFinite(lid)) continue;
+      const group =
+        groups.get(lid) ||
+        {
+          lieferantId: lid,
+          lieferantName: lieferantMap[lid]?.name || `Lieferant #${lid}`,
+          orderIds: new Set<number>(),
+          bestellnummern: new Set<string>(),
+          positionen: [] as Array<{
+            orderId: number;
+            bestellnummer: string;
+            artikelName: string;
+            menge: number;
+            preis: number;
+            notiz?: string;
+            bestellDatum?: string;
+            createdByName?: string;
+          }>,
+          gesamt: 0,
+        };
+
+      const artikel = artikelMap[Number(p.artikelId)] || {
+        name: `Artikel #${p.artikelId}`,
+        preis: 0,
+      };
+      const menge = Number(p.menge) || 0;
+      const preis = Number(artikel.preis) || 0;
+
+      group.orderIds.add(orderId);
+      group.bestellnummern.add(nr);
+      group.positionen.push({
+        orderId,
+        bestellnummer: nr,
+        artikelName: String(artikel.name || `Artikel #${p.artikelId}`),
+        menge,
+        preis,
+        notiz: p.notiz ? String(p.notiz) : undefined,
+        bestellDatum: orderMetaById.get(orderId)?.bestellDatum,
+        createdByName: orderMetaById.get(orderId)?.createdByName,
+      });
+      group.gesamt += menge * preis;
+      groups.set(lid, group);
+    }
+  }
+
+  return Array.from(groups.values()).sort((a, b) =>
+    a.lieferantName.localeCompare(b.lieferantName, "de"),
+  );
+};
+
+app.get("/api/bestellungen/sammel/preview", async (req, res) => {
+  try {
+    const role = getUserRole((req as AuthedRequest).firebaseUser);
+    if (!(role === "admin" || role === "buero")) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    const groups = await buildOpenOrderGroups();
+    res.json({
+      groups: groups.map((g) => ({
+        lieferantId: g.lieferantId,
+        lieferantName: g.lieferantName,
+        anzahlBestellungen: g.orderIds.size,
+        orderIds: Array.from(g.orderIds),
+        bestellnummern: Array.from(g.bestellnummern),
+        orders: Object.values(
+          g.positionen.reduce(
+            (acc, p) => {
+              const key = String(Number(p.orderId));
+              if (!acc[key]) {
+                acc[key] = {
+                  orderId: Number(p.orderId),
+                  bestellnummer: String(p.bestellnummer || p.orderId),
+                  anzahlPositionen: 0,
+                  summe: 0,
+                  bestellDatum: p.bestellDatum || null,
+                  createdByName: p.createdByName || null,
+                };
+              }
+              acc[key].anzahlPositionen += 1;
+              acc[key].summe += Number(p.menge || 0) * Number(p.preis || 0);
+              return acc;
+            },
+            {} as Record<
+              string,
+              {
+                orderId: number;
+                bestellnummer: string;
+                anzahlPositionen: number;
+                summe: number;
+                bestellDatum: string | null;
+                createdByName: string | null;
+              }
+            >,
+          ),
+        ).map((o) => ({ ...o, summe: Number(o.summe.toFixed(2)) })),
+        anzahlPositionen: g.positionen.length,
+        gesamt: Number(g.gesamt.toFixed(2)),
+      })),
+      totalGroups: groups.length,
+      totalOrders: groups.reduce((sum, g) => sum + g.orderIds.size, 0),
+    });
+  } catch (error) {
+    console.error("Fehler bei Sammelbestellung-Vorschau", error);
+    res.status(500).json({ error: "Sammelvorschau fehlgeschlagen" });
+  }
+});
+
+app.post("/api/bestellungen/sammel/send", express.json(), async (req, res) => {
+  try {
+    const role = getUserRole((req as AuthedRequest).firebaseUser);
+    if (!(role === "admin" || role === "buero")) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+
+    const requestedOrderIdsRaw = Array.isArray(req.body?.orderIds)
+      ? req.body.orderIds
+      : [];
+    const requestedOrderIds = new Set<number>(
+      requestedOrderIdsRaw
+        .map((v: any) => Number(v))
+        .filter((v: number) => Number.isFinite(v) && v > 0),
+    );
+
+    const allGroups = await buildOpenOrderGroups();
+    const groups = requestedOrderIds.size
+      ? allGroups
+          .map((g) => {
+            const filteredPos = g.positionen.filter((p) =>
+              requestedOrderIds.has(Number(p.orderId)),
+            );
+            const filteredOrderIds = new Set<number>(
+              filteredPos.map((p) => Number(p.orderId)),
+            );
+            const filteredBestellnummern = new Set<string>(
+              filteredPos.map((p) => String(p.bestellnummer)),
+            );
+            return {
+              ...g,
+              positionen: filteredPos,
+              orderIds: filteredOrderIds,
+              bestellnummern: filteredBestellnummern,
+              gesamt: filteredPos.reduce(
+                (sum, p) => sum + Number(p.menge || 0) * Number(p.preis || 0),
+                0,
+              ),
+            };
+          })
+          .filter((g) => g.orderIds.size > 0)
+      : allGroups;
+    if (!groups.length) {
+      res.json({ success: true, sentGroups: 0, updatedOrders: 0 });
+      return;
+    }
+
+    const settingsRepo = await Promise.resolve(require("./repositories/settings"));
+    const subjTemplate =
+      (await settingsRepo.getSetting("email_subject")) || "Sammelbestellung {{lieferant}}";
+    const bodyTemplate =
+      (await settingsRepo.getSetting("email_body")) ||
+      "<h2>Sammelbestellung {{lieferant}}</h2>{{artikel_liste}}";
+    const signature = (await settingsRepo.getSetting("email_signature")) || "";
+    const to = await resolveConfiguredMailRecipient(settingsRepo);
+    if (!to) {
+      res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
+      return;
+    }
+
+    const db = await Promise.resolve(require("./db"));
+
+    const sentOrderIds = new Set<number>();
+    const sentGroupNames: string[] = [];
+
+    for (const g of groups) {
+      let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr style="text-align:left"><th>Bestellung</th><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
+      let artikelText = "";
+      for (const p of g.positionen) {
+        const gesamt = (Number(p.preis) * Number(p.menge)).toFixed(2);
+        const notiz = p.notiz ? String(p.notiz) : "";
+        artikelHtml += `<tr><td>#${p.bestellnummer}</td><td>${p.artikelName}</td><td>${p.menge}</td><td>${Number(p.preis).toFixed(2)} €</td><td>${gesamt} €</td><td>${notiz}</td></tr>`;
+        artikelText += `- #${p.bestellnummer} | ${p.artikelName} | Menge: ${p.menge} | Preis: ${Number(p.preis).toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
+      }
+      artikelHtml += "</tbody></table>";
+
+      const replacements: Record<string, string> = {
+        "{{bestellnummer}}": Array.from(g.bestellnummern).join(", "),
+        "{{datum}}": new Date().toLocaleDateString("de-DE"),
+        "{{lieferant}}": g.lieferantName,
+        "{{artikel_liste}}": artikelHtml,
+        "{{artikel_text}}": artikelText,
+      };
+
+      let subject = subjTemplate;
+      let html = bodyTemplate;
+      let text = `Sammelbestellung ${g.lieferantName}\n\n${artikelText}`;
+      for (const key of Object.keys(replacements)) {
+        const val = replacements[key];
+        const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
+        subject = subject.replace(re, val);
+        html = html.replace(re, val);
+        text = text.replace(re, val);
+      }
+      if (signature) {
+        html += `<div>${signature}</div>`;
+        text += `\n${signature}`;
+      }
+
+      await sendMailUsingConfiguredSmtp(settingsRepo, to, subject, text, html);
+      const ids = Array.from(g.orderIds);
+      if (ids.length) {
+        await db.query(
+          "update bestellungen set status = 'bestellt' where id = ANY($1::int[]) and status = 'offen'",
+          [ids],
+        );
+        ids.forEach((id) => sentOrderIds.add(id));
+      }
+      sentGroupNames.push(g.lieferantName);
+    }
+
+    res.json({
+      success: true,
+      sentGroups: sentGroupNames.length,
+      groups: sentGroupNames,
+      updatedOrders: sentOrderIds.size,
+    });
+  } catch (error: any) {
+    console.error("Fehler bei Sammelbestellung-Ausfuehrung", error);
+    res.status(500).json({
+      error: "Sammelbestellung fehlgeschlagen",
+      detail: String(error?.message || error).slice(0, 1000),
+    });
+  }
+});
+
 app.put("/api/bestellungen/:id/send", express.json(), async (req, res) => {
   const id = parseInteger(req.params.id);
   if (!id) {
@@ -1627,13 +2549,8 @@ app.put("/api/bestellungen/:id/send", express.json(), async (req, res) => {
       text += `\n${signature}`;
     }
 
-    const { sendOrderEmail } = await Promise.resolve(
-      require("./services/email"),
-    );
-
     // determine recipient(s): try settings or default MAIL_TO env
-    const toSetting = await settingsRepo.getSetting("email_recipient");
-    const to = toSetting || process.env.MAIL_TO || process.env.MAIL_USER || "";
+    const to = await resolveConfiguredMailRecipient(settingsRepo);
     if (!to) {
       res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
       return;
@@ -1641,7 +2558,8 @@ app.put("/api/bestellungen/:id/send", express.json(), async (req, res) => {
 
     // send email
     try {
-      await sendOrderEmail(
+      await sendMailUsingConfiguredSmtp(
+        settingsRepo,
         to,
         subject,
         `Bestellung ${bestellung.bestellnummer}\n+\nDatum: ${bestellung.bestellDatum}`,

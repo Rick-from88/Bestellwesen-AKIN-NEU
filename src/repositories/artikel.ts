@@ -8,14 +8,14 @@ export interface CreateArtikelInput {
   artikelnummer?: string;
   einheit?: string;
   verpackungseinheit?: string;
+  standardBestellwert?: number;
+  fotoUrl?: string;
   preis: number;
-  lagerbestand: number;
-  minBestand?: number;
 }
 
 export const listArtikel = async (): Promise<Artikel[]> => {
   const result = await query(
-    'select id, lieferant_id as "lieferantId", name, beschreibung, artikelnummer, einheit, verpackungseinheit, preis, lagerbestand, min_bestand as "minBestand" from artikel order by name',
+    'select id, lieferant_id as "lieferantId", name, beschreibung, artikelnummer, einheit, verpackungseinheit, standard_bestellwert as "standardBestellwert", foto_url as "fotoUrl", preis from artikel order by name',
   );
 
   return result.rows;
@@ -25,7 +25,7 @@ export const createArtikel = async (
   input: CreateArtikelInput,
 ): Promise<Artikel> => {
   const result = await query(
-    'insert into artikel (lieferant_id, name, beschreibung, artikelnummer, einheit, verpackungseinheit, preis, lagerbestand, min_bestand) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id, lieferant_id as "lieferantId", name, beschreibung, artikelnummer, einheit, verpackungseinheit, preis, lagerbestand, min_bestand as "minBestand"',
+    'insert into artikel (lieferant_id, name, beschreibung, artikelnummer, einheit, verpackungseinheit, standard_bestellwert, foto_url, preis) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id, lieferant_id as "lieferantId", name, beschreibung, artikelnummer, einheit, verpackungseinheit, standard_bestellwert as "standardBestellwert", foto_url as "fotoUrl", preis',
     [
       input.lieferantId,
       input.name,
@@ -33,9 +33,9 @@ export const createArtikel = async (
       input.artikelnummer ?? null,
       input.einheit ?? null,
       input.verpackungseinheit ?? null,
+      input.standardBestellwert ?? null,
+      input.fotoUrl ?? null,
       input.preis,
-      input.lagerbestand,
-      input.minBestand ?? 0,
     ],
   );
 
@@ -47,7 +47,7 @@ export const updateArtikel = async (
   input: CreateArtikelInput,
 ): Promise<Artikel | null> => {
   const result = await query(
-    'update artikel set lieferant_id = $1, name = $2, beschreibung = $3, artikelnummer = $4, einheit = $5, verpackungseinheit = $6, preis = $7, lagerbestand = $8, min_bestand = $9 where id = $10 returning id, lieferant_id as "lieferantId", name, beschreibung, artikelnummer, einheit, verpackungseinheit, preis, lagerbestand, min_bestand as "minBestand"',
+    'update artikel set lieferant_id = $1, name = $2, beschreibung = $3, artikelnummer = $4, einheit = $5, verpackungseinheit = $6, standard_bestellwert = $7, foto_url = $8, preis = $9 where id = $10 returning id, lieferant_id as "lieferantId", name, beschreibung, artikelnummer, einheit, verpackungseinheit, standard_bestellwert as "standardBestellwert", foto_url as "fotoUrl", preis',
     [
       input.lieferantId,
       input.name,
@@ -55,9 +55,9 @@ export const updateArtikel = async (
       input.artikelnummer ?? null,
       input.einheit ?? null,
       input.verpackungseinheit ?? null,
+      input.standardBestellwert ?? null,
+      input.fotoUrl ?? null,
       input.preis,
-      input.lagerbestand,
-      input.minBestand ?? 0,
       id,
     ],
   );
