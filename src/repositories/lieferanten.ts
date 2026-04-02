@@ -57,7 +57,13 @@ export const listLieferantArtikel = async (
 export interface LieferantBestellverlaufEintrag {
   id: number;
   bestellnummer?: number;
-  status: "offen" | "bestellt" | "geliefert" | "storniert";
+  status:
+    | "offen"
+    | "bestellt"
+    | "teilgeliefert"
+    | "geliefert"
+    | "teilstorniert"
+    | "storniert";
   bestellDatum: string;
   createdByName?: string;
   createdByEmail?: string;

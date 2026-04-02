@@ -4,7 +4,14 @@ export interface Bestellung {
   createdByUid?: string;
   createdByName?: string;
   createdByEmail?: string;
-  status: "offen" | "bestellt" | "geliefert" | "storniert";
+  auftragsBestaetigt?: boolean;
+  status:
+    | "offen"
+    | "bestellt"
+    | "teilgeliefert"
+    | "geliefert"
+    | "teilstorniert"
+    | "storniert";
   bestellDatum: Date;
   positionen: BestellungPosition[];
 }
@@ -13,6 +20,8 @@ export interface BestellungPosition {
   artikelId: number;
   lieferantId: number;
   menge: number;
+  geliefertMenge?: number;
+  storniertMenge?: number;
   notiz?: string;
 }
 

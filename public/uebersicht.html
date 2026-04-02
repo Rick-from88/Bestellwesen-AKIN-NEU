@@ -18,21 +18,61 @@
         </div>
       </header>
 
-      <section class="grid">
+      <section class="grid dashboard-grid">
         <article class="card">
           <div class="card__label">Offene Bestellungen</div>
           <div class="card__value" id="offeneCount">0</div>
           <div class="card__trend" id="offeneTrend">Noch keine Daten</div>
         </article>
         <article class="card">
-          <div class="card__label">Gefaellige Lieferanten</div>
-          <div class="card__value" id="lieferantenCount">0</div>
-          <div class="card__trend" id="lieferantenTrend">Noch keine Daten</div>
-        </article>
-        <article class="card">
-          <div class="card__label">Artikel im Fokus</div>
-          <div class="card__value" id="artikelCount">0</div>
-          <div class="card__trend" id="artikelTrend">Noch keine Daten</div>
+          <div class="card__label">Bestellsumme im Zeitraum</div>
+          <div class="card__value" id="zeitraumSummeValue">0 €</div>
+          <div class="card__trend" id="zeitraumSummeTrend">Noch keine Daten</div>
+          <div style="margin-top: 10px; display: grid; gap: 8px">
+            <div style="display: flex; flex-wrap: wrap; gap: 8px">
+              <button
+                type="button"
+                class="btn btn--small btn--ghost"
+                id="sumQuickThisMonth"
+              >
+                Dieser Monat
+              </button>
+              <button
+                type="button"
+                class="btn btn--small btn--ghost"
+                id="sumQuickLastMonth"
+              >
+                Letzter Monat
+              </button>
+              <button
+                type="button"
+                class="btn btn--small btn--ghost"
+                id="sumQuickThisYear"
+              >
+                Dieses Jahr
+              </button>
+            </div>
+            <div
+              style="
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                align-items: center;
+              "
+            >
+              <label style="display: grid; gap: 4px; font-size: 0.85rem; color: var(--ink-soft)">
+                Von
+                <input id="sumFrom" type="date" />
+              </label>
+              <label style="display: grid; gap: 4px; font-size: 0.85rem; color: var(--ink-soft)">
+                Bis
+                <input id="sumTo" type="date" />
+              </label>
+            </div>
+            <div style="color: var(--ink-soft); font-size: 0.85rem">
+              Zeitraum bleibt gespeichert, bis du ihn änderst.
+            </div>
+          </div>
         </article>
       </section>
 
@@ -118,10 +158,13 @@
     </nav>
 
     <script>
-      const lieferantenCount = document.getElementById("lieferantenCount");
-      const lieferantenTrend = document.getElementById("lieferantenTrend");
-      const artikelCount = document.getElementById("artikelCount");
-      const artikelTrend = document.getElementById("artikelTrend");
+      const zeitraumSummeValue = document.getElementById("zeitraumSummeValue");
+      const zeitraumSummeTrend = document.getElementById("zeitraumSummeTrend");
+      const sumFromInput = document.getElementById("sumFrom");
+      const sumToInput = document.getElementById("sumTo");
+      const sumQuickThisMonth = document.getElementById("sumQuickThisMonth");
+      const sumQuickLastMonth = document.getElementById("sumQuickLastMonth");
+      const sumQuickThisYear = document.getElementById("sumQuickThisYear");
       const letzteBestellungenList = document.getElementById(
         "letzteBestellungenList",
       );
@@ -134,8 +177,18 @@
       const chatInput = document.getElementById("chatInput");
       const chatSendBtn = document.getElementById("chatSendBtn");
       const chatStatus = document.getElementById("chatStatus");
+      const CHAT_LAST_READ_KEY = "chat_last_read_at";
+      let chatLastReadAt = Number(
+        (typeof localStorage !== "undefined" &&
+          localStorage.getItem(CHAT_LAST_READ_KEY)) ||
+          0,
+      );
+      if (!Number.isFinite(chatLastReadAt) || chatLastReadAt < 0) {
+        chatLastReadAt = 0;
+      }
       let knownChatMessageIds = new Set();
       let isInitialChatLoad = true;
+      let chatLatestMessageTime = 0;
       let chatPollHandle = null;
       let chatLoadInFlight = false;
 
@@ -156,6 +209,27 @@
         }
         return date.toLocaleDateString("de-DE");
       };
+
+      const formatCurrency = (value) => {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return "-";
+        return n.toLocaleString("de-DE", {
+          style: "currency",
+          currency: "EUR",
+        });
+      };
+
+      const pad2 = (v) => String(v).padStart(2, "0");
+      const toDateInputValue = (d) => {
+        if (!(d instanceof Date) || Number.isNaN(d.getTime())) return "";
+        return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      };
+      const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+      const endOfMonth = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const startOfYear = (d) => new Date(d.getFullYear(), 0, 1);
+      const endOfYear = (d) => new Date(d.getFullYear(), 11, 31);
+      const toStartOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      const toEndOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
       const displayNameFromOrder = (bestellung) => {
         const explicitName = String(bestellung?.createdByName || "").trim();
@@ -244,23 +318,120 @@
         });
       };
 
-      const loadLieferanten = async () => {
-        const response = await fetch("/api/lieferanten");
-        const lieferanten = await response.json();
-        lieferantenCount.textContent = lieferanten.length;
-        lieferantenTrend.textContent = lieferanten.length
-          ? "Profil gepflegt"
-          : "Noch keine Daten";
+      const DASH_SUM_RANGE_FROM_KEY = "dashboard_sum_range_from";
+      const DASH_SUM_RANGE_TO_KEY = "dashboard_sum_range_to";
+      let bestellungenCache = null;
+      let artikelPreisMapCache = null;
+
+      const readSavedRange = () => {
+        let from = "";
+        let to = "";
+        try {
+          from = String(localStorage.getItem(DASH_SUM_RANGE_FROM_KEY) || "");
+          to = String(localStorage.getItem(DASH_SUM_RANGE_TO_KEY) || "");
+        } catch (e) {}
+        return { from, to };
       };
 
-      const loadArtikel = async () => {
-        const response = await fetch("/api/artikel");
-        const artikel = await response.json();
-        artikelCount.textContent = artikel.length;
-        if (artikelTrend) {
-          artikelTrend.textContent = artikel.length
-            ? "Artikelstamm vorhanden"
-            : "Noch keine Daten";
+      const saveRange = (from, to) => {
+        try {
+          localStorage.setItem(DASH_SUM_RANGE_FROM_KEY, String(from || ""));
+          localStorage.setItem(DASH_SUM_RANGE_TO_KEY, String(to || ""));
+        } catch (e) {}
+      };
+
+      const ensureDefaultRange = () => {
+        const now = new Date();
+        const defFrom = toDateInputValue(startOfMonth(now));
+        const defTo = toDateInputValue(endOfMonth(now));
+        const saved = readSavedRange();
+        const from = saved.from || defFrom;
+        const to = saved.to || defTo;
+        if (sumFromInput && !sumFromInput.value) sumFromInput.value = from;
+        if (sumToInput && !sumToInput.value) sumToInput.value = to;
+        if (!saved.from || !saved.to) {
+          saveRange(from, to);
+        }
+        return { from, to };
+      };
+
+      const parseDateInput = (val) => {
+        const v = String(val || "").trim();
+        if (!v) return null;
+        const d = new Date(v + "T00:00:00");
+        return Number.isNaN(d.getTime()) ? null : d;
+      };
+
+      const computeOrderSum = (bestellung, artikelPreisMap) => {
+        const pos = Array.isArray(bestellung?.positionen) ? bestellung.positionen : [];
+        let total = 0;
+        pos.forEach((p) => {
+          const preis = artikelPreisMap?.[p.artikelId];
+          const menge = Number(p.menge);
+          if (!Number.isFinite(menge) || menge <= 0) return;
+          if (!Number.isFinite(preis)) return;
+          total += menge * preis;
+        });
+        return total;
+      };
+
+      const renderSummeImZeitraum = (from, to) => {
+        if (!zeitraumSummeValue || !zeitraumSummeTrend) return;
+        if (!Array.isArray(bestellungenCache) || !artikelPreisMapCache) {
+          zeitraumSummeTrend.textContent = "Noch keine Daten";
+          zeitraumSummeValue.textContent = "0 €";
+          return;
+        }
+        const fromD = parseDateInput(from);
+        const toD = parseDateInput(to);
+        if (!fromD || !toD) {
+          zeitraumSummeTrend.textContent = "Bitte Zeitraum wählen";
+          zeitraumSummeValue.textContent = "0 €";
+          return;
+        }
+        const fromTs = toStartOfDay(fromD).getTime();
+        const toTs = toEndOfDay(toD).getTime();
+        if (!Number.isFinite(fromTs) || !Number.isFinite(toTs) || fromTs > toTs) {
+          zeitraumSummeTrend.textContent = "Zeitraum ungültig";
+          zeitraumSummeValue.textContent = "0 €";
+          return;
+        }
+
+        let sum = 0;
+        let count = 0;
+        bestellungenCache.forEach((b) => {
+          const ts = new Date(b.bestellDatum).getTime();
+          if (!Number.isFinite(ts)) return;
+          if (ts < fromTs || ts > toTs) return;
+          if (String(b?.status || "offen") !== "bestellt") return;
+          sum += computeOrderSum(b, artikelPreisMapCache);
+          count += 1;
+        });
+
+        zeitraumSummeValue.textContent = formatCurrency(sum);
+        zeitraumSummeTrend.textContent = `${count} bestellte Bestellungen im Zeitraum`;
+      };
+
+      const loadBestellungenAndArtikelForSum = async () => {
+        try {
+          const [bestellungenRes, artikelRes] = await Promise.all([
+            fetch("/api/bestellungen"),
+            fetch("/api/artikel"),
+          ]);
+          const bestellungen = await bestellungenRes.json();
+          const artikel = await artikelRes.json();
+          bestellungenCache = Array.isArray(bestellungen) ? bestellungen : [];
+          const preisMap = {};
+          (Array.isArray(artikel) ? artikel : []).forEach((a) => {
+            const id = Number(a?.id);
+            const preis = Number(a?.preis);
+            if (Number.isFinite(id) && id > 0 && Number.isFinite(preis)) {
+              preisMap[id] = preis;
+            }
+          });
+          artikelPreisMapCache = preisMap;
+        } catch (e) {
+          console.error("Fehler beim Laden für Zeitraum-Summe", e);
         }
       };
 
@@ -480,11 +651,18 @@
         }
       };
 
+      const refreshSummeImZeitraum = async () => {
+        const range = ensureDefaultRange();
+        await loadBestellungenAndArtikelForSum();
+        renderSummeImZeitraum(range.from, range.to);
+      };
+
       const renderChat = (messages) => {
         if (!chatList) return;
         const previousScrollTop = chatList.scrollTop;
         const keepPinnedTop = previousScrollTop < 20;
         chatList.innerHTML = "";
+        chatLatestMessageTime = 0;
         if (!Array.isArray(messages) || !messages.length) {
           const row = document.createElement("div");
           row.className = "list__row";
@@ -497,10 +675,9 @@
         messages.slice(0, 40).forEach((msg) => {
           const row = document.createElement("div");
           row.className = "list__row";
-          const msgId = String(
-            msg.id || `${msg.author || ""}-${msg.createdAt || ""}-${msg.text || ""}`,
-          );
-          const isNew = !isInitialChatLoad && !knownChatMessageIds.has(msgId);
+          const msgTime = msg.createdAt ? new Date(msg.createdAt).getTime() : 0;
+          chatLatestMessageTime = Math.max(chatLatestMessageTime, msgTime || 0);
+          const isNew = !isInitialChatLoad && msgTime > chatLastReadAt;
           if (isNew) {
             row.classList.add("chat-row--new");
           }
@@ -525,12 +702,22 @@
           row.appendChild(left);
           chatList.appendChild(row);
         });
-        messages.forEach((msg) => {
-          const msgId = String(
-            msg.id || `${msg.author || ""}-${msg.createdAt || ""}-${msg.text || ""}`,
-          );
-          knownChatMessageIds.add(msgId);
-        });
+
+        // Mark as read:
+        // - on initial load: treat everything as read
+        // - while user is at the top: treat everything as read up to latest time
+        if (isInitialChatLoad) {
+          chatLastReadAt = chatLatestMessageTime;
+          try {
+            localStorage.setItem(CHAT_LAST_READ_KEY, String(chatLastReadAt));
+          } catch (e) {}
+        } else if (keepPinnedTop && chatLatestMessageTime > 0) {
+          chatLastReadAt = chatLatestMessageTime;
+          try {
+            localStorage.setItem(CHAT_LAST_READ_KEY, String(chatLastReadAt));
+          } catch (e) {}
+        }
+
         isInitialChatLoad = false;
         if (keepPinnedTop) {
           chatList.scrollTop = 0;
@@ -553,6 +740,18 @@
           chatLoadInFlight = false;
         }
       };
+
+      if (chatList) {
+        chatList.addEventListener("scroll", () => {
+          // Chat newest messages are on top: "lesen" = user nahe am Top.
+          if (chatList.scrollTop < 20 && chatLatestMessageTime > 0) {
+            chatLastReadAt = chatLatestMessageTime;
+            try {
+              localStorage.setItem(CHAT_LAST_READ_KEY, String(chatLastReadAt));
+            } catch (e) {}
+          }
+        });
+      }
 
       const sendChat = async () => {
         const text = String(chatInput?.value || "").trim();
@@ -590,16 +789,18 @@
         }
       };
 
-      loadLieferanten();
-      loadArtikel();
       loadLetzteBestellungen();
       loadOffeneCount();
       loadDashboardNotes();
       loadChat();
+      // initial + live refresh for sum tile
+      refreshSummeImZeitraum();
+      window.setInterval(refreshSummeImZeitraum, 15000);
       chatPollHandle = window.setInterval(loadChat, 5000);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
           loadChat();
+          refreshSummeImZeitraum();
         }
       });
       if (chatSendBtn) chatSendBtn.addEventListener("click", sendChat);
@@ -609,6 +810,47 @@
             event.preventDefault();
             sendChat();
           }
+        });
+      }
+
+      const onRangeChange = () => {
+        const from = String(sumFromInput?.value || "");
+        const to = String(sumToInput?.value || "");
+        saveRange(from, to);
+        // recompute immediately with current cache (and also refresh fetch to catch new orders)
+        renderSummeImZeitraum(from, to);
+        refreshSummeImZeitraum();
+      };
+      if (sumFromInput) sumFromInput.addEventListener("change", onRangeChange);
+      if (sumToInput) sumToInput.addEventListener("change", onRangeChange);
+
+      const setRangeAndRefresh = (fromDate, toDate) => {
+        const from = toDateInputValue(fromDate);
+        const to = toDateInputValue(toDate);
+        if (sumFromInput) sumFromInput.value = from;
+        if (sumToInput) sumToInput.value = to;
+        saveRange(from, to);
+        renderSummeImZeitraum(from, to);
+        refreshSummeImZeitraum();
+      };
+
+      if (sumQuickThisMonth) {
+        sumQuickThisMonth.addEventListener("click", () => {
+          const now = new Date();
+          setRangeAndRefresh(startOfMonth(now), endOfMonth(now));
+        });
+      }
+      if (sumQuickLastMonth) {
+        sumQuickLastMonth.addEventListener("click", () => {
+          const now = new Date();
+          const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          setRangeAndRefresh(startOfMonth(last), endOfMonth(last));
+        });
+      }
+      if (sumQuickThisYear) {
+        sumQuickThisYear.addEventListener("click", () => {
+          const now = new Date();
+          setRangeAndRefresh(startOfYear(now), endOfYear(now));
         });
       }
     </script>

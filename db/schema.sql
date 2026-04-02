@@ -30,13 +30,14 @@ create table if not exists bestellungen (
     -- bestellnummer wurde in einer späteren Version ergänzt; für bestehende
     -- Datenbanken wird die Spalte weiter unten per ALTER TABLE hinzugefügt.
     bestellnummer integer unique not null default 0,
+    auftrags_bestaetigt boolean not null default false,
     created_by_uid text,
     created_by_name text,
     created_by_email text,
     artikel_id integer not null references artikel(id) on delete restrict,
     lieferant_id integer not null references lieferanten(id) on delete restrict,
     menge integer not null,
-    status text not null check (status in ('offen', 'bestellt', 'geliefert', 'storniert')),
+    status text not null check (status in ('offen', 'bestellt', 'teilgeliefert', 'geliefert', 'teilstorniert', 'storniert')),
     bestell_datum timestamp not null default now()
 );
 
@@ -46,6 +47,8 @@ create table if not exists bestellpositionen (
     artikel_id integer not null references artikel(id) on delete restrict,
     lieferant_id integer not null references lieferanten(id) on delete restrict,
     menge integer not null,
+    geliefert_menge integer not null default 0,
+    storniert_menge integer not null default 0,
     notiz text
 );
 
@@ -88,10 +91,18 @@ alter table bestellungen
     drop constraint if exists bestellungen_status_check;
 alter table bestellungen
     add constraint bestellungen_status_check
-    check (status in ('offen', 'bestellt', 'geliefert', 'storniert'));
+    check (status in ('offen', 'bestellt', 'teilgeliefert', 'geliefert', 'teilstorniert', 'storniert'));
 
 -- Lagerbestand/Mindestbestand werden nicht mehr verwendet.
 alter table artikel
     drop column if exists lagerbestand;
 alter table artikel
     drop column if exists min_bestand;
+
+-- Delivery/Cancel tracking & Auftragsbestaetigung
+alter table bestellungen
+    add column if not exists auftrags_bestaetigt boolean not null default false;
+alter table bestellpositionen
+    add column if not exists geliefert_menge integer not null default 0;
+alter table bestellpositionen
+    add column if not exists storniert_menge integer not null default 0;

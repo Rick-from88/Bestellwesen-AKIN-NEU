@@ -77,10 +77,10 @@
                 />
               </svg>
               <div>
-                <div class="card__label">Maileinstellungen</div>
-                <div class="card__value">
-                  SMTP, Absenderadresse konfigurieren
-                </div>
+              <div class="card__label">Maileinstellungen</div>
+              <div class="card__value">
+                SMTP, Vorlagen & Reminder konfigurieren
+              </div>
               </div>
             </div>
           </a>
@@ -252,6 +252,33 @@
                   id="email_body"
                   rows="6"
                   placeholder="Hallo {{kunde}},\nHier ist Ihre Bestellung..."
+                ></textarea>
+              </div>
+              <hr />
+              <div
+                style="
+                  grid-column: 1 / -1;
+                  font-weight: 700;
+                  color: var(--ink-soft);
+                  margin-bottom: 4px;
+                "
+              >
+                Reminder-Vorlage (Nachfassen)
+              </div>
+              <div class="form__row">
+                <label for="reminder_subject">Reminder Betreff</label>
+                <input
+                  id="reminder_subject"
+                  type="text"
+                  placeholder="Nachfassen Bestellung {{bestellnummer}} bei {{lieferant}}"
+                />
+              </div>
+              <div class="form__row">
+                <label for="reminder_body">Reminder Body (HTML erlaubt)</label>
+                <textarea
+                  id="reminder_body"
+                  rows="6"
+                  placeholder="Bitte um Rückmeldung zum Liefertermin.\n\n{{artikel_text}}"
                 ></textarea>
               </div>
               <div class="form__row">
@@ -927,6 +954,8 @@
       const email_subject = document.getElementById("email_subject");
       const email_body = document.getElementById("email_body");
       const email_signature = document.getElementById("email_signature");
+      const reminder_subject = document.getElementById("reminder_subject");
+      const reminder_body = document.getElementById("reminder_body");
 
       mailCancel.addEventListener("click", () => {
         if (mailDetails) mailDetails.style.display = "none";
@@ -947,6 +976,8 @@
             EMAIL_SUBJECT: email_subject.value || null,
             EMAIL_BODY: email_body.value || null,
             EMAIL_SIGNATURE: email_signature.value || null,
+            REMINDER_SUBJECT: reminder_subject?.value || null,
+            REMINDER_BODY: reminder_body?.value || null,
           };
           // normalize keys to backend's settings shape (lowercase keys expected elsewhere)
           const normalized = {};
@@ -1021,6 +1052,8 @@
           email_subject.value = data.email_subject || "";
           email_body.value = data.email_body || "";
           email_signature.value = data.email_signature || "";
+          if (reminder_subject) reminder_subject.value = data.reminder_subject || "";
+          if (reminder_body) reminder_body.value = data.reminder_body || "";
 
           // populate current SMTP summary (read-only)
           document.getElementById("mailCurrentHost").textContent =

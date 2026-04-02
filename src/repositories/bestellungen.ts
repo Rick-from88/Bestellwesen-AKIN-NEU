@@ -2,18 +2,27 @@ import { getClient, query } from "../db";
 import { getSetting, setSetting } from "./settings";
 import { Bestellung, BestellungPosition } from "../types";
 
-export type BestellungStatus = "offen" | "bestellt" | "geliefert" | "storniert";
+export type BestellungStatus =
+  | "offen"
+  | "bestellt"
+  | "teilgeliefert"
+  | "geliefert"
+  | "teilstorniert"
+  | "storniert";
 
 export interface BestellungPositionInput {
   artikelId: number;
   lieferantId: number;
   menge: number;
+  geliefertMenge?: number;
+  storniertMenge?: number;
   notiz?: string;
 }
 
 export interface CreateBestellungInput {
   status?: BestellungStatus;
   bestellDatum?: string;
+  auftragsBestaetigt?: boolean;
   createdByUid?: string;
   createdByName?: string;
   createdByEmail?: string;
@@ -23,6 +32,7 @@ export interface CreateBestellungInput {
 export interface UpdateBestellungInput {
   status?: BestellungStatus;
   bestellDatum?: string;
+  auftragsBestaetigt?: boolean;
   positionen: BestellungPositionInput[];
 }
 
@@ -34,10 +44,13 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
                     b.created_by_name as "createdByName",
                     b.created_by_email as "createdByEmail",
                     b.status,
+                    b.auftrags_bestaetigt as "auftragsBestaetigt",
                     b.bestell_datum as "bestellDatum",
                     p.artikel_id as "artikelId",
                     p.lieferant_id as "lieferantId",
                     p.menge,
+                    p.geliefert_menge as "geliefertMenge",
+                    p.storniert_menge as "storniertMenge",
                     p.notiz
                  from bestellungen b
                  join bestellpositionen p on p.bestellung_id = b.id
@@ -48,10 +61,13 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
                     b.created_by_name as "createdByName",
                     b.created_by_email as "createdByEmail",
                     b.status,
+                    b.auftrags_bestaetigt as "auftragsBestaetigt",
                     b.bestell_datum as "bestellDatum",
                     b.artikel_id as "artikelId",
                     b.lieferant_id as "lieferantId",
                     b.menge,
+                    0::int as "geliefertMenge",
+                    0::int as "storniertMenge",
                     null::text as notiz
                  from bestellungen b
                 where not exists (
@@ -74,17 +90,20 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
         createdByName: row.createdByName ?? undefined,
         createdByEmail: row.createdByEmail ?? undefined,
         status: row.status as BestellungStatus,
+        auftragsBestaetigt: row.auftragsBestaetigt ?? false,
         bestellDatum: row.bestellDatum,
         positionen: [],
       });
     }
 
-    if (row.artikelId && row.lieferantId && row.menge) {
+      if (row.artikelId && row.lieferantId && row.menge) {
       const position: BestellungPosition = {
         artikelId: row.artikelId,
         lieferantId: row.lieferantId,
         menge: row.menge,
         notiz: row.notiz ?? undefined,
+          geliefertMenge: row.geliefertMenge ?? 0,
+          storniertMenge: row.storniertMenge ?? 0,
       };
       bestellungen.get(id)?.positionen.push(position);
     }
@@ -191,7 +210,7 @@ export const createBestellung = async (
     }
 
     const bestellungResult = await client.query(
-      'insert into bestellungen (bestellnummer, created_by_uid, created_by_name, created_by_email, artikel_id, lieferant_id, menge, status, bestell_datum) values ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9::timestamp, now())) returning id, bestellnummer, created_by_uid as "createdByUid", created_by_name as "createdByName", created_by_email as "createdByEmail", status, bestell_datum as "bestellDatum"',
+      'insert into bestellungen (bestellnummer, created_by_uid, created_by_name, created_by_email, artikel_id, lieferant_id, menge, auftrags_bestaetigt, status, bestell_datum) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, coalesce($10::timestamp, now())) returning id, bestellnummer, created_by_uid as "createdByUid", created_by_name as "createdByName", created_by_email as "createdByEmail", status, auftrags_bestaetigt as "auftragsBestaetigt", bestell_datum as "bestellDatum"',
       [
         nextNr,
         input.createdByUid ?? null,
@@ -200,6 +219,7 @@ export const createBestellung = async (
         firstPosition.artikelId,
         firstPosition.lieferantId,
         firstPosition.menge,
+        input.auftragsBestaetigt ?? false,
         input.status ?? "offen",
         input.bestellDatum ?? null,
       ],
@@ -209,12 +229,14 @@ export const createBestellung = async (
 
     for (const position of input.positionen) {
       await client.query(
-        "insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, notiz) values ($1, $2, $3, $4, $5)",
+        "insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz) values ($1, $2, $3, $4, $5, $6, $7)",
         [
           bestellung.id,
           position.artikelId,
           position.lieferantId,
           position.menge,
+          position.geliefertMenge ?? 0,
+          position.storniertMenge ?? 0,
           position.notiz ?? null,
         ],
       );
@@ -229,6 +251,7 @@ export const createBestellung = async (
       createdByName: bestellung.createdByName ?? undefined,
       createdByEmail: bestellung.createdByEmail ?? undefined,
       status: bestellung.status as BestellungStatus,
+      auftragsBestaetigt: bestellung.auftragsBestaetigt ?? false,
       bestellDatum: bestellung.bestellDatum,
       positionen: input.positionen,
     };
@@ -251,11 +274,20 @@ export const updateBestellung = async (
 
     const firstPosition = input.positionen[0];
     const bestellungResult = await client.query(
-      'update bestellungen set artikel_id = $1, lieferant_id = $2, menge = $3, status = $4, bestell_datum = coalesce($5::timestamp, bestell_datum) where id = $6 returning id, status, bestell_datum as "bestellDatum"',
+      `update bestellungen
+         set artikel_id = $1,
+             lieferant_id = $2,
+             menge = $3,
+             auftrags_bestaetigt = coalesce($4::boolean, auftrags_bestaetigt),
+             status = $5,
+             bestell_datum = coalesce($6::timestamp, bestell_datum)
+       where id = $7
+       returning id, status, auftrags_bestaetigt as "auftragsBestaetigt", bestell_datum as "bestellDatum"`,
       [
         firstPosition.artikelId,
         firstPosition.lieferantId,
         firstPosition.menge,
+        input.auftragsBestaetigt ?? null,
         input.status ?? "offen",
         input.bestellDatum ?? null,
         id,
@@ -266,19 +298,18 @@ export const updateBestellung = async (
       throw new Error("Bestellung nicht gefunden");
     }
 
-    await client.query(
-      "delete from bestellpositionen where bestellung_id = $1",
-      [id],
-    );
+    await client.query("delete from bestellpositionen where bestellung_id = $1", [id]);
 
     for (const position of input.positionen) {
       await client.query(
-        "insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, notiz) values ($1, $2, $3, $4, $5)",
+        "insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz) values ($1, $2, $3, $4, $5, $6, $7)",
         [
           id,
           position.artikelId,
           position.lieferantId,
           position.menge,
+          position.geliefertMenge ?? 0,
+          position.storniertMenge ?? 0,
           position.notiz ?? null,
         ],
       );
@@ -299,6 +330,7 @@ export const updateBestellung = async (
       id: bestellung.id,
       bestellnummer,
       status: bestellung.status as BestellungStatus,
+      auftragsBestaetigt: bestellung.auftragsBestaetigt ?? false,
       bestellDatum: bestellung.bestellDatum,
       positionen: input.positionen,
     };
@@ -324,10 +356,13 @@ export const getBestellungById = async (
                 b.created_by_name as "createdByName",
                 b.created_by_email as "createdByEmail",
                 b.status,
+                b.auftrags_bestaetigt as "auftragsBestaetigt",
                 b.bestell_datum as "bestellDatum",
                 p.artikel_id as "artikelId",
                 p.lieferant_id as "lieferantId",
                 p.menge,
+                p.geliefert_menge as "geliefertMenge",
+                p.storniert_menge as "storniertMenge",
                 p.notiz
              from bestellungen b
              left join bestellpositionen p on p.bestellung_id = b.id
@@ -348,6 +383,7 @@ export const getBestellungById = async (
         createdByName: row.createdByName ?? undefined,
         createdByEmail: row.createdByEmail ?? undefined,
         status: row.status as BestellungStatus,
+          auftragsBestaetigt: row.auftragsBestaetigt ?? false,
         bestellDatum: row.bestellDatum,
         positionen: [],
       });
@@ -357,6 +393,8 @@ export const getBestellungById = async (
         artikelId: row.artikelId,
         lieferantId: row.lieferantId,
         menge: row.menge,
+          geliefertMenge: row.geliefertMenge ?? 0,
+          storniertMenge: row.storniertMenge ?? 0,
         notiz: row.notiz ?? undefined,
       });
     }

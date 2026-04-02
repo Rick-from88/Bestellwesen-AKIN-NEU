@@ -19,10 +19,13 @@ const listBestellungen = () => __awaiter(void 0, void 0, void 0, function* () {
                     b.created_by_name as "createdByName",
                     b.created_by_email as "createdByEmail",
                     b.status,
+                    b.auftrags_bestaetigt as "auftragsBestaetigt",
                     b.bestell_datum as "bestellDatum",
                     p.artikel_id as "artikelId",
                     p.lieferant_id as "lieferantId",
                     p.menge,
+                    p.geliefert_menge as "geliefertMenge",
+                    p.storniert_menge as "storniertMenge",
                     p.notiz
                  from bestellungen b
                  join bestellpositionen p on p.bestellung_id = b.id
@@ -33,10 +36,13 @@ const listBestellungen = () => __awaiter(void 0, void 0, void 0, function* () {
                     b.created_by_name as "createdByName",
                     b.created_by_email as "createdByEmail",
                     b.status,
+                    b.auftrags_bestaetigt as "auftragsBestaetigt",
                     b.bestell_datum as "bestellDatum",
                     b.artikel_id as "artikelId",
                     b.lieferant_id as "lieferantId",
                     b.menge,
+                    0::int as "geliefertMenge",
+                    0::int as "storniertMenge",
                     null::text as notiz
                  from bestellungen b
                 where not exists (
@@ -45,7 +51,7 @@ const listBestellungen = () => __awaiter(void 0, void 0, void 0, function* () {
                 order by "bestellDatum" desc, id desc`);
     const bestellungen = new Map();
     result.rows.forEach((row) => {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         const id = row.id;
         const existing = bestellungen.get(id);
         if (!existing) {
@@ -56,6 +62,7 @@ const listBestellungen = () => __awaiter(void 0, void 0, void 0, function* () {
                 createdByName: (_c = row.createdByName) !== null && _c !== void 0 ? _c : undefined,
                 createdByEmail: (_d = row.createdByEmail) !== null && _d !== void 0 ? _d : undefined,
                 status: row.status,
+                auftragsBestaetigt: (_e = row.auftragsBestaetigt) !== null && _e !== void 0 ? _e : false,
                 bestellDatum: row.bestellDatum,
                 positionen: [],
             });
@@ -65,9 +72,11 @@ const listBestellungen = () => __awaiter(void 0, void 0, void 0, function* () {
                 artikelId: row.artikelId,
                 lieferantId: row.lieferantId,
                 menge: row.menge,
-                notiz: (_e = row.notiz) !== null && _e !== void 0 ? _e : undefined,
+                notiz: (_f = row.notiz) !== null && _f !== void 0 ? _f : undefined,
+                geliefertMenge: (_g = row.geliefertMenge) !== null && _g !== void 0 ? _g : 0,
+                storniertMenge: (_h = row.storniertMenge) !== null && _h !== void 0 ? _h : 0,
             };
-            (_f = bestellungen.get(id)) === null || _f === void 0 ? void 0 : _f.positionen.push(position);
+            (_j = bestellungen.get(id)) === null || _j === void 0 ? void 0 : _j.positionen.push(position);
         }
     });
     const resultArray = Array.from(bestellungen.values());
@@ -125,7 +134,7 @@ const getNextBestellnummer = (dateIso) => __awaiter(void 0, void 0, void 0, func
 });
 exports.getNextBestellnummer = getNextBestellnummer;
 const createBestellung = (input) => __awaiter(void 0, void 0, void 0, function* () {
-    var _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    var _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
     const client = yield (0, db_1.getClient)();
     try {
         yield client.query("begin");
@@ -158,7 +167,7 @@ const createBestellung = (input) => __awaiter(void 0, void 0, void 0, function* 
             // non-fatal: if updating the override fails, continue without blocking the creation
             console.error("Warnung: konnte Override-Einstellung nicht aktualisieren", e);
         }
-        const bestellungResult = yield client.query('insert into bestellungen (bestellnummer, created_by_uid, created_by_name, created_by_email, artikel_id, lieferant_id, menge, status, bestell_datum) values ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9::timestamp, now())) returning id, bestellnummer, created_by_uid as "createdByUid", created_by_name as "createdByName", created_by_email as "createdByEmail", status, bestell_datum as "bestellDatum"', [
+        const bestellungResult = yield client.query('insert into bestellungen (bestellnummer, created_by_uid, created_by_name, created_by_email, artikel_id, lieferant_id, menge, auftrags_bestaetigt, status, bestell_datum) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, coalesce($10::timestamp, now())) returning id, bestellnummer, created_by_uid as "createdByUid", created_by_name as "createdByName", created_by_email as "createdByEmail", status, auftrags_bestaetigt as "auftragsBestaetigt", bestell_datum as "bestellDatum"', [
             nextNr,
             (_c = input.createdByUid) !== null && _c !== void 0 ? _c : null,
             (_d = input.createdByName) !== null && _d !== void 0 ? _d : null,
@@ -166,27 +175,31 @@ const createBestellung = (input) => __awaiter(void 0, void 0, void 0, function* 
             firstPosition.artikelId,
             firstPosition.lieferantId,
             firstPosition.menge,
-            (_f = input.status) !== null && _f !== void 0 ? _f : "offen",
-            (_g = input.bestellDatum) !== null && _g !== void 0 ? _g : null,
+            (_f = input.auftragsBestaetigt) !== null && _f !== void 0 ? _f : false,
+            (_g = input.status) !== null && _g !== void 0 ? _g : "offen",
+            (_h = input.bestellDatum) !== null && _h !== void 0 ? _h : null,
         ]);
         const bestellung = bestellungResult.rows[0];
         for (const position of input.positionen) {
-            yield client.query("insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, notiz) values ($1, $2, $3, $4, $5)", [
+            yield client.query("insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz) values ($1, $2, $3, $4, $5, $6, $7)", [
                 bestellung.id,
                 position.artikelId,
                 position.lieferantId,
                 position.menge,
-                (_h = position.notiz) !== null && _h !== void 0 ? _h : null,
+                (_j = position.geliefertMenge) !== null && _j !== void 0 ? _j : 0,
+                (_k = position.storniertMenge) !== null && _k !== void 0 ? _k : 0,
+                (_l = position.notiz) !== null && _l !== void 0 ? _l : null,
             ]);
         }
         yield client.query("commit");
         return {
             id: bestellung.id,
-            bestellnummer: (_j = bestellung.bestellnummer) !== null && _j !== void 0 ? _j : undefined,
-            createdByUid: (_k = bestellung.createdByUid) !== null && _k !== void 0 ? _k : undefined,
-            createdByName: (_l = bestellung.createdByName) !== null && _l !== void 0 ? _l : undefined,
-            createdByEmail: (_m = bestellung.createdByEmail) !== null && _m !== void 0 ? _m : undefined,
+            bestellnummer: (_m = bestellung.bestellnummer) !== null && _m !== void 0 ? _m : undefined,
+            createdByUid: (_o = bestellung.createdByUid) !== null && _o !== void 0 ? _o : undefined,
+            createdByName: (_p = bestellung.createdByName) !== null && _p !== void 0 ? _p : undefined,
+            createdByEmail: (_q = bestellung.createdByEmail) !== null && _q !== void 0 ? _q : undefined,
             status: bestellung.status,
+            auftragsBestaetigt: (_r = bestellung.auftragsBestaetigt) !== null && _r !== void 0 ? _r : false,
             bestellDatum: bestellung.bestellDatum,
             positionen: input.positionen,
         };
@@ -201,17 +214,26 @@ const createBestellung = (input) => __awaiter(void 0, void 0, void 0, function* 
 });
 exports.createBestellung = createBestellung;
 const updateBestellung = (id, input) => __awaiter(void 0, void 0, void 0, function* () {
-    var _o, _p, _q, _r, _s;
+    var _s, _t, _u, _v, _w, _x, _y, _z, _0;
     const client = yield (0, db_1.getClient)();
     try {
         yield client.query("begin");
         const firstPosition = input.positionen[0];
-        const bestellungResult = yield client.query('update bestellungen set artikel_id = $1, lieferant_id = $2, menge = $3, status = $4, bestell_datum = coalesce($5::timestamp, bestell_datum) where id = $6 returning id, status, bestell_datum as "bestellDatum"', [
+        const bestellungResult = yield client.query(`update bestellungen
+         set artikel_id = $1,
+             lieferant_id = $2,
+             menge = $3,
+             auftrags_bestaetigt = coalesce($4::boolean, auftrags_bestaetigt),
+             status = $5,
+             bestell_datum = coalesce($6::timestamp, bestell_datum)
+       where id = $7
+       returning id, status, auftrags_bestaetigt as "auftragsBestaetigt", bestell_datum as "bestellDatum"`, [
             firstPosition.artikelId,
             firstPosition.lieferantId,
             firstPosition.menge,
-            (_o = input.status) !== null && _o !== void 0 ? _o : "offen",
-            (_p = input.bestellDatum) !== null && _p !== void 0 ? _p : null,
+            (_s = input.auftragsBestaetigt) !== null && _s !== void 0 ? _s : null,
+            (_t = input.status) !== null && _t !== void 0 ? _t : "offen",
+            (_u = input.bestellDatum) !== null && _u !== void 0 ? _u : null,
             id,
         ]);
         if (!bestellungResult.rows.length) {
@@ -219,23 +241,26 @@ const updateBestellung = (id, input) => __awaiter(void 0, void 0, void 0, functi
         }
         yield client.query("delete from bestellpositionen where bestellung_id = $1", [id]);
         for (const position of input.positionen) {
-            yield client.query("insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, notiz) values ($1, $2, $3, $4, $5)", [
+            yield client.query("insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz) values ($1, $2, $3, $4, $5, $6, $7)", [
                 id,
                 position.artikelId,
                 position.lieferantId,
                 position.menge,
-                (_q = position.notiz) !== null && _q !== void 0 ? _q : null,
+                (_v = position.geliefertMenge) !== null && _v !== void 0 ? _v : 0,
+                (_w = position.storniertMenge) !== null && _w !== void 0 ? _w : 0,
+                (_x = position.notiz) !== null && _x !== void 0 ? _x : null,
             ]);
         }
         yield client.query("commit");
         const bestellung = bestellungResult.rows[0];
         // fetch bestellnummer (was not changed by update)
         const nrRes = yield client.query("select bestellnummer from bestellungen where id = $1", [id]);
-        const bestellnummer = (_s = (_r = nrRes.rows[0]) === null || _r === void 0 ? void 0 : _r.bestellnummer) !== null && _s !== void 0 ? _s : undefined;
+        const bestellnummer = (_z = (_y = nrRes.rows[0]) === null || _y === void 0 ? void 0 : _y.bestellnummer) !== null && _z !== void 0 ? _z : undefined;
         return {
             id: bestellung.id,
             bestellnummer,
             status: bestellung.status,
+            auftragsBestaetigt: (_0 = bestellung.auftragsBestaetigt) !== null && _0 !== void 0 ? _0 : false,
             bestellDatum: bestellung.bestellDatum,
             positionen: input.positionen,
         };
@@ -260,10 +285,13 @@ const getBestellungById = (id) => __awaiter(void 0, void 0, void 0, function* ()
                 b.created_by_name as "createdByName",
                 b.created_by_email as "createdByEmail",
                 b.status,
+                b.auftrags_bestaetigt as "auftragsBestaetigt",
                 b.bestell_datum as "bestellDatum",
                 p.artikel_id as "artikelId",
                 p.lieferant_id as "lieferantId",
                 p.menge,
+                p.geliefert_menge as "geliefertMenge",
+                p.storniert_menge as "storniertMenge",
                 p.notiz
              from bestellungen b
              left join bestellpositionen p on p.bestellung_id = b.id
@@ -272,7 +300,7 @@ const getBestellungById = (id) => __awaiter(void 0, void 0, void 0, function* ()
         return null;
     const bestellungenMap = new Map();
     res.rows.forEach((row) => {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         const bid = row.id;
         if (!bestellungenMap.has(bid)) {
             bestellungenMap.set(bid, {
@@ -282,16 +310,19 @@ const getBestellungById = (id) => __awaiter(void 0, void 0, void 0, function* ()
                 createdByName: (_c = row.createdByName) !== null && _c !== void 0 ? _c : undefined,
                 createdByEmail: (_d = row.createdByEmail) !== null && _d !== void 0 ? _d : undefined,
                 status: row.status,
+                auftragsBestaetigt: (_e = row.auftragsBestaetigt) !== null && _e !== void 0 ? _e : false,
                 bestellDatum: row.bestellDatum,
                 positionen: [],
             });
         }
         if (row.artikelId && row.lieferantId && row.menge) {
-            (_e = bestellungenMap.get(bid)) === null || _e === void 0 ? void 0 : _e.positionen.push({
+            (_f = bestellungenMap.get(bid)) === null || _f === void 0 ? void 0 : _f.positionen.push({
                 artikelId: row.artikelId,
                 lieferantId: row.lieferantId,
                 menge: row.menge,
-                notiz: (_f = row.notiz) !== null && _f !== void 0 ? _f : undefined,
+                geliefertMenge: (_g = row.geliefertMenge) !== null && _g !== void 0 ? _g : 0,
+                storniertMenge: (_h = row.storniertMenge) !== null && _h !== void 0 ? _h : 0,
+                notiz: (_j = row.notiz) !== null && _j !== void 0 ? _j : undefined,
             });
         }
     });

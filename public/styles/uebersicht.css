@@ -147,6 +147,58 @@ body::before {
   margin-bottom: 32px;
 }
 
+.dashboard-grid {
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+}
+
+@media (max-width: 720px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-grid input[type="date"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 21, 21, 0.12);
+  background: linear-gradient(180deg, #ffffff, #fbf9f6);
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  box-shadow: 0 10px 22px rgba(17, 21, 21, 0.06);
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease;
+}
+
+.dashboard-grid input[type="date"]:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 107, 53, 0.35);
+  box-shadow: 0 14px 28px rgba(255, 107, 53, 0.10);
+}
+
+.dashboard-grid input[type="date"]:focus {
+  outline: none;
+  border-color: rgba(255, 107, 53, 0.55);
+  box-shadow:
+    0 16px 34px rgba(255, 107, 53, 0.14),
+    0 0 0 4px rgba(255, 107, 53, 0.14);
+}
+
+/* Chrome/Edge calendar icon */
+.dashboard-grid input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.85;
+  cursor: pointer;
+  filter: grayscale(10%) saturate(1.2);
+}
+
+.dashboard-grid input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 .card {
   background: var(--panel);
   padding: 20px;
@@ -686,6 +738,19 @@ body::before {
   gap: 12px;
   align-items: center;
 }
+
+/* Mail-Entwürfe: Labels über Feldern, damit Editor/Preview wirklich breit werden */
+.modal--maildraft .form__row.form__row--stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.modal--maildraft textarea {
+  width: 100%;
+  min-width: 100%;
+  resize: vertical;
+}
 .form__row label {
   color: var(--ink-soft);
   font-weight: 600;
@@ -705,9 +770,9 @@ body::before {
 }
 .position-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 120px 120px;
+  grid-template-columns: 1fr 1fr 90px 90px 90px 140px;
   gap: 8px;
-  align-items: center;
+  align-items: start;
 }
 .form__actions {
   display: flex;

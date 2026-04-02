@@ -44,6 +44,13 @@
         <div class="panel">
           <div class="panel__header">
             <h2>Artikel vom Lieferanten</h2>
+            <button
+              class="btn btn--ghost btn--small"
+              type="button"
+              id="addArtikelFromSupplierBtn"
+            >
+              Artikel anlegen
+            </button>
           </div>
           <div class="list" id="artikelList"></div>
         </div>
@@ -74,10 +81,175 @@
       const emailForm = document.getElementById("emailForm");
       const emailMessage = document.getElementById("emailMessage");
       const mailtoLink = document.getElementById("mailtoLink");
+      const addArtikelFromSupplierBtn = document.getElementById(
+        "addArtikelFromSupplierBtn",
+      );
       let imageModal = null;
       let imageModalImage = null;
 
       const lieferantId = Number(window.location.pathname.split("/").pop());
+
+      let artikelCreateModal = null;
+      let artikelCreateForm = null;
+      let artikelCreateMsg = null;
+
+      const ensureArtikelCreateModal = () => {
+        if (artikelCreateModal) return;
+        artikelCreateModal = document.createElement("div");
+        artikelCreateModal.className = "modal";
+        artikelCreateModal.setAttribute("aria-hidden", "true");
+        artikelCreateModal.innerHTML = `
+          <div class="modal__backdrop"></div>
+          <div class="modal__content" role="dialog" aria-modal="true" style="max-width: 980px">
+            <div class="modal__header">
+              <h2>Artikel anlegen (Lieferant)</h2>
+              <button class="btn btn--link" type="button" id="artikelCreateClose">Schliessen</button>
+            </div>
+            <form class="form" id="artikelCreateForm" style="padding: 8px 0 0">
+              <div class="form__row">
+                <label for="ac_name">Artikelbezeichnung</label>
+                <input id="ac_name" type="text" required />
+              </div>
+              <div class="form__row">
+                <label for="ac_preis">Preis (EUR)</label>
+                <input id="ac_preis" type="number" min="0" step="0.01" required />
+              </div>
+              <div class="form__row">
+                <label for="ac_artikelnummer">Artikelnummer</label>
+                <input id="ac_artikelnummer" type="text" />
+              </div>
+              <div class="form__row">
+                <label for="ac_einheit">Einheit</label>
+                <input id="ac_einheit" type="text" />
+              </div>
+              <div class="form__row">
+                <label for="ac_ve">VE</label>
+                <input id="ac_ve" type="text" />
+              </div>
+              <div class="form__row">
+                <label for="ac_std">Standardbestellwert</label>
+                <input id="ac_std" type="number" min="1" step="1" />
+              </div>
+              <div class="form__actions">
+                <button class="btn btn--primary" type="submit">Speichern</button>
+                <button class="btn btn--ghost" type="button" id="artikelCreateCancel">Abbrechen</button>
+              </div>
+              <div id="artikelCreateMsg" class="form__message" role="status"></div>
+            </form>
+          </div>
+        `;
+        document.body.appendChild(artikelCreateModal);
+        const closeBtn = artikelCreateModal.querySelector("#artikelCreateClose");
+        const cancelBtn = artikelCreateModal.querySelector("#artikelCreateCancel");
+        const backdrop = artikelCreateModal.querySelector(".modal__backdrop");
+        artikelCreateForm = artikelCreateModal.querySelector("#artikelCreateForm");
+        artikelCreateMsg = artikelCreateModal.querySelector("#artikelCreateMsg");
+        const close = () => {
+          artikelCreateModal.classList.remove("is-open");
+          artikelCreateModal.setAttribute("aria-hidden", "true");
+          if (artikelCreateMsg) artikelCreateMsg.textContent = "";
+        };
+        closeBtn?.addEventListener("click", close);
+        cancelBtn?.addEventListener("click", close);
+        backdrop?.addEventListener("click", close);
+
+        artikelCreateForm?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          if (!artikelCreateMsg) return;
+          artikelCreateMsg.textContent = "";
+          try {
+            const name = String(
+              artikelCreateModal.querySelector("#ac_name")?.value || "",
+            ).trim();
+            const preis = Number(
+              String(artikelCreateModal.querySelector("#ac_preis")?.value || "")
+                .trim()
+                .replace(",", "."),
+            );
+            if (!name || !Number.isFinite(preis)) {
+              artikelCreateMsg.textContent =
+                "Bitte Artikelbezeichnung und Preis ausfüllen.";
+              return;
+            }
+            const payload = {
+              lieferantId,
+              name,
+              beschreibung: "",
+              preis,
+              artikelnummer: String(
+                artikelCreateModal.querySelector("#ac_artikelnummer")?.value || "",
+              ).trim() || undefined,
+              einheit: String(
+                artikelCreateModal.querySelector("#ac_einheit")?.value || "",
+              ).trim() || undefined,
+              verpackungseinheit: String(
+                artikelCreateModal.querySelector("#ac_ve")?.value || "",
+              ).trim() || undefined,
+              standardBestellwert: (() => {
+                const v = Number(
+                  String(artikelCreateModal.querySelector("#ac_std")?.value || "")
+                    .trim()
+                    .replace(",", "."),
+                );
+                return Number.isFinite(v) && v >= 1 ? v : undefined;
+              })(),
+            };
+            artikelCreateMsg.textContent = "Speichere...";
+            const res = await fetch("/api/artikel", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+              const txt = await res.text();
+              artikelCreateMsg.textContent = `Fehler: ${txt}`;
+              return;
+            }
+            const created = await res.json().catch(() => null);
+            const newId = Number(created?.id);
+            artikelCreateMsg.textContent = "Gespeichert.";
+            // refresh supplier articles list
+            try {
+              const aRes = await fetch(`/api/lieferanten/${lieferantId}/artikel`);
+              if (aRes.ok) {
+                const list = await aRes.json();
+                renderArtikel(Array.isArray(list) ? list : []);
+              }
+            } catch {}
+            // open article to fill missing fields
+            if (Number.isFinite(newId) && newId > 0) {
+              try {
+                window.location.href = `/artikel?open=${encodeURIComponent(newId)}`;
+              } catch {}
+            }
+            close();
+          } catch (e) {
+            console.error(e);
+            artikelCreateMsg.textContent = "Fehler beim Speichern.";
+          }
+        });
+      };
+
+      const openArtikelCreateModal = () => {
+        ensureArtikelCreateModal();
+        if (!artikelCreateModal) return;
+        // prefill/clear fields
+        try {
+          const setVal = (id, v) => {
+            const el = artikelCreateModal.querySelector(id);
+            if (el) el.value = v;
+          };
+          setVal("#ac_name", "");
+          setVal("#ac_preis", "");
+          setVal("#ac_artikelnummer", "");
+          setVal("#ac_einheit", "");
+          setVal("#ac_ve", "");
+          setVal("#ac_std", "");
+          if (artikelCreateMsg) artikelCreateMsg.textContent = "";
+        } catch {}
+        artikelCreateModal.classList.add("is-open");
+        artikelCreateModal.setAttribute("aria-hidden", "false");
+      };
 
       const formatValue = (label, value) => {
         const row = document.createElement("div");
@@ -277,6 +449,12 @@
           ? `mailto:${email}?${query}`
           : `mailto:${email}`;
       });
+
+      if (addArtikelFromSupplierBtn) {
+        addArtikelFromSupplierBtn.addEventListener("click", () => {
+          openArtikelCreateModal();
+        });
+      }
 
       if (Number.isFinite(lieferantId)) {
         imageModal = document.createElement("div");
