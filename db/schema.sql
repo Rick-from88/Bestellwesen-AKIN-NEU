@@ -1,6 +1,7 @@
 create table if not exists lieferanten (
     id serial primary key,
     name text not null,
+    kundennummer text,
     kontakt_person text,
     email text,
     telefon text,
@@ -73,6 +74,8 @@ alter table bestellungen
     add column if not exists created_by_email text;
 alter table bestellpositionen
     add column if not exists notiz text;
+alter table lieferanten
+    add column if not exists kundennummer text;
 
 -- Migration für ältere Datenbanken ohne erweiterte Artikel-Felder.
 alter table artikel

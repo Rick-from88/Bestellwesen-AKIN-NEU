@@ -2,7 +2,7 @@
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Bestellwesen Dashboard</title>
     <link rel="stylesheet" href="/static/styles/uebersicht.css" />
   </head>
@@ -52,14 +52,7 @@
                 Dieses Jahr
               </button>
             </div>
-            <div
-              style="
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
-                align-items: center;
-              "
-            >
+            <div class="dashboard-sum-dates">
               <label style="display: grid; gap: 4px; font-size: 0.85rem; color: var(--ink-soft)">
                 Von
                 <input id="sumFrom" type="date" />
@@ -135,7 +128,7 @@
             id="chatList"
             style="max-height: 320px; overflow-y: auto; padding-right: 4px"
           ></div>
-          <div class="form__row" style="grid-template-columns: 1fr auto; margin-top: 10px">
+          <div class="form__row form__row--chat" style="margin-top: 10px">
             <input id="chatInput" type="text" placeholder="Nachricht schreiben..." />
             <button class="btn btn--primary" id="chatSendBtn" type="button">
               Senden

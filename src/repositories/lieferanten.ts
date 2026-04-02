@@ -3,6 +3,7 @@ import { Artikel, Lieferant } from "../types";
 
 export interface CreateLieferantInput {
   name: string;
+  kundenNummer?: string;
   kontaktPerson?: string;
   email?: string;
   telefon?: string;
@@ -14,7 +15,7 @@ export interface CreateLieferantInput {
 
 export const listLieferanten = async (): Promise<Lieferant[]> => {
   const result = await query(
-    'select id, name, kontakt_person as "kontaktPerson", email, telefon, strasse, plz, stadt, land from lieferanten order by name',
+    'select id, name, kundennummer as "kundenNummer", kontakt_person as "kontaktPerson", email, telefon, strasse, plz, stadt, land from lieferanten order by name',
   );
 
   return result.rows;
@@ -24,7 +25,7 @@ export const getLieferantById = async (
   id: number,
 ): Promise<Lieferant | null> => {
   const result = await query(
-    'select id, name, kontakt_person as "kontaktPerson", email, telefon, strasse, plz, stadt, land from lieferanten where id = $1',
+    'select id, name, kundennummer as "kundenNummer", kontakt_person as "kontaktPerson", email, telefon, strasse, plz, stadt, land from lieferanten where id = $1',
     [id],
   );
 
@@ -107,9 +108,10 @@ export const createLieferant = async (
   input: CreateLieferantInput,
 ): Promise<Lieferant> => {
   const result = await query(
-    'insert into lieferanten (name, kontakt_person, email, telefon, strasse, plz, stadt, land) values ($1, $2, $3, $4, $5, $6, $7, $8) returning id, name, kontakt_person as "kontaktPerson", email, telefon, strasse, plz, stadt, land',
+    'insert into lieferanten (name, kundennummer, kontakt_person, email, telefon, strasse, plz, stadt, land) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id, name, kundennummer as "kundenNummer", kontakt_person as "kontaktPerson", email, telefon, strasse, plz, stadt, land',
     [
       input.name,
+      input.kundenNummer ?? null,
       input.kontaktPerson ?? null,
       input.email ?? null,
       input.telefon ?? null,
@@ -128,9 +130,10 @@ export const updateLieferant = async (
   input: CreateLieferantInput,
 ): Promise<Lieferant | null> => {
   const result = await query(
-    'update lieferanten set name = $1, kontakt_person = $2, email = $3, telefon = $4, strasse = $5, plz = $6, stadt = $7, land = $8 where id = $9 returning id, name, kontakt_person as "kontaktPerson", email, telefon, strasse, plz, stadt, land',
+    'update lieferanten set name = $1, kundennummer = $2, kontakt_person = $3, email = $4, telefon = $5, strasse = $6, plz = $7, stadt = $8, land = $9 where id = $10 returning id, name, kundennummer as "kundenNummer", kontakt_person as "kontaktPerson", email, telefon, strasse, plz, stadt, land',
     [
       input.name,
+      input.kundenNummer ?? null,
       input.kontaktPerson ?? null,
       input.email ?? null,
       input.telefon ?? null,

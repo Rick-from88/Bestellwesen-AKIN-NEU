@@ -2,7 +2,7 @@
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Lieferanten</title>
     <link rel="stylesheet" href="/static/styles/uebersicht.css" />
   </head>
@@ -62,6 +62,15 @@
           <div class="form__row">
             <label for="lieferantNameInput">Name</label>
             <input id="lieferantNameInput" name="name" type="text" required />
+          </div>
+          <div class="form__row">
+            <label for="lieferantKundenNummerInput">Kundennummer</label>
+            <input
+              id="lieferantKundenNummerInput"
+              name="kundenNummer"
+              type="text"
+              placeholder="z. B. 12345"
+            />
           </div>
           <div class="form__row">
             <label for="lieferantKontaktInput">Kontaktperson</label>
@@ -126,6 +135,9 @@
       const lieferantForm = document.getElementById("lieferantForm");
       const lieferantMessage = document.getElementById("lieferantMessage");
       const lieferantNameInput = document.getElementById("lieferantNameInput");
+      const lieferantKundenNummerInput = document.getElementById(
+        "lieferantKundenNummerInput",
+      );
       const lieferantKontaktInput = document.getElementById("lieferantKontaktInput");
       const lieferantEmailInput = document.getElementById("lieferantEmailInput");
       const lieferantTelefonInput = document.getElementById("lieferantTelefonInput");
@@ -143,6 +155,7 @@
         currentLieferantId = lieferant ? lieferant.id : null;
         lieferantMessage.textContent = "";
         lieferantNameInput.value = lieferant?.name || "";
+        lieferantKundenNummerInput.value = lieferant?.kundenNummer || "";
         lieferantKontaktInput.value = lieferant?.kontaktPerson || "";
         lieferantEmailInput.value = lieferant?.email || "";
         lieferantTelefonInput.value = lieferant?.telefon || "";
@@ -174,6 +187,7 @@
           list = list.filter((l) => {
             const parts = [
               l.name,
+              l.kundenNummer,
               l.kontaktPerson,
               l.email,
               l.telefon,
@@ -232,7 +246,10 @@
 
           const meta = document.createElement("div");
           meta.className = "list__meta";
-          meta.textContent = lieferant.kontaktPerson || "Keine Kontaktdaten";
+          const metaParts = [];
+          if (lieferant.kundenNummer) metaParts.push(`Kundennr: ${lieferant.kundenNummer}`);
+          if (lieferant.kontaktPerson) metaParts.push(lieferant.kontaktPerson);
+          meta.textContent = metaParts.join(" | ") || "Keine Kontaktdaten";
 
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
@@ -344,6 +361,7 @@
 
         const payload = {
           name: lieferantNameInput.value.trim(),
+          kundenNummer: optionalValue(lieferantKundenNummerInput.value),
           kontaktPerson: optionalValue(lieferantKontaktInput.value),
           email: optionalValue(lieferantEmailInput.value),
           telefon: optionalValue(lieferantTelefonInput.value),

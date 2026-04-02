@@ -41,6 +41,7 @@ export interface Artikel {
 export interface Lieferant {
   id: number;
   name: string;
+  kundenNummer?: string;
   kontaktPerson: string;
   email: string;
   telefon: string;

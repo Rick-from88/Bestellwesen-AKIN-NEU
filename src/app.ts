@@ -27,6 +27,7 @@ import {
   listArtikel,
   updateArtikel,
 } from "./repositories/artikel";
+import { ensureSchema } from "./db";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -320,6 +321,60 @@ const stripHtmlToText = (html: string) => {
     .trim();
 };
 
+const escapeHtml = (value: unknown): string => {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+};
+
+const buildArtikelListeForMail = (
+  positionen: any[],
+  artikelMap: Record<number, any>,
+) => {
+  const tableStyle =
+    "border-collapse:collapse;width:100%;table-layout:fixed;font-family:Arial,Helvetica,sans-serif;font-size:14px;";
+  const thStyle =
+    "text-align:left;border-bottom:1px solid #e5e7eb;padding:8px 6px;font-weight:700;";
+  const tdStyle = "border-bottom:1px solid #f1f5f9;padding:8px 6px;vertical-align:top;";
+  const tdRightStyle = `${tdStyle}text-align:right;white-space:nowrap;`;
+  const tdNoWrapStyle = `${tdStyle}white-space:nowrap;`;
+
+  let artikelHtml =
+    `<table border="0" cellpadding="0" cellspacing="0" style="${tableStyle}">` +
+    `<thead><tr>` +
+    `<th style="${thStyle}width:62%;">Artikel</th>` +
+    `<th style="${thStyle}width:23%;">Artikelnummer</th>` +
+    `<th style="${thStyle}width:15%;text-align:right;">Menge</th>` +
+    `</tr></thead><tbody>`;
+
+  let artikelText = "";
+  for (const pos of positionen || []) {
+    const a = artikelMap[Number(pos.artikelId)] || {
+      name: `Artikel #${pos.artikelId}`,
+      artikelnummer: "",
+    };
+    const name = String(a.name || `Artikel #${pos.artikelId}`);
+    const nrRaw = a.artikelnummer ?? a.artikelNummer ?? "";
+    const nr = String(nrRaw || "").trim();
+    const menge = Number(pos.menge) || 0;
+    const nrDisplay = nr || "-";
+
+    artikelHtml +=
+      `<tr>` +
+      `<td style="${tdStyle}">${escapeHtml(name)}</td>` +
+      `<td style="${tdNoWrapStyle}">${escapeHtml(nrDisplay)}</td>` +
+      `<td style="${tdRightStyle}">${escapeHtml(String(menge))}</td>` +
+      `</tr>`;
+    artikelText += `- ${name} | Nr: ${nrDisplay} | Menge: ${menge}\n`;
+  }
+  artikelHtml += "</tbody></table>";
+
+  return { artikelHtml, artikelText };
+};
+
 const buildOrderMailDraft = async (id: number) => {
   const { getBestellungById } = await Promise.resolve(
     require("./repositories/bestellungen"),
@@ -339,14 +394,14 @@ const buildOrderMailDraft = async (id: number) => {
   let artikelRows: any[] = [];
   if (artikelIds.length) {
     const aRes = await db.query(
-      "select id, name, preis from artikel where id = ANY($1)",
+      "select id, name, artikelnummer from artikel where id = ANY($1)",
       [artikelIds],
     );
     artikelRows = aRes.rows || [];
   }
   const artikelMap: Record<number, any> = {};
   artikelRows.forEach((r) => {
-    artikelMap[r.id] = r;
+    artikelMap[Number(r.id)] = r;
   });
 
   const firstPos = Array.isArray(bestellung.positionen)
@@ -355,35 +410,27 @@ const buildOrderMailDraft = async (id: number) => {
   const lieferantId = firstPos ? Number(firstPos.lieferantId) : NaN;
   let lieferantName = "";
   let lieferantEmail = "";
+  let lieferantKundenNummer = "";
   if (Number.isFinite(lieferantId) && lieferantId > 0) {
     const lRes = await db.query(
-      "select name, email from lieferanten where id = $1",
+      "select name, email, kundennummer from lieferanten where id = $1",
       [lieferantId],
     );
     lieferantName = String(lRes.rows?.[0]?.name || "");
     lieferantEmail = String(lRes.rows?.[0]?.email || "");
+    lieferantKundenNummer = String(lRes.rows?.[0]?.kundennummer || "").trim();
   }
 
-  let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr style="text-align:left"><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
-  let artikelText = "";
-  for (const pos of bestellung.positionen || []) {
-    const a = artikelMap[pos.artikelId] || {
-      name: `Artikel #${pos.artikelId}`,
-      preis: 0,
-    };
-    const menge = Number(pos.menge) || 0;
-    const preis = Number(a.preis) || 0;
-    const gesamt = (preis * menge).toFixed(2);
-    const notiz = pos.notiz ? String(pos.notiz) : "";
-    artikelHtml += `<tr><td>${a.name}</td><td>${menge}</td><td>${preis.toFixed(2)} €</td><td>${gesamt} €</td><td>${notiz}</td></tr>`;
-    artikelText += `- ${a.name} | Menge: ${menge} | Preis: ${preis.toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
-  }
-  artikelHtml += "</tbody></table>";
+  const { artikelHtml, artikelText } = buildArtikelListeForMail(
+    bestellung.positionen || [],
+    artikelMap,
+  );
 
   const replacements: Record<string, string> = {
     "{{bestellnummer}}": String(bestellung.bestellnummer ?? ""),
     "{{datum}}": String(bestellung.bestellDatum ?? ""),
     "{{lieferant}}": lieferantName,
+    "{{kundennummer}}": lieferantKundenNummer,
     "{{artikel_liste}}": artikelHtml,
     "{{artikel_text}}": artikelText,
   };
@@ -406,6 +453,9 @@ const buildOrderMailDraft = async (id: number) => {
     subject = subject.replace(re, val);
     html = html.replace(re, val);
     text = text.replace(re, val);
+  }
+  if (lieferantKundenNummer && !subject.toLowerCase().includes("kundennummer")) {
+    subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
   }
   if (signature) {
     html += `<div>${signature}</div>`;
@@ -788,7 +838,8 @@ app.use("/api", (req: any, res: any, next: any) => {
           p === "/lieferanten" ||
           p === "/artikel" ||
           p === "/dashboard/chat")) ||
-      (m === "PUT" && p === "/dashboard/notes");
+      (m === "PUT" &&
+        (p === "/dashboard/notes" || /^\/lieferanten\/\d+$/.test(p)));
 
     if (allow) return next();
     return res.status(403).json({ error: "forbidden for role produktion" });
@@ -1145,6 +1196,7 @@ app.get("/api/lieferanten", async (req, res) => {
 
 app.post("/api/lieferanten", async (req, res) => {
   const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+  const kundenNummer = parseString(req.body.kundenNummer);
   const kontaktPerson =
     typeof req.body.kontaktPerson === "string"
       ? req.body.kontaktPerson.trim()
@@ -1166,6 +1218,7 @@ app.post("/api/lieferanten", async (req, res) => {
   try {
     const lieferant = await createLieferant({
       name,
+      kundenNummer,
       kontaktPerson,
       email,
       telefon,
@@ -1206,6 +1259,7 @@ app.get("/api/lieferanten/:id", async (req, res) => {
 app.put("/api/lieferanten/:id", async (req, res) => {
   const lieferantId = parseInteger(req.params.id);
   const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+  const kundenNummer = parseString(req.body.kundenNummer);
   const kontaktPerson = parseString(req.body.kontaktPerson);
   const email = parseString(req.body.email);
   const telefon = parseString(req.body.telefon);
@@ -1227,6 +1281,7 @@ app.put("/api/lieferanten/:id", async (req, res) => {
   try {
     const lieferant = await updateLieferant(lieferantId, {
       name,
+      kundenNummer,
       kontaktPerson,
       email,
       telefon,
@@ -2965,7 +3020,7 @@ app.post(
       let artikelRows: any[] = [];
       if (artikelIds.length) {
         const aRes = await db.query(
-          "select id, name, preis from artikel where id = ANY($1)",
+          "select id, name, artikelnummer from artikel where id = ANY($1)",
           [artikelIds],
         );
         artikelRows = aRes.rows || [];
@@ -2976,12 +3031,13 @@ app.post(
       });
 
       const lieferantRes = await db.query(
-        "select id, name, email from lieferanten where id = $1",
+        "select id, name, email, kundennummer from lieferanten where id = $1",
         [lieferantId],
       );
       const lieferantRow = lieferantRes.rows[0] || null;
       const lieferantName =
         lieferantRow?.name || `Lieferant #${lieferantId}`;
+      const lieferantKundenNummer = String(lieferantRow?.kundennummer || "").trim();
       const supplierEmail = lieferantRow?.email
         ? String(lieferantRow.email)
         : "";
@@ -2994,25 +3050,10 @@ app.post(
         return;
       }
 
-      let artikelHtml =
-        `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">` +
-        `<thead><tr style="text-align:left"><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
-      let artikelText = "";
-      for (const pos of bestellung.positionen) {
-        const a = artikelMap[Number(pos.artikelId)] || {
-          name: `Artikel #${pos.artikelId}`,
-          preis: 0,
-        };
-        const menge = Number(pos.menge) || 0;
-        const preis = Number(a.preis) || 0;
-        const gesamt = (preis * menge).toFixed(2);
-        const notiz = pos.notiz ? String(pos.notiz).trim() : "";
-        artikelHtml +=
-          `<tr><td>${a.name}</td><td>${menge}</td><td>${preis.toFixed(2)} €</td>` +
-          `<td>${gesamt} €</td><td>${notiz}</td></tr>`;
-        artikelText += `- ${a.name} | Menge: ${menge} | Preis: ${preis.toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
-      }
-      artikelHtml += "</tbody></table>";
+      const { artikelHtml, artikelText } = buildArtikelListeForMail(
+        bestellung.positionen || [],
+        artikelMap,
+      );
 
       const replacements: Record<string, string> = {
         "{{bestellnummer}}": String(bestellung.bestellnummer ?? ""),
@@ -3020,6 +3061,7 @@ app.post(
           "de-DE",
         ),
         "{{lieferant}}": lieferantName,
+        "{{kundennummer}}": lieferantKundenNummer,
         "{{artikel_liste}}": artikelHtml,
         "{{artikel_text}}": artikelText,
       };
@@ -3039,6 +3081,12 @@ app.post(
         subject = subject.replace(re, val);
         html = html.replace(re, val);
         text = text.replace(re, val);
+      }
+      if (
+        lieferantKundenNummer &&
+        !subject.toLowerCase().includes("kundennummer")
+      ) {
+        subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
       }
       if (signature) {
         html += `<div>${signature}</div>`;
@@ -3119,7 +3167,7 @@ app.get("/api/bestellungen/:id/reminder/send/preview", async (req, res) => {
     let artikelRows: any[] = [];
     if (artikelIds.length) {
       const aRes = await db.query(
-        "select id, name, preis from artikel where id = ANY($1)",
+        "select id, name, artikelnummer from artikel where id = ANY($1)",
         [artikelIds],
       );
       artikelRows = aRes.rows || [];
@@ -3130,39 +3178,26 @@ app.get("/api/bestellungen/:id/reminder/send/preview", async (req, res) => {
     });
 
     const lieferantRes = await db.query(
-      "select id, name, email from lieferanten where id = $1",
+      "select id, name, email, kundennummer from lieferanten where id = $1",
       [lieferantId],
     );
     const lieferantRow = lieferantRes.rows[0] || null;
     const lieferantName = lieferantRow?.name || `Lieferant #${lieferantId}`;
+    const lieferantKundenNummer = String(lieferantRow?.kundennummer || "").trim();
     const supplierEmail = lieferantRow?.email ? String(lieferantRow.email) : "";
     const fallbackTo = await resolveConfiguredMailRecipient(settingsRepo);
     const to = String(supplierEmail || "").trim() || String(fallbackTo || "").trim();
 
-    let artikelHtml =
-      `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">` +
-      `<thead><tr style="text-align:left"><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
-    let artikelText = "";
-    for (const pos of bestellung.positionen) {
-      const a = artikelMap[Number(pos.artikelId)] || {
-        name: `Artikel #${pos.artikelId}`,
-        preis: 0,
-      };
-      const menge = Number(pos.menge) || 0;
-      const preis = Number(a.preis) || 0;
-      const gesamt = (preis * menge).toFixed(2);
-      const notiz = pos.notiz ? String(pos.notiz).trim() : "";
-      artikelHtml +=
-        `<tr><td>${a.name}</td><td>${menge}</td><td>${preis.toFixed(2)} €</td>` +
-        `<td>${gesamt} €</td><td>${notiz}</td></tr>`;
-      artikelText += `- ${a.name} | Menge: ${menge} | Preis: ${preis.toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
-    }
-    artikelHtml += "</tbody></table>";
+    const { artikelHtml, artikelText } = buildArtikelListeForMail(
+      bestellung.positionen || [],
+      artikelMap,
+    );
 
     const replacements: Record<string, string> = {
       "{{bestellnummer}}": String(bestellung.bestellnummer ?? ""),
       "{{datum}}": new Date(bestellung.bestellDatum).toLocaleDateString("de-DE"),
       "{{lieferant}}": lieferantName,
+      "{{kundennummer}}": lieferantKundenNummer,
       "{{artikel_liste}}": artikelHtml,
       "{{artikel_text}}": artikelText,
     };
@@ -3176,6 +3211,9 @@ app.get("/api/bestellungen/:id/reminder/send/preview", async (req, res) => {
       subject = subject.replace(re, val);
       html = html.replace(re, val);
       text = text.replace(re, val);
+    }
+    if (lieferantKundenNummer && !subject.toLowerCase().includes("kundennummer")) {
+      subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
     }
     if (signature) {
       html += `<div>${signature}</div>`;
@@ -3234,7 +3272,12 @@ app.get("/__routes", (req, res) => {
 
 // Internal: run SQL schema from repo (temporary migration helper)
 // migration endpoint removed
-
-app.listen(PORT, () => {
-  console.log(`Server läuft auf http://localhost:${PORT}`);
-});
+ensureSchema()
+  .catch((e) => {
+    console.error("Warnung: Schema-Migration fehlgeschlagen", e);
+  })
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`Server läuft auf http://localhost:${PORT}`);
+    });
+  });

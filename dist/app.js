@@ -45,6 +45,7 @@ const bestellungen_1 = require("./repositories/bestellungen");
 const lieferanten_1 = require("./repositories/lieferanten");
 const email_1 = require("./services/email");
 const artikel_1 = require("./repositories/artikel");
+const db_1 = require("./db");
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 app.use(body_parser_1.default.json({ limit: "10mb" }));
@@ -306,8 +307,51 @@ const stripHtmlToText = (html) => {
         .replace(/\n{3,}/g, "\n\n")
         .trim();
 };
+const escapeHtml = (value) => {
+    return String(value !== null && value !== void 0 ? value : "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+};
+const buildArtikelListeForMail = (positionen, artikelMap) => {
+    var _a, _b;
+    const tableStyle = "border-collapse:collapse;width:100%;table-layout:fixed;font-family:Arial,Helvetica,sans-serif;font-size:14px;";
+    const thStyle = "text-align:left;border-bottom:1px solid #e5e7eb;padding:8px 6px;font-weight:700;";
+    const tdStyle = "border-bottom:1px solid #f1f5f9;padding:8px 6px;vertical-align:top;";
+    const tdRightStyle = `${tdStyle}text-align:right;white-space:nowrap;`;
+    const tdNoWrapStyle = `${tdStyle}white-space:nowrap;`;
+    let artikelHtml = `<table border="0" cellpadding="0" cellspacing="0" style="${tableStyle}">` +
+        `<thead><tr>` +
+        `<th style="${thStyle}width:62%;">Artikel</th>` +
+        `<th style="${thStyle}width:23%;">Artikelnummer</th>` +
+        `<th style="${thStyle}width:15%;text-align:right;">Menge</th>` +
+        `</tr></thead><tbody>`;
+    let artikelText = "";
+    for (const pos of positionen || []) {
+        const a = artikelMap[Number(pos.artikelId)] || {
+            name: `Artikel #${pos.artikelId}`,
+            artikelnummer: "",
+        };
+        const name = String(a.name || `Artikel #${pos.artikelId}`);
+        const nrRaw = (_b = (_a = a.artikelnummer) !== null && _a !== void 0 ? _a : a.artikelNummer) !== null && _b !== void 0 ? _b : "";
+        const nr = String(nrRaw || "").trim();
+        const menge = Number(pos.menge) || 0;
+        const nrDisplay = nr || "-";
+        artikelHtml +=
+            `<tr>` +
+                `<td style="${tdStyle}">${escapeHtml(name)}</td>` +
+                `<td style="${tdNoWrapStyle}">${escapeHtml(nrDisplay)}</td>` +
+                `<td style="${tdRightStyle}">${escapeHtml(String(menge))}</td>` +
+                `</tr>`;
+        artikelText += `- ${name} | Nr: ${nrDisplay} | Menge: ${menge}\n`;
+    }
+    artikelHtml += "</tbody></table>";
+    return { artikelHtml, artikelText };
+};
 const buildOrderMailDraft = (id) => __awaiter(void 0, void 0, void 0, function* () {
-    var _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
+    var _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
     const { getBestellungById } = yield Promise.resolve(require("./repositories/bestellungen"));
     const bestellung = yield getBestellungById(id);
     if (!bestellung) {
@@ -319,12 +363,12 @@ const buildOrderMailDraft = (id) => __awaiter(void 0, void 0, void 0, function* 
     const artikelIds = Array.from(new Set((bestellung.positionen || []).map((p) => p.artikelId)));
     let artikelRows = [];
     if (artikelIds.length) {
-        const aRes = yield db.query("select id, name, preis from artikel where id = ANY($1)", [artikelIds]);
+        const aRes = yield db.query("select id, name, artikelnummer from artikel where id = ANY($1)", [artikelIds]);
         artikelRows = aRes.rows || [];
     }
     const artikelMap = {};
     artikelRows.forEach((r) => {
-        artikelMap[r.id] = r;
+        artikelMap[Number(r.id)] = r;
     });
     const firstPos = Array.isArray(bestellung.positionen)
         ? bestellung.positionen[0]
@@ -332,48 +376,40 @@ const buildOrderMailDraft = (id) => __awaiter(void 0, void 0, void 0, function* 
     const lieferantId = firstPos ? Number(firstPos.lieferantId) : NaN;
     let lieferantName = "";
     let lieferantEmail = "";
+    let lieferantKundenNummer = "";
     if (Number.isFinite(lieferantId) && lieferantId > 0) {
-        const lRes = yield db.query("select name, email from lieferanten where id = $1", [lieferantId]);
+        const lRes = yield db.query("select name, email, kundennummer from lieferanten where id = $1", [lieferantId]);
         lieferantName = String(((_j = (_h = lRes.rows) === null || _h === void 0 ? void 0 : _h[0]) === null || _j === void 0 ? void 0 : _j.name) || "");
         lieferantEmail = String(((_l = (_k = lRes.rows) === null || _k === void 0 ? void 0 : _k[0]) === null || _l === void 0 ? void 0 : _l.email) || "");
+        lieferantKundenNummer = String(((_o = (_m = lRes.rows) === null || _m === void 0 ? void 0 : _m[0]) === null || _o === void 0 ? void 0 : _o.kundennummer) || "").trim();
     }
-    let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr style="text-align:left"><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
-    let artikelText = "";
-    for (const pos of bestellung.positionen || []) {
-        const a = artikelMap[pos.artikelId] || {
-            name: `Artikel #${pos.artikelId}`,
-            preis: 0,
-        };
-        const menge = Number(pos.menge) || 0;
-        const preis = Number(a.preis) || 0;
-        const gesamt = (preis * menge).toFixed(2);
-        const notiz = pos.notiz ? String(pos.notiz) : "";
-        artikelHtml += `<tr><td>${a.name}</td><td>${menge}</td><td>${preis.toFixed(2)} €</td><td>${gesamt} €</td><td>${notiz}</td></tr>`;
-        artikelText += `- ${a.name} | Menge: ${menge} | Preis: ${preis.toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
-    }
-    artikelHtml += "</tbody></table>";
+    const { artikelHtml, artikelText } = buildArtikelListeForMail(bestellung.positionen || [], artikelMap);
     const replacements = {
-        "{{bestellnummer}}": String((_m = bestellung.bestellnummer) !== null && _m !== void 0 ? _m : ""),
-        "{{datum}}": String((_o = bestellung.bestellDatum) !== null && _o !== void 0 ? _o : ""),
+        "{{bestellnummer}}": String((_p = bestellung.bestellnummer) !== null && _p !== void 0 ? _p : ""),
+        "{{datum}}": String((_q = bestellung.bestellDatum) !== null && _q !== void 0 ? _q : ""),
         "{{lieferant}}": lieferantName,
+        "{{kundennummer}}": lieferantKundenNummer,
         "{{artikel_liste}}": artikelHtml,
         "{{artikel_text}}": artikelText,
     };
     const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
     const subjTemplate = (yield settingsRepo.getSetting("email_subject")) ||
-        `Bestellung ${(_p = bestellung.bestellnummer) !== null && _p !== void 0 ? _p : ""}`;
+        `Bestellung ${(_r = bestellung.bestellnummer) !== null && _r !== void 0 ? _r : ""}`;
     const bodyTemplate = (yield settingsRepo.getSetting("email_body")) ||
-        `<h2>Bestellung ${(_q = bestellung.bestellnummer) !== null && _q !== void 0 ? _q : ""}</h2><p>Datum: ${(_r = bestellung.bestellDatum) !== null && _r !== void 0 ? _r : ""}</p>{{artikel_liste}}`;
+        `<h2>Bestellung ${(_s = bestellung.bestellnummer) !== null && _s !== void 0 ? _s : ""}</h2><p>Datum: ${(_t = bestellung.bestellDatum) !== null && _t !== void 0 ? _t : ""}</p>{{artikel_liste}}`;
     const signature = (yield settingsRepo.getSetting("email_signature")) || "";
     let subject = subjTemplate;
     let html = bodyTemplate;
-    let text = `Bestellung ${(_s = bestellung.bestellnummer) !== null && _s !== void 0 ? _s : ""}\nDatum: ${(_t = bestellung.bestellDatum) !== null && _t !== void 0 ? _t : ""}\n\n${artikelText}`;
+    let text = `Bestellung ${(_u = bestellung.bestellnummer) !== null && _u !== void 0 ? _u : ""}\nDatum: ${(_v = bestellung.bestellDatum) !== null && _v !== void 0 ? _v : ""}\n\n${artikelText}`;
     for (const key of Object.keys(replacements)) {
         const val = replacements[key];
         const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
         subject = subject.replace(re, val);
         html = html.replace(re, val);
         text = text.replace(re, val);
+    }
+    if (lieferantKundenNummer && !subject.toLowerCase().includes("kundennummer")) {
+        subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
     }
     if (signature) {
         html += `<div>${signature}</div>`;
@@ -485,12 +521,12 @@ const computeDeliveryStatus = (positions, previousStatus, requestedStatus) => {
 // Firebase Auth (Login)
 // -----------------------
 app.post("/api/auth/login", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _u;
+    var _w;
     try {
         if (!firebaseAdminReady) {
             return res.status(503).json({ error: "firebase admin not configured" });
         }
-        const idToken = typeof ((_u = req.body) === null || _u === void 0 ? void 0 : _u.idToken) === "string" ? req.body.idToken : "";
+        const idToken = typeof ((_w = req.body) === null || _w === void 0 ? void 0 : _w.idToken) === "string" ? req.body.idToken : "";
         if (!idToken)
             return res.status(400).json({ error: "missing idToken" });
         const decoded = yield admin.auth().verifyIdToken(idToken);
@@ -505,7 +541,7 @@ app.post("/api/auth/login", (req, res) => __awaiter(void 0, void 0, void 0, func
         });
         return res.json({ uid: decoded.uid, email: decoded.email || null });
     }
-    catch (_v) {
+    catch (_x) {
         return res.status(401).json({ error: "invalid token" });
     }
 }));
@@ -558,10 +594,10 @@ app.get("/api/admin/users", requireAdminApi, (req, res) => __awaiter(void 0, voi
     }
 }));
 app.post("/api/admin/users/:uid/role", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _w;
+    var _y;
     try {
         const uid = String(req.params.uid || "");
-        const role = String(((_w = req.body) === null || _w === void 0 ? void 0 : _w.role) || "");
+        const role = String(((_y = req.body) === null || _y === void 0 ? void 0 : _y.role) || "");
         if (!uid || !["admin", "buero", "produktion"].includes(role)) {
             return res.status(400).json({ error: "invalid role payload" });
         }
@@ -573,12 +609,12 @@ app.post("/api/admin/users/:uid/role", requireAdminApi, (req, res) => __awaiter(
     }
 }));
 app.post("/api/admin/users", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _x, _y, _z;
+    var _z, _0, _1;
     try {
-        const email = typeof ((_x = req.body) === null || _x === void 0 ? void 0 : _x.email) === "string" ? req.body.email.trim() : "";
-        const displayNameInput = typeof ((_y = req.body) === null || _y === void 0 ? void 0 : _y.displayName) === "string" ? req.body.displayName.trim() : "";
+        const email = typeof ((_z = req.body) === null || _z === void 0 ? void 0 : _z.email) === "string" ? req.body.email.trim() : "";
+        const displayNameInput = typeof ((_0 = req.body) === null || _0 === void 0 ? void 0 : _0.displayName) === "string" ? req.body.displayName.trim() : "";
         const displayName = displayNameInput || toDisplayNameFromEmail(email);
-        const password = typeof ((_z = req.body) === null || _z === void 0 ? void 0 : _z.password) === "string" ? req.body.password : "";
+        const password = typeof ((_1 = req.body) === null || _1 === void 0 ? void 0 : _1.password) === "string" ? req.body.password : "";
         if (!email || !password) {
             return res.status(400).json({ error: "email and password required" });
         }
@@ -689,7 +725,8 @@ app.use("/api", (req, res, next) => {
                     p === "/lieferanten" ||
                     p === "/artikel" ||
                     p === "/dashboard/chat")) ||
-            (m === "PUT" && p === "/dashboard/notes");
+            (m === "PUT" &&
+                (p === "/dashboard/notes" || /^\/lieferanten\/\d+$/.test(p)));
         if (allow)
             return next();
         return res.status(403).json({ error: "forbidden for role produktion" });
@@ -708,8 +745,8 @@ app.get("/api/bestellungen", (req, res) => __awaiter(void 0, void 0, void 0, fun
     }
 }));
 app.post("/api/bestellungen", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _0;
-    const status = (_0 = parseStatus(req.body.status)) !== null && _0 !== void 0 ? _0 : "offen";
+    var _2;
+    const status = (_2 = parseStatus(req.body.status)) !== null && _2 !== void 0 ? _2 : "offen";
     const actorProfile = yield resolveActorProfile(req.firebaseUser);
     const bestellDatum = typeof req.body.bestellDatum === "string"
         ? req.body.bestellDatum
@@ -749,14 +786,14 @@ app.post("/api/bestellungen", (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
 }));
 app.put("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _1, _2, _3, _4, _5, _6;
+    var _3, _4, _5, _6, _7, _8;
     const bestellungId = parseInteger(req.params.id);
-    const auftragsBestaetigt = Boolean(((_1 = req.body) === null || _1 === void 0 ? void 0 : _1.auftragsBestaetigt) === true);
+    const auftragsBestaetigt = Boolean(((_3 = req.body) === null || _3 === void 0 ? void 0 : _3.auftragsBestaetigt) === true);
     const actorProfile = yield resolveActorProfile(req.firebaseUser);
     const bestellDatum = typeof req.body.bestellDatum === "string"
         ? req.body.bestellDatum
         : undefined;
-    const requestedStatus = (_3 = parseStatus((_2 = req.body) === null || _2 === void 0 ? void 0 : _2.status)) !== null && _3 !== void 0 ? _3 : "offen";
+    const requestedStatus = (_5 = parseStatus((_4 = req.body) === null || _4 === void 0 ? void 0 : _4.status)) !== null && _5 !== void 0 ? _5 : "offen";
     if (!bestellungId) {
         res.status(400).json({ error: "Ungueltige Bestellungs-ID." });
         return;
@@ -772,7 +809,7 @@ app.put("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0,
         // prevent editing positions if order is delivered or cancelled
         const db = yield Promise.resolve(require("./db"));
         const cur = yield db.query("select status from bestellungen where id = $1", [bestellungId]);
-        const curStatus = (_4 = cur.rows[0]) === null || _4 === void 0 ? void 0 : _4.status;
+        const curStatus = (_6 = cur.rows[0]) === null || _6 === void 0 ? void 0 : _6.status;
         if (curStatus === "geliefert" ||
             curStatus === "storniert" ||
             curStatus === "teilstorniert") {
@@ -805,8 +842,8 @@ app.put("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0,
                 artikelId: Number(pos.artikelId),
                 lieferantId: lid,
                 menge: Number(pos.menge),
-                geliefertMenge: Number((_5 = pos.geliefertMenge) !== null && _5 !== void 0 ? _5 : 0),
-                storniertMenge: Number((_6 = pos.storniertMenge) !== null && _6 !== void 0 ? _6 : 0),
+                geliefertMenge: Number((_7 = pos.geliefertMenge) !== null && _7 !== void 0 ? _7 : 0),
+                storniertMenge: Number((_8 = pos.storniertMenge) !== null && _8 !== void 0 ? _8 : 0),
                 notiz: pos.notiz,
             });
         }
@@ -876,10 +913,10 @@ app.put("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0,
 }));
 // change status only (allows changing status even when positions are locked)
 app.put("/api/bestellungen/:id/status", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _7, _8;
+    var _9, _10;
     const id = parseInteger(req.params.id);
-    const status = parseStatus((_7 = req.body) === null || _7 === void 0 ? void 0 : _7.status);
-    const auftragsBestaetigt = typeof ((_8 = req.body) === null || _8 === void 0 ? void 0 : _8.auftragsBestaetigt) === "boolean"
+    const status = parseStatus((_9 = req.body) === null || _9 === void 0 ? void 0 : _9.status);
+    const auftragsBestaetigt = typeof ((_10 = req.body) === null || _10 === void 0 ? void 0 : _10.auftragsBestaetigt) === "boolean"
         ? req.body.auftragsBestaetigt
         : undefined;
     if (!id || !status) {
@@ -994,6 +1031,7 @@ app.get("/api/lieferanten", (req, res) => __awaiter(void 0, void 0, void 0, func
 }));
 app.post("/api/lieferanten", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const kundenNummer = parseString(req.body.kundenNummer);
     const kontaktPerson = typeof req.body.kontaktPerson === "string"
         ? req.body.kontaktPerson.trim()
         : undefined;
@@ -1010,6 +1048,7 @@ app.post("/api/lieferanten", (req, res) => __awaiter(void 0, void 0, void 0, fun
     try {
         const lieferant = yield (0, lieferanten_1.createLieferant)({
             name,
+            kundenNummer,
             kontaktPerson,
             email,
             telefon,
@@ -1047,6 +1086,7 @@ app.get("/api/lieferanten/:id", (req, res) => __awaiter(void 0, void 0, void 0, 
 app.put("/api/lieferanten/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const lieferantId = parseInteger(req.params.id);
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+    const kundenNummer = parseString(req.body.kundenNummer);
     const kontaktPerson = parseString(req.body.kontaktPerson);
     const email = parseString(req.body.email);
     const telefon = parseString(req.body.telefon);
@@ -1065,6 +1105,7 @@ app.put("/api/lieferanten/:id", (req, res) => __awaiter(void 0, void 0, void 0, 
     try {
         const lieferant = yield (0, lieferanten_1.updateLieferant)(lieferantId, {
             name,
+            kundenNummer,
             kontaktPerson,
             email,
             telefon,
@@ -1376,18 +1417,18 @@ app.get("/api/dashboard/notes", (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 app.put("/api/dashboard/notes", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _9, _10;
+    var _11, _12;
     try {
         const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
         // Accept either a single new note via { note: 'text' }
         // or a full replacement via { notes: [...] }
-        if (Array.isArray((_9 = req.body) === null || _9 === void 0 ? void 0 : _9.notes)) {
+        if (Array.isArray((_11 = req.body) === null || _11 === void 0 ? void 0 : _11.notes)) {
             const notesArr = req.body.notes;
             yield settingsRepo.setSetting("dashboard_notes", JSON.stringify(notesArr));
             res.status(204).send();
             return;
         }
-        if (typeof ((_10 = req.body) === null || _10 === void 0 ? void 0 : _10.note) === "string" && req.body.note.trim()) {
+        if (typeof ((_12 = req.body) === null || _12 === void 0 ? void 0 : _12.note) === "string" && req.body.note.trim()) {
             const noteText = req.body.note.trim();
             const existingRaw = yield settingsRepo.getSetting("dashboard_notes");
             let notesArr = [];
@@ -1429,7 +1470,7 @@ app.get("/api/dashboard/chat", (req, res) => __awaiter(void 0, void 0, void 0, f
                 if (Array.isArray(parsed))
                     messages = parsed;
             }
-            catch (_11) {
+            catch (_13) {
                 messages = [];
             }
         }
@@ -1441,9 +1482,9 @@ app.get("/api/dashboard/chat", (req, res) => __awaiter(void 0, void 0, void 0, f
     }
 }));
 app.post("/api/dashboard/chat", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _12;
+    var _14;
     try {
-        const text = typeof ((_12 = req.body) === null || _12 === void 0 ? void 0 : _12.text) === "string" ? req.body.text.trim() : "";
+        const text = typeof ((_14 = req.body) === null || _14 === void 0 ? void 0 : _14.text) === "string" ? req.body.text.trim() : "";
         if (!text) {
             res.status(400).json({ error: "text required" });
             return;
@@ -1457,7 +1498,7 @@ app.post("/api/dashboard/chat", express_1.default.json(), (req, res) => __awaite
                 if (Array.isArray(parsed))
                     messages = parsed;
             }
-            catch (_13) { }
+            catch (_15) { }
         }
         const actor = yield resolveActorProfile(req.firebaseUser);
         const msg = {
@@ -1522,7 +1563,7 @@ app.put("/api/settings", express_1.default.json(), (req, res) => __awaiter(void 
     }
 }));
 app.put("/api/settings/sequence", express_1.default.json(), requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _14, _15, _16;
+    var _16, _17, _18;
     try {
         const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
         const db = yield Promise.resolve(require("./db"));
@@ -1536,7 +1577,7 @@ app.put("/api/settings/sequence", express_1.default.json(), requireAdminApi, (re
         }
         const prefix = String(prefixSetting);
         const seqDigits = Number(seqDigitsSetting);
-        const lastDigits = Number((_14 = req.body) === null || _14 === void 0 ? void 0 : _14.lastDigits);
+        const lastDigits = Number((_16 = req.body) === null || _16 === void 0 ? void 0 : _16.lastDigits);
         if (!Number.isInteger(lastDigits) ||
             lastDigits < 0 ||
             lastDigits >= Math.pow(10, seqDigits)) {
@@ -1549,7 +1590,7 @@ app.put("/api/settings/sequence", express_1.default.json(), requireAdminApi, (re
         // we store the full next number; choose next = prefix*multiplier + lastDigits + 1
         const desiredNext = Number(prefix) * multiplier + lastDigits + 1;
         const maxRes = yield db.query("select max(bestellnummer) as mx from bestellungen where bestellnummer between $1 and $2", [lower, upper]);
-        const mx = (_16 = (_15 = maxRes.rows[0]) === null || _15 === void 0 ? void 0 : _15.mx) !== null && _16 !== void 0 ? _16 : null;
+        const mx = (_18 = (_17 = maxRes.rows[0]) === null || _17 === void 0 ? void 0 : _17.mx) !== null && _18 !== void 0 ? _18 : null;
         if (mx && Number(mx) >= desiredNext) {
             res.status(400).json({
                 error: "Gewuenschte Zahl ist kleiner oder gleich bestehender Maximalnummer.",
@@ -1685,19 +1726,19 @@ const nonEmptyOrNull = (v) => {
     return s ? s : null;
 };
 const upsertLieferantByName = (db, item) => __awaiter(void 0, void 0, void 0, function* () {
-    var _17, _18, _19;
+    var _19, _20, _21;
     const name = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.name);
     if (!name)
         return { id: 0, action: "skipped" };
     const existing = yield db.query("select id from lieferanten where lower(trim(name)) = lower(trim($1)) limit 1", [name]);
-    const kontakt = nonEmptyOrNull((_17 = item === null || item === void 0 ? void 0 : item.kontaktPerson) !== null && _17 !== void 0 ? _17 : item === null || item === void 0 ? void 0 : item.kontakt_person);
+    const kontakt = nonEmptyOrNull((_19 = item === null || item === void 0 ? void 0 : item.kontaktPerson) !== null && _19 !== void 0 ? _19 : item === null || item === void 0 ? void 0 : item.kontakt_person);
     const email = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.email);
     const telefon = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.telefon);
     const strasse = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.strasse);
     const plz = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.plz);
     const stadt = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.stadt);
     const land = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.land);
-    if ((_18 = existing.rows[0]) === null || _18 === void 0 ? void 0 : _18.id) {
+    if ((_20 = existing.rows[0]) === null || _20 === void 0 ? void 0 : _20.id) {
         const id = Number(existing.rows[0].id);
         const updated = yield db.query(`update lieferanten
           set kontakt_person = coalesce($2, kontakt_person),
@@ -1710,7 +1751,7 @@ const upsertLieferantByName = (db, item) => __awaiter(void 0, void 0, void 0, fu
         where id = $1`, [id, kontakt, email, telefon, strasse, plz, stadt, land]);
         return {
             id,
-            action: ((_19 = updated.rowCount) !== null && _19 !== void 0 ? _19 : 0) > 0 ? "updated" : "skipped",
+            action: ((_21 = updated.rowCount) !== null && _21 !== void 0 ? _21 : 0) > 0 ? "updated" : "skipped",
         };
     }
     const inserted = yield db.query(`insert into lieferanten (name, kontakt_person, email, telefon, strasse, plz, stadt, land)
@@ -1719,7 +1760,7 @@ const upsertLieferantByName = (db, item) => __awaiter(void 0, void 0, void 0, fu
     return { id: Number(inserted.rows[0].id), action: "created" };
 });
 const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, void 0, void 0, function* () {
-    var _20, _21, _22, _23;
+    var _22, _23, _24, _25;
     const name = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.name);
     const preisNum = Number(item === null || item === void 0 ? void 0 : item.preis);
     if (!lieferantId || !name || !Number.isFinite(preisNum)) {
@@ -1733,7 +1774,7 @@ const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, v
           and lower(trim(coalesce(artikelnummer,''))) = lower(trim($2))
         limit 1`, [lieferantId, artikelnummer]);
     }
-    if (!((_20 = existing.rows[0]) === null || _20 === void 0 ? void 0 : _20.id)) {
+    if (!((_22 = existing.rows[0]) === null || _22 === void 0 ? void 0 : _22.id)) {
         existing = yield db.query(`select id from artikel
         where lieferant_id = $1
           and lower(trim(name)) = lower(trim($2))
@@ -1746,8 +1787,8 @@ const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, v
     const standardBestellwert = Number.isFinite(standardBestellwertRaw)
         ? Math.max(1, Math.trunc(standardBestellwertRaw))
         : null;
-    const fotoUrl = nonEmptyOrNull((_21 = item === null || item === void 0 ? void 0 : item.fotoUrl) !== null && _21 !== void 0 ? _21 : item === null || item === void 0 ? void 0 : item.foto_url);
-    if ((_22 = existing.rows[0]) === null || _22 === void 0 ? void 0 : _22.id) {
+    const fotoUrl = nonEmptyOrNull((_23 = item === null || item === void 0 ? void 0 : item.fotoUrl) !== null && _23 !== void 0 ? _23 : item === null || item === void 0 ? void 0 : item.foto_url);
+    if ((_24 = existing.rows[0]) === null || _24 === void 0 ? void 0 : _24.id) {
         const id = Number(existing.rows[0].id);
         const updated = yield db.query(`update artikel
           set name = $2,
@@ -1771,7 +1812,7 @@ const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, v
         ]);
         return {
             id,
-            action: ((_23 = updated.rowCount) !== null && _23 !== void 0 ? _23 : 0) > 0 ? "updated" : "skipped",
+            action: ((_25 = updated.rowCount) !== null && _25 !== void 0 ? _25 : 0) > 0 ? "updated" : "skipped",
         };
     }
     const inserted = yield db.query(`insert into artikel
@@ -1791,13 +1832,13 @@ const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, v
     return { id: Number(inserted.rows[0].id), action: "created" };
 });
 app.post("/api/import/catalog", requireAdminApi, express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _24, _25, _26, _27;
+    var _26, _27, _28, _29;
     try {
         const db = yield Promise.resolve(require("./db"));
-        const lieferanten = Array.isArray((_24 = req.body) === null || _24 === void 0 ? void 0 : _24.lieferanten)
+        const lieferanten = Array.isArray((_26 = req.body) === null || _26 === void 0 ? void 0 : _26.lieferanten)
             ? req.body.lieferanten
             : [];
-        const artikel = Array.isArray((_25 = req.body) === null || _25 === void 0 ? void 0 : _25.artikel) ? req.body.artikel : [];
+        const artikel = Array.isArray((_27 = req.body) === null || _27 === void 0 ? void 0 : _27.artikel) ? req.body.artikel : [];
         const lieferantenStats = { created: 0, updated: 0, skipped: 0 };
         const lieferantenIdMap = new Map();
         const lieferantenNameMap = new Map();
@@ -1818,7 +1859,7 @@ app.post("/api/import/catalog", requireAdminApi, express_1.default.json(), (req,
         }
         const artikelStats = { created: 0, updated: 0, skipped: 0 };
         for (const a of artikel) {
-            let lid = Number((_27 = (_26 = a === null || a === void 0 ? void 0 : a.lieferantId) !== null && _26 !== void 0 ? _26 : a === null || a === void 0 ? void 0 : a.lieferant_id) !== null && _27 !== void 0 ? _27 : 0);
+            let lid = Number((_29 = (_28 = a === null || a === void 0 ? void 0 : a.lieferantId) !== null && _28 !== void 0 ? _28 : a === null || a === void 0 ? void 0 : a.lieferant_id) !== null && _29 !== void 0 ? _29 : 0);
             if (lieferantenIdMap.has(lid))
                 lid = Number(lieferantenIdMap.get(lid));
             if (!lid && (a === null || a === void 0 ? void 0 : a.lieferantName)) {
@@ -1840,7 +1881,7 @@ app.post("/api/import/catalog", requireAdminApi, express_1.default.json(), (req,
     }
 }));
 app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _28, _29, _30, _31;
+    var _30, _31, _32, _33;
     try {
         const backup = req.body || {};
         const db = yield Promise.resolve(require("./db"));
@@ -1873,7 +1914,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
         const artikelIdMap = new Map();
         const artikelStats = { created: 0, updated: 0, skipped: 0 };
         for (const a of artikel) {
-            let lid = Number((_29 = (_28 = a === null || a === void 0 ? void 0 : a.lieferantId) !== null && _28 !== void 0 ? _28 : a === null || a === void 0 ? void 0 : a.lieferant_id) !== null && _29 !== void 0 ? _29 : 0);
+            let lid = Number((_31 = (_30 = a === null || a === void 0 ? void 0 : a.lieferantId) !== null && _30 !== void 0 ? _30 : a === null || a === void 0 ? void 0 : a.lieferant_id) !== null && _31 !== void 0 ? _31 : 0);
             if (lieferantenIdMap.has(lid))
                 lid = Number(lieferantenIdMap.get(lid));
             if (!lid && (a === null || a === void 0 ? void 0 : a.lieferantName)) {
@@ -1917,7 +1958,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
                     continue;
                 }
                 const exists = yield db.query("select id from bestellungen where bestellnummer = $1 limit 1", [bestellnummer]);
-                if ((_30 = exists.rows[0]) === null || _30 === void 0 ? void 0 : _30.id) {
+                if ((_32 = exists.rows[0]) === null || _32 === void 0 ? void 0 : _32.id) {
                     ordersSkipped++;
                     continue;
                 }
@@ -1999,7 +2040,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
         const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
         const settingKeys = Object.keys(settings || {});
         for (const key of settingKeys) {
-            yield settingsRepo.setSetting(key, String((_31 = settings[key]) !== null && _31 !== void 0 ? _31 : ""));
+            yield settingsRepo.setSetting(key, String((_33 = settings[key]) !== null && _33 !== void 0 ? _33 : ""));
         }
         res.json({
             success: true,
@@ -2018,7 +2059,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
 }));
 // Send order by email and set status to 'bestellt'
 const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* () {
-    var _32, _33, _34, _35, _36;
+    var _34, _35, _36, _37, _38;
     const { listBestellungen } = yield Promise.resolve(require("./repositories/bestellungen"));
     const db = yield Promise.resolve(require("./db"));
     const allBestellungen = yield listBestellungen();
@@ -2057,7 +2098,7 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
     const groups = new Map();
     for (const b of offene) {
         const orderId = Number(b.id);
-        const nr = String((_33 = (_32 = b.bestellnummer) !== null && _32 !== void 0 ? _32 : b.id) !== null && _33 !== void 0 ? _33 : "");
+        const nr = String((_35 = (_34 = b.bestellnummer) !== null && _34 !== void 0 ? _34 : b.id) !== null && _35 !== void 0 ? _35 : "");
         const pos = Array.isArray(b.positionen) ? b.positionen : [];
         for (const p of pos) {
             const lid = Number(p.lieferantId);
@@ -2066,7 +2107,7 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
             const group = groups.get(lid) ||
                 {
                     lieferantId: lid,
-                    lieferantName: ((_34 = lieferantMap[lid]) === null || _34 === void 0 ? void 0 : _34.name) || `Lieferant #${lid}`,
+                    lieferantName: ((_36 = lieferantMap[lid]) === null || _36 === void 0 ? void 0 : _36.name) || `Lieferant #${lid}`,
                     orderIds: new Set(),
                     bestellnummern: new Set(),
                     positionen: [],
@@ -2087,8 +2128,8 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
                 menge,
                 preis,
                 notiz: p.notiz ? String(p.notiz) : undefined,
-                bestellDatum: (_35 = orderMetaById.get(orderId)) === null || _35 === void 0 ? void 0 : _35.bestellDatum,
-                createdByName: (_36 = orderMetaById.get(orderId)) === null || _36 === void 0 ? void 0 : _36.createdByName,
+                bestellDatum: (_37 = orderMetaById.get(orderId)) === null || _37 === void 0 ? void 0 : _37.bestellDatum,
+                createdByName: (_38 = orderMetaById.get(orderId)) === null || _38 === void 0 ? void 0 : _38.createdByName,
             });
             group.gesamt += menge * preis;
             groups.set(lid, group);
@@ -2190,14 +2231,14 @@ app.get("/api/bestellungen/sammel/preview", (req, res) => __awaiter(void 0, void
     }
 }));
 app.post("/api/bestellungen/sammel/send/preview", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _37;
+    var _39;
     try {
         const role = getUserRole(req.firebaseUser);
         if (!(role === "admin" || role === "buero")) {
             res.status(403).json({ error: "forbidden" });
             return;
         }
-        const requestedOrderIdsRaw = Array.isArray((_37 = req.body) === null || _37 === void 0 ? void 0 : _37.orderIds)
+        const requestedOrderIdsRaw = Array.isArray((_39 = req.body) === null || _39 === void 0 ? void 0 : _39.orderIds)
             ? req.body.orderIds
             : [];
         const requestedOrderIds = new Set(requestedOrderIdsRaw
@@ -2243,14 +2284,14 @@ app.post("/api/bestellungen/sammel/send/preview", express_1.default.json(), (req
     }
 }));
 app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _38, _39;
+    var _40, _41;
     try {
         const role = getUserRole(req.firebaseUser);
         if (!(role === "admin" || role === "buero")) {
             res.status(403).json({ error: "forbidden" });
             return;
         }
-        const requestedOrderIdsRaw = Array.isArray((_38 = req.body) === null || _38 === void 0 ? void 0 : _38.orderIds)
+        const requestedOrderIdsRaw = Array.isArray((_40 = req.body) === null || _40 === void 0 ? void 0 : _40.orderIds)
             ? req.body.orderIds
             : [];
         const requestedOrderIds = new Set(requestedOrderIdsRaw
@@ -2277,7 +2318,7 @@ app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) =
             res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
             return;
         }
-        const overridesRaw = Array.isArray((_39 = req.body) === null || _39 === void 0 ? void 0 : _39.overrides) ? req.body.overrides : [];
+        const overridesRaw = Array.isArray((_41 = req.body) === null || _41 === void 0 ? void 0 : _41.overrides) ? req.body.overrides : [];
         const overridesByLieferantId = new Map();
         overridesRaw.forEach((o) => {
             const lid = Number(o === null || o === void 0 ? void 0 : o.lieferantId);
@@ -2326,7 +2367,7 @@ app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) =
     }
 }));
 app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _40, _41, _42, _43, _44;
+    var _42, _43, _44, _45, _46;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2340,10 +2381,10 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
         }
         const draft = yield buildOrderMailDraft(id);
         const settingsRepo = draft.settingsRepo;
-        const to = parseString((_40 = req.body) === null || _40 === void 0 ? void 0 : _40.to) || parseString((_41 = req.body) === null || _41 === void 0 ? void 0 : _41.recipient) || draft.to;
-        const subject = parseString((_42 = req.body) === null || _42 === void 0 ? void 0 : _42.subject) || draft.subject;
-        const html = parseString((_43 = req.body) === null || _43 === void 0 ? void 0 : _43.html) || draft.html;
-        const text = parseString((_44 = req.body) === null || _44 === void 0 ? void 0 : _44.text) ||
+        const to = parseString((_42 = req.body) === null || _42 === void 0 ? void 0 : _42.to) || parseString((_43 = req.body) === null || _43 === void 0 ? void 0 : _43.recipient) || draft.to;
+        const subject = parseString((_44 = req.body) === null || _44 === void 0 ? void 0 : _44.subject) || draft.subject;
+        const html = parseString((_45 = req.body) === null || _45 === void 0 ? void 0 : _45.html) || draft.html;
+        const text = parseString((_46 = req.body) === null || _46 === void 0 ? void 0 : _46.text) ||
             (html ? stripHtmlToText(html) : "") ||
             draft.text;
         if (!to) {
@@ -2374,7 +2415,7 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
     }
 }));
 app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _45, _46, _47, _48;
+    var _47, _48, _49, _50;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2395,8 +2436,8 @@ app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, vo
             lieferantName: draft.lieferantName,
             lieferantEmail: draft.lieferantEmail,
             fallbackTo: draft.fallbackTo,
-            bestellnummer: (_46 = (_45 = draft.bestellung) === null || _45 === void 0 ? void 0 : _45.bestellnummer) !== null && _46 !== void 0 ? _46 : null,
-            status: (_48 = (_47 = draft.bestellung) === null || _47 === void 0 ? void 0 : _47.status) !== null && _48 !== void 0 ? _48 : null,
+            bestellnummer: (_48 = (_47 = draft.bestellung) === null || _47 === void 0 ? void 0 : _47.bestellnummer) !== null && _48 !== void 0 ? _48 : null,
+            status: (_50 = (_49 = draft.bestellung) === null || _49 === void 0 ? void 0 : _49.status) !== null && _50 !== void 0 ? _50 : null,
         });
     }
     catch (e) {
@@ -2406,7 +2447,7 @@ app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, vo
 }));
 // Send reminder mail to supplier for a given order (no status change)
 app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _49, _50, _51, _52, _53, _54, _55;
+    var _51, _52, _53, _54, _55, _56, _57;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2445,16 +2486,17 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
         const artikelIds = Array.from(new Set((bestellung.positionen || []).map((p) => p.artikelId)));
         let artikelRows = [];
         if (artikelIds.length) {
-            const aRes = yield db.query("select id, name, preis from artikel where id = ANY($1)", [artikelIds]);
+            const aRes = yield db.query("select id, name, artikelnummer from artikel where id = ANY($1)", [artikelIds]);
             artikelRows = aRes.rows || [];
         }
         const artikelMap = {};
         artikelRows.forEach((r) => {
             artikelMap[Number(r.id)] = r;
         });
-        const lieferantRes = yield db.query("select id, name, email from lieferanten where id = $1", [lieferantId]);
+        const lieferantRes = yield db.query("select id, name, email, kundennummer from lieferanten where id = $1", [lieferantId]);
         const lieferantRow = lieferantRes.rows[0] || null;
         const lieferantName = (lieferantRow === null || lieferantRow === void 0 ? void 0 : lieferantRow.name) || `Lieferant #${lieferantId}`;
+        const lieferantKundenNummer = String((lieferantRow === null || lieferantRow === void 0 ? void 0 : lieferantRow.kundennummer) || "").trim();
         const supplierEmail = (lieferantRow === null || lieferantRow === void 0 ? void 0 : lieferantRow.email)
             ? String(lieferantRow.email)
             : "";
@@ -2465,36 +2507,20 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
             res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
             return;
         }
-        let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">` +
-            `<thead><tr style="text-align:left"><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
-        let artikelText = "";
-        for (const pos of bestellung.positionen) {
-            const a = artikelMap[Number(pos.artikelId)] || {
-                name: `Artikel #${pos.artikelId}`,
-                preis: 0,
-            };
-            const menge = Number(pos.menge) || 0;
-            const preis = Number(a.preis) || 0;
-            const gesamt = (preis * menge).toFixed(2);
-            const notiz = pos.notiz ? String(pos.notiz).trim() : "";
-            artikelHtml +=
-                `<tr><td>${a.name}</td><td>${menge}</td><td>${preis.toFixed(2)} €</td>` +
-                    `<td>${gesamt} €</td><td>${notiz}</td></tr>`;
-            artikelText += `- ${a.name} | Menge: ${menge} | Preis: ${preis.toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
-        }
-        artikelHtml += "</tbody></table>";
+        const { artikelHtml, artikelText } = buildArtikelListeForMail(bestellung.positionen || [], artikelMap);
         const replacements = {
-            "{{bestellnummer}}": String((_49 = bestellung.bestellnummer) !== null && _49 !== void 0 ? _49 : ""),
+            "{{bestellnummer}}": String((_51 = bestellung.bestellnummer) !== null && _51 !== void 0 ? _51 : ""),
             "{{datum}}": new Date(bestellung.bestellDatum).toLocaleDateString("de-DE"),
             "{{lieferant}}": lieferantName,
+            "{{kundennummer}}": lieferantKundenNummer,
             "{{artikel_liste}}": artikelHtml,
             "{{artikel_text}}": artikelText,
         };
-        let subject = parseString((_50 = req.body) === null || _50 === void 0 ? void 0 : _50.subject) || subjTemplate;
-        let html = parseString((_51 = req.body) === null || _51 === void 0 ? void 0 : _51.html) || bodyTemplate;
-        let text = parseString((_52 = req.body) === null || _52 === void 0 ? void 0 : _52.text) ||
+        let subject = parseString((_52 = req.body) === null || _52 === void 0 ? void 0 : _52.subject) || subjTemplate;
+        let html = parseString((_53 = req.body) === null || _53 === void 0 ? void 0 : _53.html) || bodyTemplate;
+        let text = parseString((_54 = req.body) === null || _54 === void 0 ? void 0 : _54.text) ||
             (html ? stripHtmlToText(html) : "") ||
-            `Nachfassen Bestellung ${(_53 = bestellung.bestellnummer) !== null && _53 !== void 0 ? _53 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
+            `Nachfassen Bestellung ${(_55 = bestellung.bestellnummer) !== null && _55 !== void 0 ? _55 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
         for (const key of Object.keys(replacements)) {
             const val = replacements[key];
             const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
@@ -2502,11 +2528,15 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
             html = html.replace(re, val);
             text = text.replace(re, val);
         }
+        if (lieferantKundenNummer &&
+            !subject.toLowerCase().includes("kundennummer")) {
+            subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
+        }
         if (signature) {
             html += `<div>${signature}</div>`;
             text += `\n${signature}`;
         }
-        const toOverride = parseString((_54 = req.body) === null || _54 === void 0 ? void 0 : _54.to) || parseString((_55 = req.body) === null || _55 === void 0 ? void 0 : _55.recipient) || to;
+        const toOverride = parseString((_56 = req.body) === null || _56 === void 0 ? void 0 : _56.to) || parseString((_57 = req.body) === null || _57 === void 0 ? void 0 : _57.recipient) || to;
         if (!toOverride) {
             res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
             return;
@@ -2523,7 +2553,7 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
     }
 }));
 app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _56, _57, _58, _59;
+    var _58, _59, _60, _61;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2561,53 +2591,41 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
         const artikelIds = Array.from(new Set((bestellung.positionen || []).map((p) => p.artikelId)));
         let artikelRows = [];
         if (artikelIds.length) {
-            const aRes = yield db.query("select id, name, preis from artikel where id = ANY($1)", [artikelIds]);
+            const aRes = yield db.query("select id, name, artikelnummer from artikel where id = ANY($1)", [artikelIds]);
             artikelRows = aRes.rows || [];
         }
         const artikelMap = {};
         artikelRows.forEach((r) => {
             artikelMap[Number(r.id)] = r;
         });
-        const lieferantRes = yield db.query("select id, name, email from lieferanten where id = $1", [lieferantId]);
+        const lieferantRes = yield db.query("select id, name, email, kundennummer from lieferanten where id = $1", [lieferantId]);
         const lieferantRow = lieferantRes.rows[0] || null;
         const lieferantName = (lieferantRow === null || lieferantRow === void 0 ? void 0 : lieferantRow.name) || `Lieferant #${lieferantId}`;
+        const lieferantKundenNummer = String((lieferantRow === null || lieferantRow === void 0 ? void 0 : lieferantRow.kundennummer) || "").trim();
         const supplierEmail = (lieferantRow === null || lieferantRow === void 0 ? void 0 : lieferantRow.email) ? String(lieferantRow.email) : "";
         const fallbackTo = yield resolveConfiguredMailRecipient(settingsRepo);
         const to = String(supplierEmail || "").trim() || String(fallbackTo || "").trim();
-        let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%">` +
-            `<thead><tr style="text-align:left"><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
-        let artikelText = "";
-        for (const pos of bestellung.positionen) {
-            const a = artikelMap[Number(pos.artikelId)] || {
-                name: `Artikel #${pos.artikelId}`,
-                preis: 0,
-            };
-            const menge = Number(pos.menge) || 0;
-            const preis = Number(a.preis) || 0;
-            const gesamt = (preis * menge).toFixed(2);
-            const notiz = pos.notiz ? String(pos.notiz).trim() : "";
-            artikelHtml +=
-                `<tr><td>${a.name}</td><td>${menge}</td><td>${preis.toFixed(2)} €</td>` +
-                    `<td>${gesamt} €</td><td>${notiz}</td></tr>`;
-            artikelText += `- ${a.name} | Menge: ${menge} | Preis: ${preis.toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
-        }
-        artikelHtml += "</tbody></table>";
+        const { artikelHtml, artikelText } = buildArtikelListeForMail(bestellung.positionen || [], artikelMap);
         const replacements = {
-            "{{bestellnummer}}": String((_56 = bestellung.bestellnummer) !== null && _56 !== void 0 ? _56 : ""),
+            "{{bestellnummer}}": String((_58 = bestellung.bestellnummer) !== null && _58 !== void 0 ? _58 : ""),
             "{{datum}}": new Date(bestellung.bestellDatum).toLocaleDateString("de-DE"),
             "{{lieferant}}": lieferantName,
+            "{{kundennummer}}": lieferantKundenNummer,
             "{{artikel_liste}}": artikelHtml,
             "{{artikel_text}}": artikelText,
         };
         let subject = subjTemplate;
         let html = bodyTemplate;
-        let text = `Nachfassen Bestellung ${(_57 = bestellung.bestellnummer) !== null && _57 !== void 0 ? _57 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
+        let text = `Nachfassen Bestellung ${(_59 = bestellung.bestellnummer) !== null && _59 !== void 0 ? _59 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
         for (const key of Object.keys(replacements)) {
             const val = replacements[key];
             const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
             subject = subject.replace(re, val);
             html = html.replace(re, val);
             text = text.replace(re, val);
+        }
+        if (lieferantKundenNummer && !subject.toLowerCase().includes("kundennummer")) {
+            subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
         }
         if (signature) {
             html += `<div>${signature}</div>`;
@@ -2621,8 +2639,8 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
             lieferantName,
             lieferantEmail: supplierEmail,
             fallbackTo,
-            bestellnummer: (_58 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.bestellnummer) !== null && _58 !== void 0 ? _58 : null,
-            status: (_59 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.status) !== null && _59 !== void 0 ? _59 : null,
+            bestellnummer: (_60 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.bestellnummer) !== null && _60 !== void 0 ? _60 : null,
+            status: (_61 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.status) !== null && _61 !== void 0 ? _61 : null,
         });
     }
     catch (e) {
@@ -2664,6 +2682,12 @@ app.get("/__routes", (req, res) => {
 });
 // Internal: run SQL schema from repo (temporary migration helper)
 // migration endpoint removed
-app.listen(PORT, () => {
-    console.log(`Server läuft auf http://localhost:${PORT}`);
+(0, db_1.ensureSchema)()
+    .catch((e) => {
+    console.error("Warnung: Schema-Migration fehlgeschlagen", e);
+})
+    .finally(() => {
+    app.listen(PORT, () => {
+        console.log(`Server läuft auf http://localhost:${PORT}`);
+    });
 });

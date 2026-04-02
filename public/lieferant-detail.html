@@ -2,7 +2,7 @@
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Lieferantendetail</title>
     <link rel="stylesheet" href="/static/styles/uebersicht.css" />
   </head>
@@ -100,7 +100,11 @@
         artikelCreateModal.setAttribute("aria-hidden", "true");
         artikelCreateModal.innerHTML = `
           <div class="modal__backdrop"></div>
-          <div class="modal__content" role="dialog" aria-modal="true" style="max-width: 980px">
+          <div
+            class="modal__content modal__content--md"
+            role="dialog"
+            aria-modal="true"
+          >
             <div class="modal__header">
               <h2>Artikel anlegen (Lieferant)</h2>
               <button class="btn btn--link" type="button" id="artikelCreateClose">Schliessen</button>
@@ -393,6 +397,7 @@
         kontaktList.appendChild(
           formatValue("Kontaktperson", lieferant.kontaktPerson),
         );
+        kontaktList.appendChild(formatValue("Kundennummer", lieferant.kundenNummer));
         kontaktList.appendChild(formatValue("E-Mail", lieferant.email));
         kontaktList.appendChild(formatValue("Telefon", lieferant.telefon));
         

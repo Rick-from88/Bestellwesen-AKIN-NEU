@@ -48,3 +48,10 @@ const pool = new Pool(poolConfig);
 export const query = (text: string, params?: Array<unknown>) =>
   pool.query(text, params);
 export const getClient = () => pool.connect();
+
+export const ensureSchema = async () => {
+  // Keep this minimal and idempotent; older DBs may miss newer columns.
+  await query(
+    "alter table lieferanten add column if not exists kundennummer text",
+  );
+};

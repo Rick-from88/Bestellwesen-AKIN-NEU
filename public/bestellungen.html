@@ -2,7 +2,7 @@
 <html lang="de">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Bestellungen</title>
     <link rel="stylesheet" href="/static/styles/uebersicht.css" />
   </head>
@@ -132,7 +132,11 @@
 
     <div class="modal modal--maildraft" id="mailDraftModal" aria-hidden="true">
       <div class="modal__backdrop"></div>
-      <div class="modal__content" role="dialog" aria-modal="true" style="max-width: 1280px">
+      <div
+        class="modal__content modal__content--wide"
+        role="dialog"
+        aria-modal="true"
+      >
         <div class="modal__header">
           <h2 id="mailDraftTitle">E-Mail vor dem Senden prüfen</h2>
           <button class="btn btn--link" type="button" id="mailDraftClose">
@@ -149,31 +153,14 @@
             <label for="mailDraftSubject">Betreff</label>
             <input id="mailDraftSubject" type="text" />
           </div>
-          <div
-            style="
-              display: grid;
-              grid-template-columns: minmax(320px, 0.9fr) minmax(520px, 2.1fr);
-              gap: 12px;
-              align-items: start;
-            "
-          >
+          <div class="mail-draft-split">
             <div class="form__row form__row--stack" style="margin: 0">
               <label for="mailDraftHtml">Mail-Text (HTML erlaubt)</label>
               <textarea id="mailDraftHtml" rows="14"></textarea>
             </div>
             <div class="form__row form__row--stack" style="margin: 0">
               <label>Vorschau</label>
-              <div
-                id="mailDraftPreview"
-                style="
-                  border: 1px solid rgba(0, 0, 0, 0.10);
-                  border-radius: 12px;
-                  background: #fff;
-                  padding: 12px;
-                  min-height: 420px;
-                  overflow: auto;
-                "
-              ></div>
+              <div id="mailDraftPreview" class="mail-draft-preview"></div>
             </div>
           </div>
 
@@ -192,7 +179,11 @@
 
     <div class="modal" id="sammelModal" aria-hidden="true">
       <div class="modal__backdrop"></div>
-      <div class="modal__content" role="dialog" aria-modal="true" style="max-width: 760px">
+      <div
+        class="modal__content modal__content--narrow"
+        role="dialog"
+        aria-modal="true"
+      >
         <div class="modal__header">
           <h2>Sammelbestellung Auswahl</h2>
           <button class="btn btn--link" type="button" id="sammelClose">
@@ -224,7 +215,11 @@
 
     <div class="modal modal--maildraft" id="sammelMailDraftModal" aria-hidden="true">
       <div class="modal__backdrop"></div>
-      <div class="modal__content" role="dialog" aria-modal="true" style="max-width: 1280px">
+      <div
+        class="modal__content modal__content--wide"
+        role="dialog"
+        aria-modal="true"
+      >
         <div class="modal__header">
           <h2>Sammelbestellung: E-Mails prüfen</h2>
           <button class="btn btn--link" type="button" id="sammelMailClose">
@@ -233,22 +228,8 @@
         </div>
         <div class="form" style="padding: 16px; gap: 12px">
           <div class="list__meta" id="sammelMailMeta"></div>
-          <div
-            style="
-              display: grid;
-              grid-template-columns: 300px minmax(560px, 1fr);
-              gap: 12px;
-              align-items: start;
-            "
-          >
-            <div
-              style="
-                border: 1px solid rgba(0, 0, 0, 0.08);
-                border-radius: 12px;
-                background: #fff;
-                overflow: hidden;
-              "
-            >
+          <div class="sammel-mail-layout">
+            <div class="sammel-mail-side">
               <div style="padding: 10px 12px; font-weight: 700; border-bottom: 1px solid rgba(0,0,0,0.06)">
                 Lieferanten
               </div>
@@ -259,7 +240,7 @@
               ></div>
             </div>
 
-            <div style="display: grid; gap: 10px">
+            <div style="display: grid; gap: 10px; min-width: 0">
               <div class="form__row">
                 <label for="sammelMailTo">Empfänger</label>
                 <input id="sammelMailTo" type="text" />
@@ -268,31 +249,14 @@
                 <label for="sammelMailSubject">Betreff</label>
                 <input id="sammelMailSubject" type="text" />
               </div>
-              <div
-                style="
-                  display: grid;
-                  grid-template-columns: minmax(320px, 1fr) minmax(520px, 2fr);
-                  gap: 12px;
-                  align-items: start;
-                "
-              >
+              <div class="sammel-mail-editor-split">
                 <div class="form__row form__row--stack" style="margin: 0">
                   <label for="sammelMailHtml">Mail-Text (HTML erlaubt)</label>
                   <textarea id="sammelMailHtml" rows="14"></textarea>
                 </div>
                 <div class="form__row form__row--stack" style="margin: 0">
                   <label>Vorschau</label>
-                  <div
-                    id="sammelMailPreview"
-                    style="
-                      border: 1px solid rgba(0, 0, 0, 0.10);
-                      border-radius: 12px;
-                      background: #fff;
-                      padding: 12px;
-                      min-height: 340px;
-                      overflow: auto;
-                    "
-                  ></div>
+                  <div id="sammelMailPreview" class="mail-draft-preview"></div>
                 </div>
               </div>
 
