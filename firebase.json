@@ -6,6 +6,10 @@
     "trailingSlash": false,
     "rewrites": [
       {
+        "source": "/login",
+        "destination": "/login.html"
+      },
+      {
         "source": "/api/**",
         "run": { "serviceId": "akin-api", "region": "europe-west1" }
       },

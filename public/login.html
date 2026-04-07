@@ -48,9 +48,12 @@
     </div>
 
     <script type="module">
-      import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
-      import { app as firebaseApp } from "/static/firebase-module-init.js";
-      import { auth as firebaseAuth } from "/static/firebase-module-init.js";
+      import {
+        getAuth,
+        signInWithEmailAndPassword,
+        signOut,
+      } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+      import { app as firebaseApp, auth as firebaseAuth } from "/firebase-module-init.js";
 
       const form = document.getElementById("loginForm");
       const emailEl = document.getElementById("email");
@@ -68,9 +71,12 @@
 
       const doLogin = async (email, password) => {
         setMessage("Anmeldung...");
+        console.log("[login] starte Firebase-Login für", email);
         const res = await signInWithEmailAndPassword(auth, email, password);
         const user = res.user;
+        console.log("[login] Firebase-Login OK, UID:", user?.uid);
         const idToken = await user.getIdToken();
+        console.log("[login] ID-Token geholt, sende an /api/auth/login");
 
         const apiRes = await fetch("/api/auth/login", {
           method: "POST",
@@ -80,8 +86,10 @@
 
         if (!apiRes.ok) {
           const txt = await apiRes.text();
+          console.error("[login] /api/auth/login Fehler", apiRes.status, txt);
           throw new Error(txt || "Login fehlgeschlagen");
         }
+        console.log("[login] /api/auth/login OK");
       };
 
       const doLogout = async () => {
@@ -112,11 +120,16 @@
         try {
           const email = emailEl.value.trim();
           const password = passwordEl.value;
+          console.log("[login] submit", email);
           await doLogin(email, password);
           window.location.href = "/uebersicht";
         } catch (e) {
-          console.error(e);
-          setMessage("Login fehlgeschlagen. Bitte Daten prüfen.");
+          console.error("[login] Fehler beim Login", e);
+          const msg =
+            (e && e.code && String(e.code)) ||
+            (e && e.message && String(e.message)) ||
+            "Login fehlgeschlagen. Bitte Daten prüfen.";
+          setMessage(msg);
         }
       });
 

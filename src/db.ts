@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const rawHostEnv = process.env.DB_HOST;
 const host = (process.env.DB_HOST || process.env.PGHOST || "localhost")
   .toString()
   .trim();
@@ -43,6 +42,24 @@ if (host) {
   poolConfig.port = port;
 }
 
+// Öffentliche Postgres-Hosts (Cloud SQL, Neon, …) verlangen oft TLS. Unix-Socket (/cloudsql/…) nicht.
+const isUnixSocket = host.startsWith("/");
+const sslHint = String(process.env.DB_SSL || process.env.PGSSLMODE || "")
+  .trim()
+  .toLowerCase();
+const useSsl =
+  !isUnixSocket &&
+  (sslHint === "true" ||
+    sslHint === "require" ||
+    sslHint === "1" ||
+    sslHint === "yes");
+if (useSsl) {
+  const rejectUnauthorized =
+    String(process.env.DB_SSL_REJECT_UNAUTHORIZED ?? "true").toLowerCase() !==
+    "false";
+  poolConfig.ssl = { rejectUnauthorized };
+}
+
 const pool = new Pool(poolConfig);
 
 export const query = (text: string, params?: Array<unknown>) =>
@@ -50,8 +67,54 @@ export const query = (text: string, params?: Array<unknown>) =>
 export const getClient = () => pool.connect();
 
 export const ensureSchema = async () => {
-  // Keep this minimal and idempotent; older DBs may miss newer columns.
+  // Idempotent: fehlende Spalten nachziehen (Cloud-DB oft älter als schema.sql).
   await query(
     "alter table lieferanten add column if not exists kundennummer text",
   );
+  await query(
+    "alter table bestellungen add column if not exists bestellnummer integer",
+  );
+  await query(
+    "alter table bestellungen add column if not exists created_by_uid text",
+  );
+  await query(
+    "alter table bestellungen add column if not exists created_by_name text",
+  );
+  await query(
+    "alter table bestellungen add column if not exists created_by_email text",
+  );
+  await query(
+    "alter table bestellungen add column if not exists auftrags_bestaetigt boolean not null default false",
+  );
+  await query(
+    "alter table bestellpositionen add column if not exists notiz text",
+  );
+  await query(
+    "alter table bestellpositionen add column if not exists geliefert_menge integer not null default 0",
+  );
+  await query(
+    "alter table bestellpositionen add column if not exists storniert_menge integer not null default 0",
+  );
+  await query(
+    "alter table bestellungen drop constraint if exists bestellungen_status_check",
+  );
+  await query(`alter table bestellungen
+    add constraint bestellungen_status_check
+    check (status in ('offen', 'bestellt', 'teilgeliefert', 'geliefert', 'teilstorniert', 'storniert'))`);
+  await query(
+    "alter table artikel add column if not exists beschreibung text",
+  );
+  await query(
+    "alter table artikel add column if not exists artikelnummer text",
+  );
+  await query("alter table artikel add column if not exists einheit text");
+  await query(
+    "alter table artikel add column if not exists verpackungseinheit text",
+  );
+  await query(
+    "alter table artikel add column if not exists standard_bestellwert integer",
+  );
+  await query("alter table artikel add column if not exists foto_url text");
+  await query("alter table artikel drop column if exists lagerbestand");
+  await query("alter table artikel drop column if exists min_bestand");
 };

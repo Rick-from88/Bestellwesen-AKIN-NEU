@@ -32,6 +32,9 @@ import { ensureSchema } from "./db";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Hinter Firebase Hosting / Load Balancer: korrekte Client-Proto/Host für Cookies.
+app.set("trust proxy", true);
+
 app.use(bodyParser.json({ limit: "10mb" }));
 app.use(bodyParser.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
@@ -40,15 +43,55 @@ app.use("/static", express.static(path.join(__dirname, "..", "public")));
 // Admin auth middleware: if `ADMIN_TOKEN` is set, require it via
 // `Authorization: Bearer <token>` header or `?admin_token=...` query.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
-const FB_SESSION_COOKIE = process.env.FB_SESSION_COOKIE || "fb_session";
+// Firebase Hosting → Cloud Run: nur das Cookie "__session" wird durchgereicht (siehe Firebase-Doku).
+const FB_SESSION_COOKIE = process.env.FB_SESSION_COOKIE || "__session";
+
+/** Session-Cookie für Firebase Hosting (*.web.app): Domain muss zur sichtbaren Origin passen. */
+function sessionCookieDomainFromReq(req: {
+  get(name: string): string | undefined;
+}): string | undefined {
+  const fromEnv =
+    process.env.SESSION_COOKIE_DOMAIN || process.env.COOKIE_DOMAIN || "";
+  const trimmed = fromEnv.trim();
+  if (trimmed) return trimmed;
+  const raw = String(req.get("x-forwarded-host") || req.get("host") || "")
+    .split(",")[0]
+    .trim()
+    .split(":")[0];
+  if (!raw) return undefined;
+  if (raw.endsWith(".web.app") || raw.endsWith(".firebaseapp.com")) {
+    return raw;
+  }
+  return undefined;
+}
+
+function sessionCookieSecure(req: {
+  secure: boolean;
+  get(name: string): string | undefined;
+}): boolean {
+  const proto = String(req.get("x-forwarded-proto") || "")
+    .split(",")[0]
+    .trim();
+  if (proto === "https") return true;
+  if (req.secure) return true;
+  return process.env.NODE_ENV === "production";
+}
+
 const ADMIN_UIDS = (process.env.ADMIN_UIDS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+/** Feste Admin-Mails (zusätzlich zu ADMIN_EMAILS in der Umgebung). */
+const ADMIN_EMAILS_BUILTIN = ["patrick@akin-pulverbeschichtungen.de"];
+const ADMIN_EMAILS_FROM_ENV = (process.env.ADMIN_EMAILS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+const ADMIN_EMAIL_SET = new Set(
+  [...ADMIN_EMAILS_BUILTIN, ...ADMIN_EMAILS_FROM_ENV].map((e) =>
+    e.toLowerCase(),
+  ),
+);
 
 const initFirebaseAdmin = () => {
   if (admin.apps.length) return admin;
@@ -121,8 +164,8 @@ const requireUserApi = async (req: any, res: any, next: any) => {
 
 const isAdminUser = (user: admin.auth.DecodedIdToken): boolean => {
   if (ADMIN_UIDS.includes(user.uid)) return true;
-  const email = user.email || "";
-  if (email && ADMIN_EMAILS.includes(email)) return true;
+  const email = (user.email || "").toLowerCase();
+  if (email && ADMIN_EMAIL_SET.has(email)) return true;
   return false;
 };
 
@@ -635,13 +678,15 @@ app.post("/api/auth/login", async (req, res) => {
     const decoded = await admin.auth().verifyIdToken(idToken);
 
     // Use ID token as session payload; every request will be verified again.
-    const secure = process.env.NODE_ENV === "production";
+    const domain = sessionCookieDomainFromReq(req);
+    const secure = sessionCookieSecure(req);
     res.cookie(FB_SESSION_COOKIE, idToken, {
       httpOnly: true,
       sameSite: "lax",
       secure,
       maxAge: 60 * 60 * 1000, // ~1h (id token lifetime)
       path: "/",
+      ...(domain ? { domain } : {}),
     });
 
     return res.json({ uid: decoded.uid, email: decoded.email || null });
@@ -651,7 +696,11 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.post("/api/auth/logout", async (req, res) => {
-  res.clearCookie(FB_SESSION_COOKIE, { path: "/" });
+  const domain = sessionCookieDomainFromReq(req);
+  res.clearCookie(FB_SESSION_COOKIE, {
+    path: "/",
+    ...(domain ? { domain } : {}),
+  });
   return res.status(204).send();
 });
 
