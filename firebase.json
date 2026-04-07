@@ -10,6 +10,10 @@
         "destination": "/login.html"
       },
       {
+        "source": "/lieferanten/*",
+        "destination": "/lieferant-detail.html"
+      },
+      {
         "source": "/api/**",
         "run": { "serviceId": "akin-api", "region": "europe-west1" }
       },
