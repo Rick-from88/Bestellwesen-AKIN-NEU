@@ -1175,7 +1175,8 @@
       const applyBestellungenFilterAndSort = () => {
         const artikelMap = artikelMapGlobal;
         const lieferantMap = lieferantMapGlobal;
-        const term = (bestellungenSearch?.value || "").toLowerCase().trim();
+        const termRaw = String(bestellungenSearch?.value || "").toLowerCase().trim();
+        const tokens = termRaw ? termRaw.split(/\s+/).filter(Boolean) : [];
         const erfasserFilter = (bestellungenErfasserFilter?.value || "").trim();
         const statusFilter = bestellungenStatusFilter?.value || "";
         const sort = bestellungenSort?.value || "date-desc";
@@ -1192,7 +1193,7 @@
           );
         }
 
-        if (term) {
+        if (tokens.length) {
           list = list.filter((b) => {
             // JS: `??` nicht ohne Klammern mit `||` mischen; daher nur `??`
             const nr = String(b.bestellnummer ?? b.id ?? "").toLowerCase();
@@ -1203,8 +1204,16 @@
               .map((p) => artikelMap[p.artikelId]?.name || "")
               .join(" ")
               .toLowerCase();
+            const artikelNummern = positionen
+              .map((p) => artikelMap[p.artikelId]?.artikelnummer || "")
+              .join(" ")
+              .toLowerCase();
             const lieferantenNamen = positionen
               .map((p) => lieferantMap[p.lieferantId] || "")
+              .join(" ")
+              .toLowerCase();
+            const mengen = positionen
+              .map((p) => String(p.menge ?? ""))
               .join(" ")
               .toLowerCase();
             const notizen = positionen
@@ -1212,6 +1221,12 @@
               .join(" ")
               .toLowerCase();
             const createdBy = displayNameFromOrder(b).toLowerCase();
+            const flags = [
+              b.auftragsBestaetigt ? "auftragsbestaetigt" : "",
+              b.auftragsBestaetigt ? "ja" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
             const haystack =
               nr +
               " " +
@@ -1221,12 +1236,18 @@
               " " +
               artikelNamen +
               " " +
+              artikelNummern +
+              " " +
               lieferantenNamen +
+              " " +
+              mengen +
               " " +
               notizen +
               " " +
-              createdBy;
-            return haystack.includes(term);
+              createdBy +
+              " " +
+              flags;
+            return tokens.every((t) => haystack.includes(t));
           });
         }
 
@@ -1278,6 +1299,7 @@
           artikelMapGlobal = artikelData.reduce((acc, item) => {
             acc[item.id] = {
               name: item.name,
+              artikelnummer: item.artikelnummer,
               preis: item.preis,
               standardBestellwert: item.standardBestellwert,
               fotoUrl: item.fotoUrl,

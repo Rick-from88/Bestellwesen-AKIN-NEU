@@ -579,7 +579,8 @@
       };
 
       const applyArtikelFilterAndSort = () => {
-        const term = (artikelSearch?.value || "").toLowerCase().trim();
+        const termRaw = String(artikelSearch?.value || "").toLowerCase().trim();
+        const tokens = termRaw ? termRaw.split(/\s+/).filter(Boolean) : [];
         const filterLieferantId =
           artikelLieferantFilter?.value || "";
         const sort = artikelSort?.value || "name-asc";
@@ -594,7 +595,7 @@
           const items = [...(artikelByLieferantGlobal[l.id] || [])];
 
           let filtered = items;
-          if (term) {
+          if (tokens.length) {
             filtered = items.filter((a) => {
               const nummer = a.artikelnummer || "";
               const text = [
@@ -602,11 +603,15 @@
                 nummer,
                 l.name,
                 a.beschreibung,
+                a.einheit,
+                a.verpackungseinheit,
+                a.standardBestellwert,
+                a.preis,
               ]
                 .filter(Boolean)
                 .join(" ")
                 .toLowerCase();
-              return text.includes(term);
+              return tokens.every((t) => text.includes(t));
             });
           }
 

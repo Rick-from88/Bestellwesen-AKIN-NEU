@@ -185,12 +185,13 @@
       };
 
       const applyLieferantenFilterAndSort = () => {
-        const term = (lieferantenSearch?.value || "").toLowerCase().trim();
+        const termRaw = String(lieferantenSearch?.value || "").toLowerCase().trim();
+        const tokens = termRaw ? termRaw.split(/\s+/).filter(Boolean) : [];
         const sort = lieferantenSort?.value || "name-asc";
 
         let list = [...lieferantenData];
 
-        if (term) {
+        if (tokens.length) {
           list = list.filter((l) => {
             const parts = [
               l.name,
@@ -202,11 +203,12 @@
               l.plz,
               l.stadt,
               l.land,
+              l.createdAt || l.created_at || "",
             ]
               .filter(Boolean)
               .join(" ")
               .toLowerCase();
-            return parts.includes(term);
+            return tokens.every((t) => parts.includes(t));
           });
         }
 
