@@ -984,6 +984,13 @@ body::before {
   max-width: 100%;
   min-width: 0;
 }
+
+/* iOS Safari: verhindert Auto-Zoom beim Fokus in Modals (Fontsize < 16px) */
+.modal input,
+.modal select,
+.modal textarea {
+  font-size: 16px;
+}
 .position-list {
   display: grid;
   gap: 8px;
