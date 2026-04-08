@@ -59,6 +59,129 @@
       let lieferanten = [];
       let artikel = [];
 
+      // Artikel-Suche (über alle Lieferanten)
+      let artikelSearchModal = null;
+      let artikelSearchInput = null;
+      let artikelSearchList = null;
+      let artikelSearchClose = null;
+      let artikelSearchResolver = null;
+
+      const normalizeText = (v) => String(v || "").toLowerCase().trim();
+
+      const ensureArtikelSearchModal = () => {
+        if (artikelSearchModal) return;
+        artikelSearchModal = document.createElement("div");
+        artikelSearchModal.className = "modal";
+        artikelSearchModal.setAttribute("aria-hidden", "true");
+        artikelSearchModal.innerHTML = `
+          <div class="modal__backdrop"></div>
+          <div class="modal__content modal__content--md" role="dialog" aria-modal="true">
+            <div class="modal__header">
+              <h2>Artikel suchen</h2>
+              <button class="btn btn--link" type="button" id="artikelSearchClose">Schliessen</button>
+            </div>
+            <div class="form" style="gap: 10px">
+              <input id="artikelSearchInput" type="search" placeholder="Suchen (Artikel, Nummer, Lieferant ...)" />
+              <div class="list" id="artikelSearchList" style="max-height: 60vh; overflow: auto"></div>
+              <div class="list__meta" style="color: var(--ink-soft)">
+                Tipp: Du kannst auch nur eine Artikelnummer eingeben.
+              </div>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(artikelSearchModal);
+        artikelSearchInput = artikelSearchModal.querySelector("#artikelSearchInput");
+        artikelSearchList = artikelSearchModal.querySelector("#artikelSearchList");
+        artikelSearchClose = artikelSearchModal.querySelector("#artikelSearchClose");
+        const backdrop = artikelSearchModal.querySelector(".modal__backdrop");
+        const close = () => {
+          artikelSearchModal.classList.remove("is-open");
+          artikelSearchModal.setAttribute("aria-hidden", "true");
+          artikelSearchResolver = null;
+        };
+        if (artikelSearchClose) artikelSearchClose.addEventListener("click", close);
+        if (backdrop) backdrop.addEventListener("click", close);
+      };
+
+      const openArtikelSearch = () =>
+        new Promise((resolve) => {
+          ensureArtikelSearchModal();
+          artikelSearchResolver = resolve;
+          if (artikelSearchList) artikelSearchList.innerHTML = "";
+          if (artikelSearchInput) artikelSearchInput.value = "";
+          artikelSearchModal.classList.add("is-open");
+          artikelSearchModal.setAttribute("aria-hidden", "false");
+          if (artikelSearchInput) artikelSearchInput.focus();
+          const render = () => {
+            if (!artikelSearchList) return;
+            const term = normalizeText(artikelSearchInput?.value || "");
+            const lieferantNameById = {};
+            (Array.isArray(lieferanten) ? lieferanten : []).forEach((l) => {
+              lieferantNameById[Number(l.id)] = l.name || `#${l.id}`;
+            });
+            const all = Array.isArray(artikel) ? artikel : [];
+            const filtered = !term
+              ? all.slice(0, 80)
+              : all
+                  .filter((a) => {
+                    const hay = [
+                      a?.name,
+                      a?.artikelnummer,
+                      lieferantNameById[Number(a?.lieferantId)],
+                      a?.beschreibung,
+                      a?.einheit,
+                      a?.verpackungseinheit,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                      .toLowerCase();
+                    return hay.includes(term);
+                  })
+                  .slice(0, 80);
+
+            artikelSearchList.innerHTML = "";
+            if (!filtered.length) {
+              const empty = document.createElement("div");
+              empty.className = "list__row";
+              empty.textContent = "Keine Treffer.";
+              artikelSearchList.appendChild(empty);
+              return;
+            }
+            filtered.forEach((a) => {
+              const row = document.createElement("button");
+              row.type = "button";
+              row.className = "list__row list__row--clickable";
+              row.style.width = "100%";
+              row.style.textAlign = "left";
+              row.style.border = "0";
+              row.style.cursor = "pointer";
+              const lid = Number(a?.lieferantId);
+              const title = document.createElement("div");
+              title.className = "list__title";
+              title.textContent = String(a?.name || `Artikel #${a?.id || ""}`);
+              const meta = document.createElement("div");
+              meta.className = "list__meta";
+              const nr = String(a?.artikelnummer || "").trim();
+              const lName = String(lieferantNameById[lid] || `Lieferant #${lid}`);
+              meta.textContent = [lName, nr ? `Nr: ${nr}` : ""].filter(Boolean).join(" | ");
+              row.appendChild(title);
+              row.appendChild(meta);
+              row.addEventListener("click", () => {
+                artikelSearchModal.classList.remove("is-open");
+                artikelSearchModal.setAttribute("aria-hidden", "true");
+                const fn = artikelSearchResolver;
+                artikelSearchResolver = null;
+                if (typeof fn === "function") fn(a);
+              });
+              artikelSearchList.appendChild(row);
+            });
+          };
+          if (artikelSearchInput) {
+            artikelSearchInput.oninput = render;
+          }
+          render();
+        });
+
       const buildSelect = (items, placeholder) => {
         const select = document.createElement("select");
         select.required = true;
@@ -154,6 +277,30 @@
         const lieferantSelect = buildSelect(lieferanten, "Lieferant");
         const artikelSelect = buildSelect([], "Artikel");
         artikelSelect.disabled = true;
+
+        const findArtikelBtn = document.createElement("button");
+        findArtikelBtn.type = "button";
+        findArtikelBtn.className = "btn btn--ghost btn--small";
+        findArtikelBtn.textContent = "Artikel finden";
+        findArtikelBtn.title = "Artikel über Suche auswählen (Lieferant wird automatisch gesetzt)";
+        findArtikelBtn.addEventListener("click", async () => {
+          try {
+            const selected = await openArtikelSearch();
+            if (!selected) return;
+            const lid = Number(selected?.lieferantId);
+            const aid = Number(selected?.id);
+            if (!Number.isFinite(lid) || lid <= 0 || !Number.isFinite(aid) || aid <= 0) {
+              return;
+            }
+            lieferantSelect.value = String(lid);
+            // trigger populate
+            await populateArtikelForLieferant(artikelSelect, lid, aid);
+            artikelSelect.value = String(aid);
+            artikelSelect.dispatchEvent(new Event("change"));
+          } catch (e) {
+            console.error(e);
+          }
+        });
 
         const manualWrap = document.createElement("div");
         manualWrap.style.display = "none";
@@ -264,6 +411,7 @@
 
         row.appendChild(lieferantSelect);
         row.appendChild(artikelSelect);
+        row.appendChild(findArtikelBtn);
         row.appendChild(mengeInput);
         row.appendChild(notizInput);
         row.appendChild(removeBtn);

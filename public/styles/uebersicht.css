@@ -990,7 +990,7 @@ body::before {
 }
 .position-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 90px 90px 90px 140px;
+  grid-template-columns: 1fr 1fr 140px 90px 90px 90px 140px;
   gap: 8px;
   align-items: start;
   min-width: 0;
@@ -1184,10 +1184,10 @@ body::before {
 
 /* Guided Tour (Shepherd) – leicht ans UI angepasst */
 .shepherd-modal-overlay-container {
-  z-index: 10200;
+  z-index: 10240;
 }
 .shepherd-element {
-  z-index: 10210;
+  z-index: 10270 !important;
   max-width: min(420px, calc(100vw - 24px));
 }
 .bw-tour-step .shepherd-content {
@@ -1289,11 +1289,10 @@ body::before {
 /* Highlight für Tour-Ziele (auch auf Mobile, wenn Tooltip zentriert ist) */
 .bw-tour-highlight {
   position: relative;
-  z-index: 10205;
-  outline: 3px solid rgba(255, 107, 53, 0.75);
-  outline-offset: 2px;
+  z-index: 10260 !important;
   border-radius: 14px;
+  /* iOS + overflow:hidden on cards: inset highlight stays visible */
   box-shadow:
-    0 0 0 6px rgba(255, 107, 53, 0.20),
-    0 18px 45px rgba(17, 21, 21, 0.18);
+    0 0 0 3px rgba(255, 107, 53, 0.80) inset,
+    0 0 0 6px rgba(255, 107, 53, 0.18) inset;
 }
