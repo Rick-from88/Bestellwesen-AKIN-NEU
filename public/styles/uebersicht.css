@@ -341,6 +341,48 @@ body::before {
   font-weight: 500;
 }
 
+#mailDetails .panel h2,
+#mailDetails .form__row label,
+#mailDetails .form__message,
+#mailDetails .template-placeholder-desc {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#mailDetails .template-placeholder-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+#mailDetails .template-placeholder-row code {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#mailDetails .template-placeholder-row .btn {
+  flex-shrink: 0;
+}
+
+#mailDetails .template-placeholder-desc {
+  color: var(--ink-soft);
+  margin-left: 8px;
+}
+
+@media (max-width: 720px) {
+  #mailDetails .template-placeholder-desc {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  #mailDetails .form__actions .btn {
+    width: 100%;
+  }
+}
+
 .card__trend {
   color: var(--accent-dark);
   font-weight: 600;
