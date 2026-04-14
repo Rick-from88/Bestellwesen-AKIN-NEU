@@ -422,6 +422,30 @@ const buildArtikelListeForMail = (
   return { artikelHtml, artikelText };
 };
 
+const ensureArtikelDetailsInDraft = (
+  html: string,
+  text: string,
+  templateSource: string,
+  artikelHtml: string,
+  artikelText: string,
+) => {
+  const source = String(templateSource || "");
+  const hasArticlePlaceholder =
+    source.includes("{{artikel_liste}}") || source.includes("{{artikel_text}}");
+  if (hasArticlePlaceholder) {
+    return { html, text };
+  }
+
+  const htmlWithList =
+    `${String(html || "")}` +
+    `<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0;" />` +
+    `<div><strong>Artikeldetails</strong></div>` +
+    `${artikelHtml}`;
+  const textWithList =
+    `${String(text || "")}\n\nArtikeldetails:\n${artikelText}`;
+  return { html: htmlWithList, text: textWithList };
+};
+
 const buildOrderMailDraft = async (id: number) => {
   const { getBestellungById } = await Promise.resolve(
     require("./repositories/bestellungen"),
@@ -501,6 +525,13 @@ const buildOrderMailDraft = async (id: number) => {
     html = html.replace(re, val);
     text = text.replace(re, val);
   }
+  ({ html, text } = ensureArtikelDetailsInDraft(
+    html,
+    text,
+    bodyTemplate,
+    artikelHtml,
+    artikelText,
+  ));
   if (lieferantKundenNummer && !subject.toLowerCase().includes("kundennummer")) {
     subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
   }
@@ -2656,6 +2687,13 @@ const buildSammelDraftForGroup = async (
     html = html.replace(re, val);
     text = text.replace(re, val);
   }
+  ({ html, text } = ensureArtikelDetailsInDraft(
+    html,
+    text,
+    bodyTemplate,
+    artikelHtml,
+    artikelText,
+  ));
   if (signature) {
     html += `<div>${signature}</div>`;
     text += `\n${signature}`;
@@ -3141,7 +3179,8 @@ app.post(
       };
 
       let subject = parseString(req.body?.subject) || subjTemplate;
-      let html = parseString(req.body?.html) || bodyTemplate;
+      const rawHtmlTemplate = parseString(req.body?.html) || bodyTemplate;
+      let html = rawHtmlTemplate;
       let text =
         parseString(req.body?.text) ||
         (html ? stripHtmlToText(html) : "") ||
@@ -3156,6 +3195,13 @@ app.post(
         html = html.replace(re, val);
         text = text.replace(re, val);
       }
+      ({ html, text } = ensureArtikelDetailsInDraft(
+        html,
+        text,
+        rawHtmlTemplate,
+        artikelHtml,
+        artikelText,
+      ));
       if (
         lieferantKundenNummer &&
         !subject.toLowerCase().includes("kundennummer")
@@ -3286,6 +3332,13 @@ app.get("/api/bestellungen/:id/reminder/send/preview", async (req, res) => {
       html = html.replace(re, val);
       text = text.replace(re, val);
     }
+    ({ html, text } = ensureArtikelDetailsInDraft(
+      html,
+      text,
+      bodyTemplate,
+      artikelHtml,
+      artikelText,
+    ));
     if (lieferantKundenNummer && !subject.toLowerCase().includes("kundennummer")) {
       subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
     }
