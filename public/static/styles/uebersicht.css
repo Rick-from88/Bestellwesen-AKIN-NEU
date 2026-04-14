@@ -495,11 +495,23 @@ body::before {
 .order-group {
   display: grid;
   gap: 8px;
+  border-left: 4px solid rgba(255, 107, 53, 0.35);
+  padding-left: 8px;
 }
 
 .supplier-group {
   display: grid;
   gap: 8px;
+  border-left: 4px solid rgba(29, 211, 176, 0.35);
+  padding-left: 8px;
+}
+
+.order-group > .list__row--clickable {
+  background: #fff0e7;
+}
+
+.supplier-group > .list__row--clickable {
+  background: #eafbf7;
 }
 
 .supplier-items {
@@ -557,6 +569,27 @@ body::before {
 .list__row--sub {
   background: #fbf9f6;
   padding-left: 18px;
+}
+
+.supplier-items .list__row--sub {
+  margin-left: 14px;
+  border-left: 2px solid rgba(29, 211, 176, 0.35);
+  background: #f3fcfa;
+  position: relative;
+}
+
+.supplier-items .list__row--sub::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: 12px;
+  border-top: 2px solid rgba(29, 211, 176, 0.35);
+}
+
+.order-items .list__row--sub {
+  background: #fff8f2;
+  border-left: 2px solid rgba(255, 107, 53, 0.28);
 }
 
 .chat-row--new {

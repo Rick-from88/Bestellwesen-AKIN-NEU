@@ -516,6 +516,7 @@
       let imageModalImage = null;
       const urlParams = new URLSearchParams(window.location.search);
       let pendingOpenBestellungId = Number(urlParams.get("open") || "");
+      const openBestellungIds = new Set();
 
       const ensureImageModal = () => {
         if (imageModal) return;
@@ -1043,9 +1044,10 @@
         }
 
         bestellungen.forEach((bestellung) => {
+          const bestellungId = Number(bestellung.id);
           const group = document.createElement("div");
           group.className = "order-group";
-          group.classList.toggle("is-open", false);
+          group.classList.toggle("is-open", openBestellungIds.has(bestellungId));
 
           const headerRow = document.createElement("div");
           headerRow.className = "list__row list__row--clickable";
@@ -1099,6 +1101,11 @@
           headerRow.addEventListener("click", () => {
             clickTimeout = setTimeout(() => {
               group.classList.toggle("is-open");
+              if (group.classList.contains("is-open")) {
+                openBestellungIds.add(bestellungId);
+              } else {
+                openBestellungIds.delete(bestellungId);
+              }
             }, 200);
           });
 
@@ -1189,9 +1196,10 @@
           if (
             Number.isFinite(pendingOpenBestellungId) &&
             pendingOpenBestellungId > 0 &&
-            Number(bestellung.id) === pendingOpenBestellungId
+            bestellungId === pendingOpenBestellungId
           ) {
             group.classList.add("is-open");
+            openBestellungIds.add(bestellungId);
             openModal(bestellung);
             pendingOpenBestellungId = NaN;
             const cleanUrl = `${window.location.pathname}${window.location.hash || ""}`;

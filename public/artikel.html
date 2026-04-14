@@ -273,6 +273,7 @@
       let currentFotoUrl = "";
       const artikelUrlParams = new URLSearchParams(window.location.search);
       let pendingOpenArtikelId = Number(artikelUrlParams.get("open") || "");
+      const openLieferantIds = new Set();
 
       const setFotoPreview = (url) => {
         currentFotoUrl = String(url || "").trim();
@@ -464,8 +465,10 @@
         }
 
         lieferanten.forEach((lieferant) => {
+          const lieferantId = Number(lieferant.id);
           const group = document.createElement("div");
           group.className = "supplier-group";
+          group.classList.toggle("is-open", openLieferantIds.has(lieferantId));
 
           const headerRow = document.createElement("div");
           headerRow.className = "list__row list__row--clickable";
@@ -493,8 +496,13 @@
           headerRow.appendChild(leftDiv);
           headerRow.appendChild(rightDiv);
           headerRow.addEventListener("click", () => {
-            lastOpenedLieferantId = lieferant.id;
+            lastOpenedLieferantId = lieferantId;
             group.classList.toggle("is-open");
+            if (group.classList.contains("is-open")) {
+              openLieferantIds.add(lieferantId);
+            } else {
+              openLieferantIds.delete(lieferantId);
+            }
           });
           group.appendChild(headerRow);
 
@@ -570,6 +578,7 @@
                 Number(artikel.id) === pendingOpenArtikelId
               ) {
                 group.classList.add("is-open");
+                openLieferantIds.add(lieferantId);
                 openArtikelModal({
                   ...artikel,
                   lieferantId: artikel.lieferantId ?? lieferant.id,
