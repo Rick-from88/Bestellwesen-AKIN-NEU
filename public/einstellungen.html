@@ -258,7 +258,7 @@
                 <textarea
                   id="email_body"
                   rows="6"
-                  placeholder="Hallo {{kunde}},\nHier ist Ihre Bestellung..."
+                  placeholder="Hallo {{lieferant}},\nHier ist Ihre Bestellung..."
                 ></textarea>
               </div>
               <hr />
@@ -385,13 +385,13 @@
                     border-radius: 8px;
                     background: #fbf9f6;
                   "
-                  >{{kunde}}</code
+                  >{{kundennummer}}</code
                 >
-                <button class="btn btn--small" data-copy="{{kunde}}">
+                <button class="btn btn--small" data-copy="{{kundennummer}}">
                   Kopieren
                 </button>
                 <div style="color: var(--ink-soft); margin-left: 8px">
-                  Kundenname
+                  Kundennummer aus Lieferantenstamm
                 </div>
               </div>
               <div style="display: flex; gap: 8px; align-items: center">
@@ -484,6 +484,13 @@
                 <code>Einheit</code>, <code>VE</code>,
                 <code>Standardbestellwert</code>, <code>Preis</code>,
                 <code>Foto</code>.
+                <a
+                  class="settings-backup-sample-link"
+                  href="/samples/catalog-import-beispiel.csv"
+                  download
+                  >Beispiel-CSV herunterladen</a
+                >
+                (Trennzeichen Komma, Semikolon oder Tabulator).
               </div>
             </div>
           </div>
@@ -774,6 +781,7 @@
       const toNumberOrNull = (v) => {
         const txt = String(v || "")
           .trim()
+          .replace(/\s*€\s*$/u, "")
           .replace(/\./g, "")
           .replace(",", ".");
         const n = Number(txt);
@@ -788,17 +796,35 @@
           const lieferantName = firstValue(row, [
             "lieferant",
             "lieferantenname",
+            "lieferantname",
             "supplier",
             "vendor",
             "firma",
+            "hersteller",
+            "anbieter",
+            "distributor",
           ]);
           const artikelbezeichnung = firstValue(row, [
             "artikelbezeichnung",
             "artikelname",
             "artikel",
             "name",
+            "bezeichnung",
+            "produkt",
+            "produktname",
+            "artikeltext",
           ]);
-          const preis = toNumberOrNull(firstValue(row, ["preis", "price"]));
+          const preis = toNumberOrNull(
+            firstValue(row, [
+              "preis",
+              "price",
+              "einzelpreis",
+              "nettopreis",
+              "listenpreis",
+              "vkpreis",
+              "ep",
+            ]),
+          );
           if (!lieferantName || !artikelbezeichnung || preis === null) return;
 
           if (!supplierMap.has(lieferantName.toLowerCase())) {
@@ -821,13 +847,28 @@
               "artikelbeschreibung",
               "beschreibung",
               "desc",
+              "kurztext",
+              "langtext",
             ]),
-            artikelnummer: firstValue(row, ["artikelnummer", "sku", "nummer"]),
-            einheit: firstValue(row, ["einheit", "unit"]),
+            artikelnummer: firstValue(row, [
+              "artikelnummer",
+              "sku",
+              "nummer",
+              "ean",
+              "gtin",
+              "artnr",
+              "materialnummer",
+            ]),
+            einheit: firstValue(row, ["einheit", "unit", "me", "mengeneinheit"]),
             verpackungseinheit: firstValue(row, ["ve", "verpackungseinheit"]),
             standardBestellwert:
               toNumberOrNull(
-                firstValue(row, ["standardbestellwert", "standardmenge"]),
+                firstValue(row, [
+                  "standardbestellwert",
+                  "standardmenge",
+                  "mindestbestellmenge",
+                  "moq",
+                ]),
               ) ?? undefined,
             preis,
             fotoUrl: firstValue(row, ["foto", "fotourl", "image", "bild"]),

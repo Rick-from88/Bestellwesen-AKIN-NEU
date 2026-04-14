@@ -162,10 +162,21 @@
               const meta = document.createElement("div");
               meta.className = "list__meta";
               const nr = String(a?.artikelnummer || "").trim();
-              const lName = String(lieferantNameById[lid] || `Lieferant #${lid}`);
-              meta.textContent = [lName, nr ? `Nr: ${nr}` : ""].filter(Boolean).join(" | ");
+              meta.textContent = nr ? `Artikelnummer: ${nr}` : "Artikelnummer: -";
+              const desc = document.createElement("div");
+              desc.className = "list__meta";
+              desc.style.marginTop = "4px";
+              desc.textContent = String(a?.beschreibung || "").trim() || "—";
+              const supplier = document.createElement("div");
+              supplier.className = "list__meta";
+              supplier.style.marginTop = "4px";
+              supplier.textContent = `Lieferant: ${String(
+                lieferantNameById[lid] || `#${lid}`,
+              )}`;
               row.appendChild(title);
               row.appendChild(meta);
+              row.appendChild(desc);
+              row.appendChild(supplier);
               row.addEventListener("click", () => {
                 artikelSearchModal.classList.remove("is-open");
                 artikelSearchModal.setAttribute("aria-hidden", "true");
@@ -234,7 +245,14 @@
           items.forEach((item) => {
             const option = document.createElement("option");
             option.value = item.id;
-            option.textContent = item.name || `#${item.id}`;
+            const artikelName = String(item.name || `#${item.id}`).trim();
+            const artikelNummer = String(item.artikelnummer || "").trim();
+            const artikelBeschreibung = String(item.beschreibung || "").trim();
+            option.textContent = [
+              artikelName,
+              artikelBeschreibung || "-",
+              artikelNummer ? `Nr: ${artikelNummer}` : "Nr: -",
+            ].join(" | ");
             if (selectedId && Number(selectedId) === Number(item.id))
               option.selected = true;
             artikelSelect.appendChild(option);
@@ -256,7 +274,14 @@
           items.forEach((item) => {
             const option = document.createElement("option");
             option.value = item.id;
-            option.textContent = item.name || `#${item.id}`;
+            const artikelName = String(item.name || `#${item.id}`).trim();
+            const artikelNummer = String(item.artikelnummer || "").trim();
+            const artikelBeschreibung = String(item.beschreibung || "").trim();
+            option.textContent = [
+              artikelName,
+              artikelBeschreibung || "-",
+              artikelNummer ? `Nr: ${artikelNummer}` : "Nr: -",
+            ].join(" | ");
             if (selectedId && Number(selectedId) === Number(item.id))
               option.selected = true;
             artikelSelect.appendChild(option);
@@ -469,6 +494,7 @@
         };
         loadPreview();
         bestellDatumInput.addEventListener("change", loadPreview);
+        bestellDatumInput.addEventListener("input", loadPreview);
       };
 
       form.addEventListener("submit", async (event) => {

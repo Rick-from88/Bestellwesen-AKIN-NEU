@@ -1143,7 +1143,10 @@
                       remaining > 0 ? ` | Rest: ${remaining}` : ""
                     }`
                   : "";
-              posMeta.innerHTML = `Artikelnummer: ${position.artikelId} | Preis: ${formatCurrency(preis)} | Menge: ${menge}${notizPart}${deliveryPart} | Gesamt: <span class="position-total">${formatCurrency(gesamtPos)}</span>`;
+              const artikelNummer = String(
+                artikelInfo?.artikelnummer || position.artikelId,
+              ).trim();
+              posMeta.innerHTML = `Artikelnummer: ${artikelNummer} | Preis: ${formatCurrency(preis)} | Menge: ${menge}${notizPart}${deliveryPart} | Gesamt: <span class="position-total">${formatCurrency(gesamtPos)}</span>`;
 
               posLeft.appendChild(posTitle);
               posLeft.appendChild(posMeta);
@@ -1467,11 +1470,8 @@
         .querySelector(".modal__backdrop")
         .addEventListener("click", closeModal);
 
-      editForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        editMessage.textContent = "";
-
-        const positionen = Array.from(editPositionen.children).map((row) => {
+      const collectEditPositionen = () =>
+        Array.from(editPositionen.children).map((row) => {
           const selects = row.querySelectorAll("select");
           const mengeInput = row.querySelector('input[aria-label="Menge"]');
           const geliefertInput = row.querySelector(
@@ -1490,6 +1490,37 @@
             notiz: String(notizInput?.value || "").trim(),
           };
         });
+      const persistCurrentBestellungFromForm = async () => {
+        const positionen = collectEditPositionen();
+        if (
+          !positionen.length ||
+          positionen.some(
+            (pos) => !pos.lieferantId || !pos.artikelId || !pos.menge,
+          )
+        ) {
+          throw new Error("Bitte alle Positionen ausfuellen.");
+        }
+        const payload = {
+          status: editStatus.value,
+          bestellDatum: editDatum.value,
+          auftragsBestaetigt: editAuftragsBestaetigt?.checked || false,
+          positionen,
+        };
+        const response = await fetch(`/api/bestellungen/${currentBestellungId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+      };
+
+      editForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        editMessage.textContent = "";
+
+        const positionen = collectEditPositionen();
         // if positions are not editable, only change status via status endpoint
         if (editAddPosition.disabled) {
           try {
@@ -1529,29 +1560,8 @@
           return;
         }
 
-        const payload = {
-          status: editStatus.value,
-          bestellDatum: editDatum.value,
-          auftragsBestaetigt: editAuftragsBestaetigt?.checked || false,
-          positionen,
-        };
-
         try {
-          const response = await fetch(
-            `/api/bestellungen/${currentBestellungId}`,
-            {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            },
-          );
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            editMessage.textContent = `Fehler: ${errorText}`;
-            return;
-          }
-
+          await persistCurrentBestellungFromForm();
           closeModal();
           loadBestellungen();
         } catch (error) {
@@ -1597,6 +1607,17 @@
           e.preventDefault();
           if (!currentBestellungId) return;
           try {
+            if (!editAddPosition.disabled) {
+              try {
+                await persistCurrentBestellungFromForm();
+                await loadBestellungen();
+              } catch (saveErr) {
+                const saveMsg =
+                  saveErr instanceof Error ? saveErr.message : String(saveErr || "");
+                editMessage.textContent = `Bitte zuerst korrigieren: ${saveMsg}`;
+                return;
+              }
+            }
             setMailDraftStatus("Lade Entwurf...");
             if (mailDraftTo) mailDraftTo.value = "";
             if (mailDraftSubject) mailDraftSubject.value = "";
@@ -1698,6 +1719,17 @@
           e.preventDefault();
           if (!currentBestellungId) return;
           try {
+            if (!editAddPosition.disabled) {
+              try {
+                await persistCurrentBestellungFromForm();
+                await loadBestellungen();
+              } catch (saveErr) {
+                const saveMsg =
+                  saveErr instanceof Error ? saveErr.message : String(saveErr || "");
+                editMessage.textContent = `Bitte zuerst korrigieren: ${saveMsg}`;
+                return;
+              }
+            }
             setMailDraftStatus("Lade Reminder-Entwurf...");
             if (mailDraftTo) mailDraftTo.value = "";
             if (mailDraftSubject) mailDraftSubject.value = "";

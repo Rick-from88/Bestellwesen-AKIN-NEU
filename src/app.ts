@@ -2503,7 +2503,7 @@ const buildOpenOrderGroups = async () => {
   let lieferantRows: any[] = [];
   if (lieferantIds.length) {
     const res = await db.query(
-      "select id, name from lieferanten where id = ANY($1)",
+      "select id, name, email, kundennummer from lieferanten where id = ANY($1)",
       [lieferantIds],
     );
     lieferantRows = res.rows || [];
@@ -2523,6 +2523,8 @@ const buildOpenOrderGroups = async () => {
     {
       lieferantId: number;
       lieferantName: string;
+      lieferantEmail: string;
+      lieferantKundennummer: string;
       orderIds: Set<number>;
       bestellnummern: Set<string>;
       positionen: Array<{
@@ -2551,6 +2553,10 @@ const buildOpenOrderGroups = async () => {
         {
           lieferantId: lid,
           lieferantName: lieferantMap[lid]?.name || `Lieferant #${lid}`,
+          lieferantEmail: String(lieferantMap[lid]?.email || "").trim(),
+          lieferantKundennummer: String(
+            lieferantMap[lid]?.kundennummer || "",
+          ).trim(),
           orderIds: new Set<number>(),
           bestellnummern: new Set<string>(),
           positionen: [] as Array<{
@@ -2620,8 +2626,12 @@ const buildSammelDraftForGroup = async (
 
   const replacements: Record<string, string> = {
     "{{bestellnummer}}": Array.from(group.bestellnummern || []).join(", "),
-    "{{datum}}": new Date().toLocaleDateString("de-DE"),
+    "{{datum}}":
+      String(group.positionen?.[0]?.bestellDatum || "")
+        .replace("T", " ")
+        .slice(0, 10) || new Date().toLocaleDateString("de-DE"),
     "{{lieferant}}": String(group.lieferantName || ""),
+    "{{kundennummer}}": String(group.lieferantKundennummer || ""),
     "{{artikel_liste}}": artikelHtml,
     "{{artikel_text}}": artikelText,
   };
@@ -2640,8 +2650,13 @@ const buildSammelDraftForGroup = async (
     html += `<div>${signature}</div>`;
     text += `\n${signature}`;
   }
+  const lieferantKundennummer = String(group.lieferantKundennummer || "").trim();
+  if (lieferantKundennummer && !subject.toLowerCase().includes("kundennummer")) {
+    subject = `${subject} (Kundennummer: ${lieferantKundennummer})`;
+  }
 
-  const to = String(baseTo || "").trim();
+  const to =
+    String(group.lieferantEmail || "").trim() || String(baseTo || "").trim();
   return {
     lieferantId: Number(group.lieferantId),
     lieferantName: String(group.lieferantName || ""),
