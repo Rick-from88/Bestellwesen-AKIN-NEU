@@ -50,6 +50,14 @@
     <script>
       const usersList = document.getElementById("usersList");
       const usersCount = document.getElementById("usersCount");
+      const deleteIntentHeaders = { "X-Delete-Intent": "true" };
+      const confirmDoubleDelete = (
+        firstMessage = "Wirklich loeschen?",
+        secondMessage = "Endgueltig loeschen?",
+      ) => {
+        if (!window.confirm(firstMessage)) return false;
+        return window.confirm(secondMessage);
+      };
       const createUserForm = document.getElementById("createUserForm");
       const newEmail = document.getElementById("newEmail");
       const newPassword = document.getElementById("newPassword");
@@ -123,9 +131,15 @@
           deleteBtn.className = "btn btn--danger btn--small";
           deleteBtn.textContent = "Löschen";
           deleteBtn.addEventListener("click", async () => {
-            const ok = window.confirm(`Nutzer ${u.email || u.uid} wirklich löschen?`);
+            const ok = confirmDoubleDelete(
+              `Nutzer ${u.email || u.uid} wirklich loeschen?`,
+              `Nutzer ${u.email || u.uid} endgueltig loeschen?`,
+            );
             if (!ok) return;
-            await fetch(`/api/admin/users/${encodeURIComponent(u.uid)}/delete`, { method: "POST" });
+            await fetch(`/api/admin/users/${encodeURIComponent(u.uid)}/delete`, {
+              method: "POST",
+              headers: deleteIntentHeaders,
+            });
             await loadUsers();
           });
 

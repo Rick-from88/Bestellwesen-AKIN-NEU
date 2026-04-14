@@ -570,6 +570,29 @@ const parseString = (value: unknown): string | undefined => {
   return typeof value === "string" ? value.trim() : undefined;
 };
 
+const hasDeleteIntent = (req: any): boolean => {
+  const rawHeader = String(req.get?.("x-delete-intent") || req.headers?.["x-delete-intent"] || "")
+    .trim()
+    .toLowerCase();
+  if (rawHeader === "true" || rawHeader === "1" || rawHeader === "yes") {
+    return true;
+  }
+  const rawQuery = String(req.query?.delete_intent || "")
+    .trim()
+    .toLowerCase();
+  return rawQuery === "true" || rawQuery === "1" || rawQuery === "yes";
+};
+
+const requireDeleteIntent = (req: any, res: any): boolean => {
+  if (hasDeleteIntent(req)) {
+    return true;
+  }
+  res.status(400).json({
+    error: "Delete-Intent fehlt. Bitte Loeschung explizit bestaetigen.",
+  });
+  return false;
+};
+
 const parseStatus = (value: unknown): BestellungStatus | null => {
   if (
     value === "offen" ||
@@ -849,6 +872,7 @@ app.post("/api/admin/users/:uid/enable", requireAdminApi, async (req, res) => {
 });
 
 app.post("/api/admin/users/:uid/delete", requireAdminApi, async (req, res) => {
+  if (!requireDeleteIntent(req, res)) return;
   try {
     const uid = String(req.params.uid || "");
     await admin.auth().deleteUser(uid);
@@ -1248,6 +1272,7 @@ app.post("/api/mail/test", express.json(), async (req, res) => {
 });
 
 app.delete("/api/bestellungen/:id", async (req, res) => {
+  if (!requireDeleteIntent(req, res)) return;
   const bestellungId = parseInteger(req.params.id);
 
   if (!bestellungId) {
@@ -1390,6 +1415,7 @@ app.put("/api/lieferanten/:id", async (req, res) => {
 });
 
 app.delete("/api/lieferanten/:id", async (req, res) => {
+  if (!requireDeleteIntent(req, res)) return;
   const lieferantId = parseInteger(req.params.id);
 
   if (!lieferantId) {
@@ -1586,6 +1612,7 @@ app.put("/api/artikel/:id", async (req, res) => {
 });
 
 app.delete("/api/artikel/:id", async (req, res) => {
+  if (!requireDeleteIntent(req, res)) return;
   const artikelId = parseInteger(req.params.id);
 
   if (!artikelId) {

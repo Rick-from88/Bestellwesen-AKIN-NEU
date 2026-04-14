@@ -1192,6 +1192,14 @@
       const createUserMsg = document.getElementById("createUserMsg");
       const newUserEmail = document.getElementById("newUserEmail");
       const newUserPassword = document.getElementById("newUserPassword");
+      const deleteIntentHeaders = { "X-Delete-Intent": "true" };
+      const confirmDoubleDelete = (
+        firstMessage = "Wirklich loeschen?",
+        secondMessage = "Endgueltig loeschen?",
+      ) => {
+        if (!window.confirm(firstMessage)) return false;
+        return window.confirm(secondMessage);
+      };
 
       const setCreateUserMsg = (txt) => {
         if (createUserMsg) createUserMsg.textContent = txt || "";
@@ -1261,13 +1269,14 @@
           deleteBtn.className = "btn btn--danger btn--small";
           deleteBtn.textContent = "Löschen";
           deleteBtn.addEventListener("click", async () => {
-            const ok = window.confirm(
-              `Nutzer ${u.email || u.uid} wirklich löschen?`,
+            const ok = confirmDoubleDelete(
+              `Nutzer ${u.email || u.uid} wirklich loeschen?`,
+              `Nutzer ${u.email || u.uid} endgueltig loeschen?`,
             );
             if (!ok) return;
             await fetch(
               `/api/admin/users/${encodeURIComponent(u.uid)}/delete`,
-              { method: "POST" },
+              { method: "POST", headers: deleteIntentHeaders },
             );
             await loadUsers();
           });

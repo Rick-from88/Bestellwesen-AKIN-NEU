@@ -347,6 +347,15 @@
       let sammelMailResolver = null;
       let sammelMailDrafts = [];
       let sammelMailOrderIds = [];
+      const deleteIntentHeaders = { "X-Delete-Intent": "true" };
+
+      const confirmDoubleDelete = (
+        firstMessage = "Wirklich loeschen?",
+        secondMessage = "Endgueltig loeschen?",
+      ) => {
+        if (!window.confirm(firstMessage)) return false;
+        return window.confirm(secondMessage);
+      };
       let sammelMailActiveIndex = 0;
       let sammelMailHasActiveLoaded = false;
 
@@ -773,6 +782,11 @@
         removeBtn.style.gridColumn = "1 / -1";
         removeBtn.style.justifySelf = "end";
         removeBtn.addEventListener("click", () => {
+          const confirmed = confirmDoubleDelete(
+            "Diese Positionszeile wirklich entfernen?",
+            "Positionszeile endgueltig entfernen?",
+          );
+          if (!confirmed) return;
           row.remove();
           if (!editPositionen.children.length) {
             editPositionen.appendChild(createPositionRow());
@@ -1586,8 +1600,9 @@
           return;
         }
 
-        const confirmed = window.confirm(
+        const confirmed = confirmDoubleDelete(
           "Soll diese Bestellung wirklich geloescht werden?",
+          "Bestellung endgueltig loeschen?",
         );
         if (!confirmed) {
           return;
@@ -1596,7 +1611,7 @@
         try {
           const response = await fetch(
             `/api/bestellungen/${currentBestellungId}`,
-            { method: "DELETE" },
+            { method: "DELETE", headers: deleteIntentHeaders },
           );
 
           if (!response.ok) {

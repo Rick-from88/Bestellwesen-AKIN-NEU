@@ -132,6 +132,14 @@
     <script>
       const lieferantenList = document.getElementById("lieferantenList");
       const lieferantenCount = document.getElementById("lieferantenCount");
+      const deleteIntentHeaders = { "X-Delete-Intent": "true" };
+      const confirmDoubleDelete = (
+        firstMessage = "Wirklich loeschen?",
+        secondMessage = "Endgueltig loeschen?",
+      ) => {
+        if (!window.confirm(firstMessage)) return false;
+        return window.confirm(secondMessage);
+      };
       const lieferantenRefresh = document.getElementById("lieferantenRefresh");
       const lieferantenSearch = document.getElementById("lieferantenSearch");
       const lieferantenSort = document.getElementById("lieferantenSort");
@@ -308,8 +316,9 @@
           deleteBtn.textContent = "Loeschen";
           deleteBtn.addEventListener("click", async (event) => {
             event.preventDefault();
-            const confirmed = window.confirm(
+            const confirmed = confirmDoubleDelete(
               `Lieferant "${lieferant.name}" wirklich loeschen?`,
+              `Lieferant "${lieferant.name}" endgueltig loeschen?`,
             );
             if (!confirmed) {
               return;
@@ -318,7 +327,7 @@
             try {
               const response = await fetch(
                 `/api/lieferanten/${lieferant.id}`,
-                { method: "DELETE" },
+                { method: "DELETE", headers: deleteIntentHeaders },
               );
 
               if (!response.ok) {
@@ -415,8 +424,9 @@
           return;
         }
 
-        const confirmed = window.confirm(
+        const confirmed = confirmDoubleDelete(
           "Soll dieser Lieferant wirklich geloescht werden?",
+          "Lieferant endgueltig loeschen?",
         );
         if (!confirmed) {
           return;
@@ -425,7 +435,7 @@
         try {
           const response = await fetch(
             `/api/lieferanten/${currentLieferantId}`,
-            { method: "DELETE" },
+            { method: "DELETE", headers: deleteIntentHeaders },
           );
 
           if (!response.ok) {

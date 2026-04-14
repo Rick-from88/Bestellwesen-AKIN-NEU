@@ -203,6 +203,14 @@
     <script>
       const artikelList = document.getElementById("artikelList");
       const artikelCount = document.getElementById("artikelCount");
+      const deleteIntentHeaders = { "X-Delete-Intent": "true" };
+      const confirmDoubleDelete = (
+        firstMessage = "Wirklich loeschen?",
+        secondMessage = "Endgueltig loeschen?",
+      ) => {
+        if (!window.confirm(firstMessage)) return false;
+        return window.confirm(secondMessage);
+      };
       const artikelRefresh = document.getElementById("artikelRefresh");
       const addArtikelBtn = document.getElementById("addArtikelBtn");
       const artikelModal = document.getElementById("artikelModal");
@@ -746,8 +754,9 @@
           return;
         }
 
-        const confirmed = window.confirm(
+        const confirmed = confirmDoubleDelete(
           "Soll dieser Artikel wirklich geloescht werden?",
+          "Artikel endgueltig loeschen?",
         );
         if (!confirmed) {
           return;
@@ -756,6 +765,7 @@
         try {
           const response = await fetch(`/api/artikel/${currentArtikelId}`, {
             method: "DELETE",
+            headers: deleteIntentHeaders,
           });
 
           if (!response.ok) {

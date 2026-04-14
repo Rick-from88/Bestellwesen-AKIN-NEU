@@ -66,6 +66,14 @@
       let artikelSearchClose = null;
       let artikelSearchResolver = null;
 
+      const confirmDoubleDelete = (
+        firstMessage = "Wirklich loeschen?",
+        secondMessage = "Endgueltig loeschen?",
+      ) => {
+        if (!window.confirm(firstMessage)) return false;
+        return window.confirm(secondMessage);
+      };
+
       const normalizeText = (v) => String(v || "").toLowerCase().trim();
 
       const ensureArtikelSearchModal = () => {
@@ -428,6 +436,11 @@
         removeBtn.className = "btn btn--link";
         removeBtn.textContent = "Entfernen";
         removeBtn.addEventListener("click", () => {
+          const confirmed = confirmDoubleDelete(
+            "Diese Positionszeile wirklich entfernen?",
+            "Positionszeile endgueltig entfernen?",
+          );
+          if (!confirmed) return;
           row.remove();
           if (!positionenContainer.children.length) {
             addPositionRow();
