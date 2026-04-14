@@ -599,6 +599,17 @@
         return date.toISOString().slice(0, 10);
       };
 
+      const formatArtikelOptionLabel = (item) => {
+        const artikelName = String(item?.name || `#${item?.id || ""}`).trim();
+        const artikelBeschreibung = String(item?.beschreibung || "").trim() || "-";
+        const artikelNummer = String(item?.artikelnummer || "").trim();
+        return [
+          artikelName,
+          artikelBeschreibung,
+          artikelNummer ? `Nr: ${artikelNummer}` : "Nr: -",
+        ].join(" | ");
+      };
+
       const buildSelect = (items, placeholder, selectedId) => {
         const select = document.createElement("select");
         select.required = true;
@@ -612,7 +623,7 @@
         items.forEach((item) => {
           const option = document.createElement("option");
           option.value = item.id;
-          option.textContent = item.name || `#${item.id}`;
+          option.textContent = formatArtikelOptionLabel(item);
           if (selectedId && Number(selectedId) === Number(item.id)) {
             option.selected = true;
           }
@@ -647,7 +658,7 @@
           items.forEach((item) => {
             const option = document.createElement("option");
             option.value = item.id;
-            option.textContent = item.name || `#${item.id}`;
+            option.textContent = formatArtikelOptionLabel(item);
             if (selectedId && Number(selectedId) === Number(item.id))
               option.selected = true;
             artikelSelect.appendChild(option);
@@ -664,7 +675,7 @@
           items.forEach((item) => {
             const option = document.createElement("option");
             option.value = item.id;
-            option.textContent = item.name || `#${item.id}`;
+            option.textContent = formatArtikelOptionLabel(item);
             if (selectedId && Number(selectedId) === Number(item.id))
               option.selected = true;
             artikelSelect.appendChild(option);
