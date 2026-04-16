@@ -88,6 +88,50 @@
     document.body.appendChild(btn);
     document.body.appendChild(popover);
 
+    // Heartbeat: prueft in Intervallen, ob Session noch gueltig ist
+    try {
+      if (typeof window !== "undefined" && typeof document !== "undefined") {
+        const startHeartbeat = () => {
+          if (window.__bwAuthHeartbeatStarted) return;
+          window.__bwAuthHeartbeatStarted = true;
+          const INTERVAL_MS = 300000; // 5 Minuten
+          setInterval(async () => {
+            // Login-Seite nicht umleiten
+            const path = String(window.location.pathname || "");
+            if (path.startsWith("/login")) return;
+            try {
+              const pingRes = await fetch("/api/auth/me", {
+                method: "GET",
+                headers: { "X-Auth-Heartbeat": "true" },
+              });
+              if (!pingRes.ok) {
+                if (!window.__bwAuthRedirecting) {
+                  window.__bwAuthRedirecting = true;
+                  window.location.href = "/login";
+                }
+              }
+            } catch {
+              if (!window.__bwAuthRedirecting) {
+                window.__bwAuthRedirecting = true;
+                window.location.href = "/login";
+              }
+            }
+          }, INTERVAL_MS);
+        };
+
+        if (document.visibilityState === "visible") {
+          startHeartbeat();
+        }
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") {
+            startHeartbeat();
+          }
+        });
+      }
+    } catch {
+      // Heartbeat-Fehler ignorieren, Widget trotzdem nutzbar lassen
+    }
+
     const tourBtn = document.getElementById("profileTourBtn");
     if (tourBtn) {
       tourBtn.addEventListener("click", () => {
