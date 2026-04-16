@@ -94,7 +94,7 @@
         const startHeartbeat = () => {
           if (window.__bwAuthHeartbeatStarted) return;
           window.__bwAuthHeartbeatStarted = true;
-          const INTERVAL_MS = 300000; // 5 Minuten
+          const INTERVAL_MS = 30 * 60 * 1000; // 30 Minuten
           setInterval(async () => {
             // Login-Seite nicht umleiten
             const path = String(window.location.pathname || "");

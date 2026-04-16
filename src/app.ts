@@ -138,6 +138,15 @@ type AuthedRequest = {
 
 type AppRole = "admin" | "buero" | "produktion";
 
+const SESSION_MAX_AGE_MS = Number(
+  process.env.SESSION_MAX_AGE_MS || 8 * 60 * 60 * 1000,
+);
+
+const extractSessionCookie = (req: any): string | null => {
+  const raw = req.cookies?.[FB_SESSION_COOKIE];
+  return typeof raw === "string" && raw.trim() ? raw : null;
+};
+
 const extractIdToken = (req: any): string => {
   const fromHeader = String(req.headers["authorization"] || "");
   if (fromHeader.startsWith("Bearer ")) return fromHeader.slice(7);
@@ -151,10 +160,20 @@ const requireUserApi = async (req: any, res: any, next: any) => {
       error: "firebase admin not configured",
     });
   }
-  const token = extractIdToken(req);
-  if (!token) return res.status(401).json({ error: "unauthorized" });
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const sessionCookie = extractSessionCookie(req);
+    let decoded: admin.auth.DecodedIdToken | null = null;
+
+    if (sessionCookie) {
+      decoded = await admin.auth().verifySessionCookie(sessionCookie, true);
+    } else {
+      const token = extractIdToken(req);
+      if (!token) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+      decoded = await admin.auth().verifyIdToken(token);
+    }
+
     (req as AuthedRequest).firebaseUser = decoded;
     return next();
   } catch {
@@ -199,11 +218,18 @@ const requireAdminApi = async (req: any, res: any, next: any) => {
     });
   }
 
-  const token = extractIdToken(req);
-  if (!token) return res.status(401).json({ error: "unauthorized" });
-
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const sessionCookie = extractSessionCookie(req);
+    let decoded: admin.auth.DecodedIdToken | null = null;
+
+    if (sessionCookie) {
+      decoded = await admin.auth().verifySessionCookie(sessionCookie, true);
+    } else {
+      const token = extractIdToken(req);
+      if (!token) return res.status(401).json({ error: "unauthorized" });
+      decoded = await admin.auth().verifyIdToken(token);
+    }
+
     (req as AuthedRequest).firebaseUser = decoded;
     if (!isAdminUser(decoded)) return res.status(403).json({ error: "forbidden" });
     return next();
@@ -216,10 +242,18 @@ const requireUserPage = async (req: any, res: any, next: any) => {
   if (!firebaseAdminReady) {
     return res.redirect("/login");
   }
-  const token = extractIdToken(req);
-  if (!token) return res.redirect("/login");
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const sessionCookie = extractSessionCookie(req);
+    let decoded: admin.auth.DecodedIdToken | null = null;
+
+    if (sessionCookie) {
+      decoded = await admin.auth().verifySessionCookie(sessionCookie, true);
+    } else {
+      const token = extractIdToken(req);
+      if (!token) return res.redirect("/login");
+      decoded = await admin.auth().verifyIdToken(token);
+    }
+
     (req as AuthedRequest).firebaseUser = decoded;
     return next();
   } catch {
@@ -734,15 +768,17 @@ app.post("/api/auth/login", async (req, res) => {
     if (!idToken) return res.status(400).json({ error: "missing idToken" });
 
     const decoded = await admin.auth().verifyIdToken(idToken);
+    const sessionCookie = await admin
+      .auth()
+      .createSessionCookie(idToken, { expiresIn: SESSION_MAX_AGE_MS });
 
-    // Use ID token as session payload; every request will be verified again.
     const domain = sessionCookieDomainFromReq(req);
     const secure = sessionCookieSecure(req);
-    res.cookie(FB_SESSION_COOKIE, idToken, {
+    res.cookie(FB_SESSION_COOKIE, sessionCookie, {
       httpOnly: true,
       sameSite: "lax",
       secure,
-      maxAge: 60 * 60 * 1000, // ~1h (id token lifetime)
+      maxAge: SESSION_MAX_AGE_MS,
       path: "/",
       ...(domain ? { domain } : {}),
     });
