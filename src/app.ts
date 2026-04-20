@@ -422,9 +422,10 @@ const buildArtikelListeForMail = (
   let artikelHtml =
     `<table border="0" cellpadding="0" cellspacing="0" style="${tableStyle}">` +
     `<thead><tr>` +
-    `<th style="${thStyle}width:34%;">Artikel</th>` +
-    `<th style="${thStyle}width:34%;">Beschreibung</th>` +
-    `<th style="${thStyle}width:17%;">Artikelnummer</th>` +
+    `<th style="${thStyle}width:28%;">Artikel</th>` +
+    `<th style="${thStyle}width:30%;">Beschreibung</th>` +
+    `<th style="${thStyle}width:16%;">Artikelnummer</th>` +
+    `<th style="${thStyle}width:11%;">VE</th>` +
     `<th style="${thStyle}width:15%;text-align:right;">Stueckzahl</th>` +
     `</tr></thead><tbody>`;
 
@@ -434,11 +435,13 @@ const buildArtikelListeForMail = (
       name: `Artikel #${pos.artikelId}`,
       beschreibung: "",
       artikelnummer: "",
+      verpackungseinheit: "",
     };
     const name = String(a.name || `Artikel #${pos.artikelId}`);
     const beschreibung = String(a.beschreibung || "").trim() || "-";
     const nrRaw = a.artikelnummer ?? a.artikelNummer ?? "";
     const nr = String(nrRaw || "").trim();
+    const ve = String(a.verpackungseinheit || "").trim() || "-";
     const menge = Number(pos.menge) || 0;
     const nrDisplay = nr || "-";
 
@@ -447,9 +450,10 @@ const buildArtikelListeForMail = (
       `<td style="${tdStyle}">${escapeHtml(name)}</td>` +
       `<td style="${tdStyle}">${escapeHtml(beschreibung)}</td>` +
       `<td style="${tdNoWrapStyle}">${escapeHtml(nrDisplay)}</td>` +
+      `<td style="${tdNoWrapStyle}">${escapeHtml(ve)}</td>` +
       `<td style="${tdRightStyle}">${escapeHtml(String(menge))}</td>` +
       `</tr>`;
-    artikelText += `- ${name} | Beschreibung: ${beschreibung} | Artikelnummer: ${nrDisplay} | Stueckzahl: ${menge}\n`;
+    artikelText += `- ${name} | Beschreibung: ${beschreibung} | Artikelnummer: ${nrDisplay} | VE: ${ve} | Stueckzahl: ${menge}\n`;
   }
   artikelHtml += "</tbody></table>";
 
@@ -499,7 +503,7 @@ const buildOrderMailDraft = async (id: number) => {
   let artikelRows: any[] = [];
   if (artikelIds.length) {
     const aRes = await db.query(
-      "select id, name, beschreibung, artikelnummer from artikel where id = ANY($1)",
+      "select id, name, beschreibung, artikelnummer, verpackungseinheit from artikel where id = ANY($1)",
       [artikelIds],
     );
     artikelRows = aRes.rows || [];
@@ -2593,7 +2597,7 @@ const buildOpenOrderGroups = async () => {
   let artikelRows: any[] = [];
   if (artikelIds.length) {
     const res = await db.query(
-      "select id, name, beschreibung, artikelnummer, preis from artikel where id = ANY($1)",
+      "select id, name, beschreibung, artikelnummer, verpackungseinheit, preis from artikel where id = ANY($1)",
       [artikelIds],
     );
     artikelRows = res.rows || [];
@@ -2665,6 +2669,7 @@ const buildOpenOrderGroups = async () => {
             artikelName: string;
             artikelBeschreibung: string;
             artikelNummer: string;
+            artikelVe: string;
             menge: number;
             preis: number;
             notiz?: string;
@@ -2689,6 +2694,7 @@ const buildOpenOrderGroups = async () => {
         artikelName: String(artikel.name || `Artikel #${p.artikelId}`),
         artikelBeschreibung: String(artikel.beschreibung || "").trim() || "-",
         artikelNummer: String(artikel.artikelnummer || "").trim() || "-",
+        artikelVe: String(artikel.verpackungseinheit || "").trim() || "-",
         menge,
         preis,
         notiz: p.notiz ? String(p.notiz) : undefined,
@@ -2718,13 +2724,13 @@ const buildSammelDraftForGroup = async (
     "<h2>Sammelbestellung {{lieferant}}</h2>{{artikel_liste}}";
   const signature = (await settingsRepo.getSetting("email_signature")) || "";
 
-  let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr style="text-align:left"><th>Bestellung</th><th>Artikel</th><th>Beschreibung</th><th>Artikelnummer</th><th>Stueckzahl</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
+  let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr style="text-align:left"><th>Bestellung</th><th>Artikel</th><th>Beschreibung</th><th>Artikelnummer</th><th>VE</th><th>Stueckzahl</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
   let artikelText = "";
   for (const p of group.positionen || []) {
     const gesamt = (Number(p.preis) * Number(p.menge)).toFixed(2);
     const notiz = p.notiz ? String(p.notiz) : "";
-    artikelHtml += `<tr><td>#${p.bestellnummer}</td><td>${p.artikelName}</td><td>${p.artikelBeschreibung}</td><td>${p.artikelNummer}</td><td>${p.menge}</td><td>${Number(p.preis).toFixed(2)} €</td><td>${gesamt} €</td><td>${notiz}</td></tr>`;
-    artikelText += `- #${p.bestellnummer} | ${p.artikelName} | Beschreibung: ${p.artikelBeschreibung} | Artikelnummer: ${p.artikelNummer} | Stueckzahl: ${p.menge} | Preis: ${Number(p.preis).toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
+    artikelHtml += `<tr><td>#${p.bestellnummer}</td><td>${p.artikelName}</td><td>${p.artikelBeschreibung}</td><td>${p.artikelNummer}</td><td>${p.artikelVe || "-"}</td><td>${p.menge}</td><td>${Number(p.preis).toFixed(2)} €</td><td>${gesamt} €</td><td>${notiz}</td></tr>`;
+    artikelText += `- #${p.bestellnummer} | ${p.artikelName} | Beschreibung: ${p.artikelBeschreibung} | Artikelnummer: ${p.artikelNummer} | VE: ${p.artikelVe || "-"} | Stueckzahl: ${p.menge} | Preis: ${Number(p.preis).toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
   }
   artikelHtml += "</tbody></table>";
 
@@ -3195,7 +3201,7 @@ app.post(
       let artikelRows: any[] = [];
       if (artikelIds.length) {
         const aRes = await db.query(
-          "select id, name, beschreibung, artikelnummer from artikel where id = ANY($1)",
+          "select id, name, beschreibung, artikelnummer, verpackungseinheit from artikel where id = ANY($1)",
           [artikelIds],
         );
         artikelRows = aRes.rows || [];
@@ -3350,7 +3356,7 @@ app.get("/api/bestellungen/:id/reminder/send/preview", async (req, res) => {
     let artikelRows: any[] = [];
     if (artikelIds.length) {
       const aRes = await db.query(
-        "select id, name, beschreibung, artikelnummer from artikel where id = ANY($1)",
+        "select id, name, beschreibung, artikelnummer, verpackungseinheit from artikel where id = ANY($1)",
         [artikelIds],
       );
       artikelRows = aRes.rows || [];
