@@ -412,13 +412,16 @@
           const ts = new Date(b.bestellDatum).getTime();
           if (!Number.isFinite(ts)) return;
           if (ts < fromTs || ts > toTs) return;
-          if (String(b?.status || "offen") === "offen") return;
+          const st = String(b?.status || "offen");
+          if (st === "offen" || st === "storniert" || st === "teilstorniert") {
+            return;
+          }
           sum += computeOrderSum(b, artikelPreisMapCache);
           count += 1;
         });
 
         zeitraumSummeValue.textContent = formatCurrency(sum);
-        zeitraumSummeTrend.textContent = `${count} Bestellungen im Zeitraum (ohne offen)`;
+        zeitraumSummeTrend.textContent = `${count} Bestellungen im Zeitraum (ohne offen, storniert und teilstorniert)`;
       };
 
       const loadBestellungenAndArtikelForSum = async () => {

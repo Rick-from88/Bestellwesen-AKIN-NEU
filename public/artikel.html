@@ -655,12 +655,18 @@
           artikelByLieferant[lieferantKey(l.id)] = filtered;
         });
 
-        renderArtikel(
-          filterLieferantId
-            ? lieferanten.filter((l) => lieferantKey(l.id) === filterLieferantId)
-            : lieferanten,
-          artikelByLieferant,
-        );
+        const baseLieferanten = filterLieferantId
+          ? lieferanten.filter((l) => lieferantKey(l.id) === filterLieferantId)
+          : lieferanten;
+        const visibleLieferanten =
+          tokens.length > 0
+            ? baseLieferanten.filter(
+                (l) =>
+                  (artikelByLieferant[lieferantKey(l.id)] || []).length > 0,
+              )
+            : baseLieferanten;
+
+        renderArtikel(visibleLieferanten, artikelByLieferant);
       };
 
       const loadArtikel = async () => {
