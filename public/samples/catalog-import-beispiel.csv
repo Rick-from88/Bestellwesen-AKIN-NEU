@@ -1,0 +1,3 @@
+Lieferant;Kontaktperson;E-Mail;Telefon;Straße;PLZ;Stadt;Land;Artikelbezeichnung;Artikelbeschreibung;Artikelnummer;Einheit;VE;Standardbestellwert;Preis;Foto
+Musterlieferant GmbH;Max Mustermann;einkauf@musterlieferant.example;030 123456;Hauptstraße 1;10115;Berlin;DE;Schraube M6x20;Edelstahl A2;4711-001;Stück;10;5;12,50;
+Beispiel AG;;bestellung@beispiel.example;;;80331;München;DE;Kabel 3m;schwarz;KBL-3M;m;1;1;8,99;

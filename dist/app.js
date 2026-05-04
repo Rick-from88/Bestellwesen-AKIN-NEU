@@ -48,6 +48,8 @@ const artikel_1 = require("./repositories/artikel");
 const db_1 = require("./db");
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
+// Hinter Firebase Hosting / Load Balancer: korrekte Client-Proto/Host für Cookies.
+app.set("trust proxy", true);
 app.use(body_parser_1.default.json({ limit: "10mb" }));
 app.use(body_parser_1.default.urlencoded({ extended: true, limit: "10mb" }));
 app.use((0, cookie_parser_1.default)());
@@ -55,15 +57,46 @@ app.use("/static", express_1.default.static(path_1.default.join(__dirname, "..",
 // Admin auth middleware: if `ADMIN_TOKEN` is set, require it via
 // `Authorization: Bearer <token>` header or `?admin_token=...` query.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
-const FB_SESSION_COOKIE = process.env.FB_SESSION_COOKIE || "fb_session";
+// Firebase Hosting → Cloud Run: nur das Cookie "__session" wird durchgereicht (siehe Firebase-Doku).
+const FB_SESSION_COOKIE = process.env.FB_SESSION_COOKIE || "__session";
+/** Session-Cookie für Firebase Hosting (*.web.app): Domain muss zur sichtbaren Origin passen. */
+function sessionCookieDomainFromReq(req) {
+    const fromEnv = process.env.SESSION_COOKIE_DOMAIN || process.env.COOKIE_DOMAIN || "";
+    const trimmed = fromEnv.trim();
+    if (trimmed)
+        return trimmed;
+    const raw = String(req.get("x-forwarded-host") || req.get("host") || "")
+        .split(",")[0]
+        .trim()
+        .split(":")[0];
+    if (!raw)
+        return undefined;
+    if (raw.endsWith(".web.app") || raw.endsWith(".firebaseapp.com")) {
+        return raw;
+    }
+    return undefined;
+}
+function sessionCookieSecure(req) {
+    const proto = String(req.get("x-forwarded-proto") || "")
+        .split(",")[0]
+        .trim();
+    if (proto === "https")
+        return true;
+    if (req.secure)
+        return true;
+    return process.env.NODE_ENV === "production";
+}
 const ADMIN_UIDS = (process.env.ADMIN_UIDS || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+/** Feste Admin-Mails (zusätzlich zu ADMIN_EMAILS in der Umgebung). */
+const ADMIN_EMAILS_BUILTIN = ["patrick@akin-pulverbeschichtungen.de"];
+const ADMIN_EMAILS_FROM_ENV = (process.env.ADMIN_EMAILS || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+const ADMIN_EMAIL_SET = new Set([...ADMIN_EMAILS_BUILTIN, ...ADMIN_EMAILS_FROM_ENV].map((e) => e.toLowerCase()));
 const initFirebaseAdmin = () => {
     if (admin.apps.length)
         return admin;
@@ -99,6 +132,12 @@ catch (e) {
     firebaseAdminReady = false;
     console.error("Firebase Admin SDK konnte nicht initialisiert werden:", e);
 }
+const SESSION_MAX_AGE_MS = Number(process.env.SESSION_MAX_AGE_MS || 8 * 60 * 60 * 1000);
+const extractSessionCookie = (req) => {
+    var _a;
+    const raw = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a[FB_SESSION_COOKIE];
+    return typeof raw === "string" && raw.trim() ? raw : null;
+};
 const extractIdToken = (req) => {
     var _a;
     const fromHeader = String(req.headers["authorization"] || "");
@@ -113,11 +152,19 @@ const requireUserApi = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
             error: "firebase admin not configured",
         });
     }
-    const token = extractIdToken(req);
-    if (!token)
-        return res.status(401).json({ error: "unauthorized" });
     try {
-        const decoded = yield admin.auth().verifyIdToken(token);
+        const sessionCookie = extractSessionCookie(req);
+        let decoded = null;
+        if (sessionCookie) {
+            decoded = yield admin.auth().verifySessionCookie(sessionCookie, true);
+        }
+        else {
+            const token = extractIdToken(req);
+            if (!token) {
+                return res.status(401).json({ error: "unauthorized" });
+            }
+            decoded = yield admin.auth().verifyIdToken(token);
+        }
         req.firebaseUser = decoded;
         return next();
     }
@@ -128,8 +175,8 @@ const requireUserApi = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
 const isAdminUser = (user) => {
     if (ADMIN_UIDS.includes(user.uid))
         return true;
-    const email = user.email || "";
-    if (email && ADMIN_EMAILS.includes(email))
+    const email = (user.email || "").toLowerCase();
+    if (email && ADMIN_EMAIL_SET.has(email))
         return true;
     return false;
 };
@@ -160,11 +207,18 @@ const requireAdminApi = (req, res, next) => __awaiter(void 0, void 0, void 0, fu
             error: "firebase admin not configured",
         });
     }
-    const token = extractIdToken(req);
-    if (!token)
-        return res.status(401).json({ error: "unauthorized" });
     try {
-        const decoded = yield admin.auth().verifyIdToken(token);
+        const sessionCookie = extractSessionCookie(req);
+        let decoded = null;
+        if (sessionCookie) {
+            decoded = yield admin.auth().verifySessionCookie(sessionCookie, true);
+        }
+        else {
+            const token = extractIdToken(req);
+            if (!token)
+                return res.status(401).json({ error: "unauthorized" });
+            decoded = yield admin.auth().verifyIdToken(token);
+        }
         req.firebaseUser = decoded;
         if (!isAdminUser(decoded))
             return res.status(403).json({ error: "forbidden" });
@@ -178,11 +232,18 @@ const requireUserPage = (req, res, next) => __awaiter(void 0, void 0, void 0, fu
     if (!firebaseAdminReady) {
         return res.redirect("/login");
     }
-    const token = extractIdToken(req);
-    if (!token)
-        return res.redirect("/login");
     try {
-        const decoded = yield admin.auth().verifyIdToken(token);
+        const sessionCookie = extractSessionCookie(req);
+        let decoded = null;
+        if (sessionCookie) {
+            decoded = yield admin.auth().verifySessionCookie(sessionCookie, true);
+        }
+        else {
+            const token = extractIdToken(req);
+            if (!token)
+                return res.redirect("/login");
+            decoded = yield admin.auth().verifyIdToken(token);
+        }
         req.firebaseUser = decoded;
         return next();
     }
@@ -324,31 +385,52 @@ const buildArtikelListeForMail = (positionen, artikelMap) => {
     const tdNoWrapStyle = `${tdStyle}white-space:nowrap;`;
     let artikelHtml = `<table border="0" cellpadding="0" cellspacing="0" style="${tableStyle}">` +
         `<thead><tr>` +
-        `<th style="${thStyle}width:62%;">Artikel</th>` +
-        `<th style="${thStyle}width:23%;">Artikelnummer</th>` +
-        `<th style="${thStyle}width:15%;text-align:right;">Menge</th>` +
+        `<th style="${thStyle}width:28%;">Artikel</th>` +
+        `<th style="${thStyle}width:30%;">Beschreibung</th>` +
+        `<th style="${thStyle}width:16%;">Artikelnummer</th>` +
+        `<th style="${thStyle}width:11%;">VE</th>` +
+        `<th style="${thStyle}width:15%;text-align:right;">Stueckzahl</th>` +
         `</tr></thead><tbody>`;
     let artikelText = "";
     for (const pos of positionen || []) {
         const a = artikelMap[Number(pos.artikelId)] || {
             name: `Artikel #${pos.artikelId}`,
+            beschreibung: "",
             artikelnummer: "",
+            verpackungseinheit: "",
         };
         const name = String(a.name || `Artikel #${pos.artikelId}`);
+        const beschreibung = String(a.beschreibung || "").trim() || "-";
         const nrRaw = (_b = (_a = a.artikelnummer) !== null && _a !== void 0 ? _a : a.artikelNummer) !== null && _b !== void 0 ? _b : "";
         const nr = String(nrRaw || "").trim();
+        const ve = String(a.verpackungseinheit || "").trim() || "-";
         const menge = Number(pos.menge) || 0;
         const nrDisplay = nr || "-";
         artikelHtml +=
             `<tr>` +
                 `<td style="${tdStyle}">${escapeHtml(name)}</td>` +
+                `<td style="${tdStyle}">${escapeHtml(beschreibung)}</td>` +
                 `<td style="${tdNoWrapStyle}">${escapeHtml(nrDisplay)}</td>` +
+                `<td style="${tdNoWrapStyle}">${escapeHtml(ve)}</td>` +
                 `<td style="${tdRightStyle}">${escapeHtml(String(menge))}</td>` +
                 `</tr>`;
-        artikelText += `- ${name} | Nr: ${nrDisplay} | Menge: ${menge}\n`;
+        artikelText += `- ${name} | Beschreibung: ${beschreibung} | Artikelnummer: ${nrDisplay} | VE: ${ve} | Stueckzahl: ${menge}\n`;
     }
     artikelHtml += "</tbody></table>";
     return { artikelHtml, artikelText };
+};
+const ensureArtikelDetailsInDraft = (html, text, templateSource, artikelHtml, artikelText) => {
+    const source = String(templateSource || "");
+    const hasArticlePlaceholder = source.includes("{{artikel_liste}}") || source.includes("{{artikel_text}}");
+    if (hasArticlePlaceholder) {
+        return { html, text };
+    }
+    const htmlWithList = `${String(html || "")}` +
+        `<hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0;" />` +
+        `<div><strong>Artikeldetails</strong></div>` +
+        `${artikelHtml}`;
+    const textWithList = `${String(text || "")}\n\nArtikeldetails:\n${artikelText}`;
+    return { html: htmlWithList, text: textWithList };
 };
 const buildOrderMailDraft = (id) => __awaiter(void 0, void 0, void 0, function* () {
     var _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
@@ -363,7 +445,7 @@ const buildOrderMailDraft = (id) => __awaiter(void 0, void 0, void 0, function* 
     const artikelIds = Array.from(new Set((bestellung.positionen || []).map((p) => p.artikelId)));
     let artikelRows = [];
     if (artikelIds.length) {
-        const aRes = yield db.query("select id, name, artikelnummer from artikel where id = ANY($1)", [artikelIds]);
+        const aRes = yield db.query("select id, name, beschreibung, artikelnummer, verpackungseinheit from artikel where id = ANY($1)", [artikelIds]);
         artikelRows = aRes.rows || [];
     }
     const artikelMap = {};
@@ -408,6 +490,7 @@ const buildOrderMailDraft = (id) => __awaiter(void 0, void 0, void 0, function* 
         html = html.replace(re, val);
         text = text.replace(re, val);
     }
+    ({ html, text } = ensureArtikelDetailsInDraft(html, text, bodyTemplate, artikelHtml, artikelText));
     if (lieferantKundenNummer && !subject.toLowerCase().includes("kundennummer")) {
         subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
     }
@@ -439,6 +522,28 @@ const parseInteger = (value) => {
 };
 const parseString = (value) => {
     return typeof value === "string" ? value.trim() : undefined;
+};
+const hasDeleteIntent = (req) => {
+    var _a, _b, _c;
+    const rawHeader = String(((_a = req.get) === null || _a === void 0 ? void 0 : _a.call(req, "x-delete-intent")) || ((_b = req.headers) === null || _b === void 0 ? void 0 : _b["x-delete-intent"]) || "")
+        .trim()
+        .toLowerCase();
+    if (rawHeader === "true" || rawHeader === "1" || rawHeader === "yes") {
+        return true;
+    }
+    const rawQuery = String(((_c = req.query) === null || _c === void 0 ? void 0 : _c.delete_intent) || "")
+        .trim()
+        .toLowerCase();
+    return rawQuery === "true" || rawQuery === "1" || rawQuery === "yes";
+};
+const requireDeleteIntent = (req, res) => {
+    if (hasDeleteIntent(req)) {
+        return true;
+    }
+    res.status(400).json({
+        error: "Delete-Intent fehlt. Bitte Loeschung explizit bestaetigen.",
+    });
+    return false;
 };
 const parseStatus = (value) => {
     if (value === "offen" ||
@@ -530,15 +635,12 @@ app.post("/api/auth/login", (req, res) => __awaiter(void 0, void 0, void 0, func
         if (!idToken)
             return res.status(400).json({ error: "missing idToken" });
         const decoded = yield admin.auth().verifyIdToken(idToken);
-        // Use ID token as session payload; every request will be verified again.
-        const secure = process.env.NODE_ENV === "production";
-        res.cookie(FB_SESSION_COOKIE, idToken, {
-            httpOnly: true,
-            sameSite: "lax",
-            secure,
-            maxAge: 60 * 60 * 1000,
-            path: "/",
-        });
+        const sessionCookie = yield admin
+            .auth()
+            .createSessionCookie(idToken, { expiresIn: SESSION_MAX_AGE_MS });
+        const domain = sessionCookieDomainFromReq(req);
+        const secure = sessionCookieSecure(req);
+        res.cookie(FB_SESSION_COOKIE, sessionCookie, Object.assign({ httpOnly: true, sameSite: "lax", secure, maxAge: SESSION_MAX_AGE_MS, path: "/" }, (domain ? { domain } : {})));
         return res.json({ uid: decoded.uid, email: decoded.email || null });
     }
     catch (_x) {
@@ -546,7 +648,8 @@ app.post("/api/auth/login", (req, res) => __awaiter(void 0, void 0, void 0, func
     }
 }));
 app.post("/api/auth/logout", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    res.clearCookie(FB_SESSION_COOKIE, { path: "/" });
+    const domain = sessionCookieDomainFromReq(req);
+    res.clearCookie(FB_SESSION_COOKIE, Object.assign({ path: "/" }, (domain ? { domain } : {})));
     return res.status(204).send();
 }));
 app.get("/api/auth/me", requireUserApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -655,6 +758,8 @@ app.post("/api/admin/users/:uid/enable", requireAdminApi, (req, res) => __awaite
     }
 }));
 app.post("/api/admin/users/:uid/delete", requireAdminApi, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!requireDeleteIntent(req, res))
+        return;
     try {
         const uid = String(req.params.uid || "");
         yield admin.auth().deleteUser(uid);
@@ -1001,6 +1106,8 @@ app.post("/api/mail/test", express_1.default.json(), (req, res) => __awaiter(voi
     }
 }));
 app.delete("/api/bestellungen/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!requireDeleteIntent(req, res))
+        return;
     const bestellungId = parseInteger(req.params.id);
     if (!bestellungId) {
         res.status(400).json({ error: "Ungueltige Bestellungs-ID." });
@@ -1128,6 +1235,8 @@ app.put("/api/lieferanten/:id", (req, res) => __awaiter(void 0, void 0, void 0, 
     }
 }));
 app.delete("/api/lieferanten/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!requireDeleteIntent(req, res))
+        return;
     const lieferantId = parseInteger(req.params.id);
     if (!lieferantId) {
         res.status(400).json({ error: "Ungueltige Lieferanten-ID." });
@@ -1299,6 +1408,8 @@ app.put("/api/artikel/:id", (req, res) => __awaiter(void 0, void 0, void 0, func
     }
 }));
 app.delete("/api/artikel/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!requireDeleteIntent(req, res))
+        return;
     const artikelId = parseInteger(req.params.id);
     if (!artikelId) {
         res.status(400).json({ error: "Ungueltige Artikel-ID." });
@@ -2059,7 +2170,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
 }));
 // Send order by email and set status to 'bestellt'
 const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* () {
-    var _34, _35, _36, _37, _38;
+    var _34, _35, _36, _37, _38, _39, _40;
     const { listBestellungen } = yield Promise.resolve(require("./repositories/bestellungen"));
     const db = yield Promise.resolve(require("./db"));
     const allBestellungen = yield listBestellungen();
@@ -2079,12 +2190,12 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
         : [])));
     let artikelRows = [];
     if (artikelIds.length) {
-        const res = yield db.query("select id, name, preis from artikel where id = ANY($1)", [artikelIds]);
+        const res = yield db.query("select id, name, beschreibung, artikelnummer, verpackungseinheit, preis from artikel where id = ANY($1)", [artikelIds]);
         artikelRows = res.rows || [];
     }
     let lieferantRows = [];
     if (lieferantIds.length) {
-        const res = yield db.query("select id, name from lieferanten where id = ANY($1)", [lieferantIds]);
+        const res = yield db.query("select id, name, email, kundennummer from lieferanten where id = ANY($1)", [lieferantIds]);
         lieferantRows = res.rows || [];
     }
     const artikelMap = {};
@@ -2108,6 +2219,8 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
                 {
                     lieferantId: lid,
                     lieferantName: ((_36 = lieferantMap[lid]) === null || _36 === void 0 ? void 0 : _36.name) || `Lieferant #${lid}`,
+                    lieferantEmail: String(((_37 = lieferantMap[lid]) === null || _37 === void 0 ? void 0 : _37.email) || "").trim(),
+                    lieferantKundennummer: String(((_38 = lieferantMap[lid]) === null || _38 === void 0 ? void 0 : _38.kundennummer) || "").trim(),
                     orderIds: new Set(),
                     bestellnummern: new Set(),
                     positionen: [],
@@ -2125,11 +2238,14 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
                 orderId,
                 bestellnummer: nr,
                 artikelName: String(artikel.name || `Artikel #${p.artikelId}`),
+                artikelBeschreibung: String(artikel.beschreibung || "").trim() || "-",
+                artikelNummer: String(artikel.artikelnummer || "").trim() || "-",
+                artikelVe: String(artikel.verpackungseinheit || "").trim() || "-",
                 menge,
                 preis,
                 notiz: p.notiz ? String(p.notiz) : undefined,
-                bestellDatum: (_37 = orderMetaById.get(orderId)) === null || _37 === void 0 ? void 0 : _37.bestellDatum,
-                createdByName: (_38 = orderMetaById.get(orderId)) === null || _38 === void 0 ? void 0 : _38.createdByName,
+                bestellDatum: (_39 = orderMetaById.get(orderId)) === null || _39 === void 0 ? void 0 : _39.bestellDatum,
+                createdByName: (_40 = orderMetaById.get(orderId)) === null || _40 === void 0 ? void 0 : _40.createdByName,
             });
             group.gesamt += menge * preis;
             groups.set(lid, group);
@@ -2138,24 +2254,28 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
     return Array.from(groups.values()).sort((a, b) => a.lieferantName.localeCompare(b.lieferantName, "de"));
 });
 const buildSammelDraftForGroup = (settingsRepo, group, baseTo) => __awaiter(void 0, void 0, void 0, function* () {
+    var _41, _42;
     const subjTemplate = (yield settingsRepo.getSetting("email_subject")) ||
         "Sammelbestellung {{lieferant}}";
     const bodyTemplate = (yield settingsRepo.getSetting("email_body")) ||
         "<h2>Sammelbestellung {{lieferant}}</h2>{{artikel_liste}}";
     const signature = (yield settingsRepo.getSetting("email_signature")) || "";
-    let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr style="text-align:left"><th>Bestellung</th><th>Artikel</th><th>Menge</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
+    let artikelHtml = `<table border="0" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%"><thead><tr style="text-align:left"><th>Bestellung</th><th>Artikel</th><th>Beschreibung</th><th>Artikelnummer</th><th>VE</th><th>Stueckzahl</th><th>Preis</th><th>Gesamt</th><th>Notiz</th></tr></thead><tbody>`;
     let artikelText = "";
     for (const p of group.positionen || []) {
         const gesamt = (Number(p.preis) * Number(p.menge)).toFixed(2);
         const notiz = p.notiz ? String(p.notiz) : "";
-        artikelHtml += `<tr><td>#${p.bestellnummer}</td><td>${p.artikelName}</td><td>${p.menge}</td><td>${Number(p.preis).toFixed(2)} €</td><td>${gesamt} €</td><td>${notiz}</td></tr>`;
-        artikelText += `- #${p.bestellnummer} | ${p.artikelName} | Menge: ${p.menge} | Preis: ${Number(p.preis).toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
+        artikelHtml += `<tr><td>#${p.bestellnummer}</td><td>${p.artikelName}</td><td>${p.artikelBeschreibung}</td><td>${p.artikelNummer}</td><td>${p.artikelVe || "-"}</td><td>${p.menge}</td><td>${Number(p.preis).toFixed(2)} €</td><td>${gesamt} €</td><td>${notiz}</td></tr>`;
+        artikelText += `- #${p.bestellnummer} | ${p.artikelName} | Beschreibung: ${p.artikelBeschreibung} | Artikelnummer: ${p.artikelNummer} | VE: ${p.artikelVe || "-"} | Stueckzahl: ${p.menge} | Preis: ${Number(p.preis).toFixed(2)}€ | Gesamt: ${gesamt}€${notiz ? ` | Notiz: ${notiz}` : ""}\n`;
     }
     artikelHtml += "</tbody></table>";
     const replacements = {
         "{{bestellnummer}}": Array.from(group.bestellnummern || []).join(", "),
-        "{{datum}}": new Date().toLocaleDateString("de-DE"),
+        "{{datum}}": String(((_42 = (_41 = group.positionen) === null || _41 === void 0 ? void 0 : _41[0]) === null || _42 === void 0 ? void 0 : _42.bestellDatum) || "")
+            .replace("T", " ")
+            .slice(0, 10) || new Date().toLocaleDateString("de-DE"),
         "{{lieferant}}": String(group.lieferantName || ""),
+        "{{kundennummer}}": String(group.lieferantKundennummer || ""),
         "{{artikel_liste}}": artikelHtml,
         "{{artikel_text}}": artikelText,
     };
@@ -2169,11 +2289,16 @@ const buildSammelDraftForGroup = (settingsRepo, group, baseTo) => __awaiter(void
         html = html.replace(re, val);
         text = text.replace(re, val);
     }
+    ({ html, text } = ensureArtikelDetailsInDraft(html, text, bodyTemplate, artikelHtml, artikelText));
     if (signature) {
         html += `<div>${signature}</div>`;
         text += `\n${signature}`;
     }
-    const to = String(baseTo || "").trim();
+    const lieferantKundennummer = String(group.lieferantKundennummer || "").trim();
+    if (lieferantKundennummer && !subject.toLowerCase().includes("kundennummer")) {
+        subject = `${subject} (Kundennummer: ${lieferantKundennummer})`;
+    }
+    const to = String(group.lieferantEmail || "").trim() || String(baseTo || "").trim();
     return {
         lieferantId: Number(group.lieferantId),
         lieferantName: String(group.lieferantName || ""),
@@ -2231,14 +2356,14 @@ app.get("/api/bestellungen/sammel/preview", (req, res) => __awaiter(void 0, void
     }
 }));
 app.post("/api/bestellungen/sammel/send/preview", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _39;
+    var _43;
     try {
         const role = getUserRole(req.firebaseUser);
         if (!(role === "admin" || role === "buero")) {
             res.status(403).json({ error: "forbidden" });
             return;
         }
-        const requestedOrderIdsRaw = Array.isArray((_39 = req.body) === null || _39 === void 0 ? void 0 : _39.orderIds)
+        const requestedOrderIdsRaw = Array.isArray((_43 = req.body) === null || _43 === void 0 ? void 0 : _43.orderIds)
             ? req.body.orderIds
             : [];
         const requestedOrderIds = new Set(requestedOrderIdsRaw
@@ -2284,14 +2409,14 @@ app.post("/api/bestellungen/sammel/send/preview", express_1.default.json(), (req
     }
 }));
 app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _40, _41;
+    var _44, _45;
     try {
         const role = getUserRole(req.firebaseUser);
         if (!(role === "admin" || role === "buero")) {
             res.status(403).json({ error: "forbidden" });
             return;
         }
-        const requestedOrderIdsRaw = Array.isArray((_40 = req.body) === null || _40 === void 0 ? void 0 : _40.orderIds)
+        const requestedOrderIdsRaw = Array.isArray((_44 = req.body) === null || _44 === void 0 ? void 0 : _44.orderIds)
             ? req.body.orderIds
             : [];
         const requestedOrderIds = new Set(requestedOrderIdsRaw
@@ -2318,7 +2443,7 @@ app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) =
             res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
             return;
         }
-        const overridesRaw = Array.isArray((_41 = req.body) === null || _41 === void 0 ? void 0 : _41.overrides) ? req.body.overrides : [];
+        const overridesRaw = Array.isArray((_45 = req.body) === null || _45 === void 0 ? void 0 : _45.overrides) ? req.body.overrides : [];
         const overridesByLieferantId = new Map();
         overridesRaw.forEach((o) => {
             const lid = Number(o === null || o === void 0 ? void 0 : o.lieferantId);
@@ -2367,7 +2492,7 @@ app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) =
     }
 }));
 app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _42, _43, _44, _45, _46;
+    var _46, _47, _48, _49, _50;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2381,10 +2506,10 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
         }
         const draft = yield buildOrderMailDraft(id);
         const settingsRepo = draft.settingsRepo;
-        const to = parseString((_42 = req.body) === null || _42 === void 0 ? void 0 : _42.to) || parseString((_43 = req.body) === null || _43 === void 0 ? void 0 : _43.recipient) || draft.to;
-        const subject = parseString((_44 = req.body) === null || _44 === void 0 ? void 0 : _44.subject) || draft.subject;
-        const html = parseString((_45 = req.body) === null || _45 === void 0 ? void 0 : _45.html) || draft.html;
-        const text = parseString((_46 = req.body) === null || _46 === void 0 ? void 0 : _46.text) ||
+        const to = parseString((_46 = req.body) === null || _46 === void 0 ? void 0 : _46.to) || parseString((_47 = req.body) === null || _47 === void 0 ? void 0 : _47.recipient) || draft.to;
+        const subject = parseString((_48 = req.body) === null || _48 === void 0 ? void 0 : _48.subject) || draft.subject;
+        const html = parseString((_49 = req.body) === null || _49 === void 0 ? void 0 : _49.html) || draft.html;
+        const text = parseString((_50 = req.body) === null || _50 === void 0 ? void 0 : _50.text) ||
             (html ? stripHtmlToText(html) : "") ||
             draft.text;
         if (!to) {
@@ -2415,7 +2540,7 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
     }
 }));
 app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _47, _48, _49, _50;
+    var _51, _52, _53, _54;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2436,8 +2561,8 @@ app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, vo
             lieferantName: draft.lieferantName,
             lieferantEmail: draft.lieferantEmail,
             fallbackTo: draft.fallbackTo,
-            bestellnummer: (_48 = (_47 = draft.bestellung) === null || _47 === void 0 ? void 0 : _47.bestellnummer) !== null && _48 !== void 0 ? _48 : null,
-            status: (_50 = (_49 = draft.bestellung) === null || _49 === void 0 ? void 0 : _49.status) !== null && _50 !== void 0 ? _50 : null,
+            bestellnummer: (_52 = (_51 = draft.bestellung) === null || _51 === void 0 ? void 0 : _51.bestellnummer) !== null && _52 !== void 0 ? _52 : null,
+            status: (_54 = (_53 = draft.bestellung) === null || _53 === void 0 ? void 0 : _53.status) !== null && _54 !== void 0 ? _54 : null,
         });
     }
     catch (e) {
@@ -2447,7 +2572,7 @@ app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, vo
 }));
 // Send reminder mail to supplier for a given order (no status change)
 app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _51, _52, _53, _54, _55, _56, _57;
+    var _55, _56, _57, _58, _59, _60, _61;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2486,7 +2611,7 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
         const artikelIds = Array.from(new Set((bestellung.positionen || []).map((p) => p.artikelId)));
         let artikelRows = [];
         if (artikelIds.length) {
-            const aRes = yield db.query("select id, name, artikelnummer from artikel where id = ANY($1)", [artikelIds]);
+            const aRes = yield db.query("select id, name, beschreibung, artikelnummer, verpackungseinheit from artikel where id = ANY($1)", [artikelIds]);
             artikelRows = aRes.rows || [];
         }
         const artikelMap = {};
@@ -2509,18 +2634,19 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
         }
         const { artikelHtml, artikelText } = buildArtikelListeForMail(bestellung.positionen || [], artikelMap);
         const replacements = {
-            "{{bestellnummer}}": String((_51 = bestellung.bestellnummer) !== null && _51 !== void 0 ? _51 : ""),
+            "{{bestellnummer}}": String((_55 = bestellung.bestellnummer) !== null && _55 !== void 0 ? _55 : ""),
             "{{datum}}": new Date(bestellung.bestellDatum).toLocaleDateString("de-DE"),
             "{{lieferant}}": lieferantName,
             "{{kundennummer}}": lieferantKundenNummer,
             "{{artikel_liste}}": artikelHtml,
             "{{artikel_text}}": artikelText,
         };
-        let subject = parseString((_52 = req.body) === null || _52 === void 0 ? void 0 : _52.subject) || subjTemplate;
-        let html = parseString((_53 = req.body) === null || _53 === void 0 ? void 0 : _53.html) || bodyTemplate;
-        let text = parseString((_54 = req.body) === null || _54 === void 0 ? void 0 : _54.text) ||
+        let subject = parseString((_56 = req.body) === null || _56 === void 0 ? void 0 : _56.subject) || subjTemplate;
+        const rawHtmlTemplate = parseString((_57 = req.body) === null || _57 === void 0 ? void 0 : _57.html) || bodyTemplate;
+        let html = rawHtmlTemplate;
+        let text = parseString((_58 = req.body) === null || _58 === void 0 ? void 0 : _58.text) ||
             (html ? stripHtmlToText(html) : "") ||
-            `Nachfassen Bestellung ${(_55 = bestellung.bestellnummer) !== null && _55 !== void 0 ? _55 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
+            `Nachfassen Bestellung ${(_59 = bestellung.bestellnummer) !== null && _59 !== void 0 ? _59 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
         for (const key of Object.keys(replacements)) {
             const val = replacements[key];
             const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
@@ -2528,6 +2654,7 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
             html = html.replace(re, val);
             text = text.replace(re, val);
         }
+        ({ html, text } = ensureArtikelDetailsInDraft(html, text, rawHtmlTemplate, artikelHtml, artikelText));
         if (lieferantKundenNummer &&
             !subject.toLowerCase().includes("kundennummer")) {
             subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
@@ -2536,7 +2663,7 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
             html += `<div>${signature}</div>`;
             text += `\n${signature}`;
         }
-        const toOverride = parseString((_56 = req.body) === null || _56 === void 0 ? void 0 : _56.to) || parseString((_57 = req.body) === null || _57 === void 0 ? void 0 : _57.recipient) || to;
+        const toOverride = parseString((_60 = req.body) === null || _60 === void 0 ? void 0 : _60.to) || parseString((_61 = req.body) === null || _61 === void 0 ? void 0 : _61.recipient) || to;
         if (!toOverride) {
             res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
             return;
@@ -2553,7 +2680,7 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
     }
 }));
 app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _58, _59, _60, _61;
+    var _62, _63, _64, _65;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2591,7 +2718,7 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
         const artikelIds = Array.from(new Set((bestellung.positionen || []).map((p) => p.artikelId)));
         let artikelRows = [];
         if (artikelIds.length) {
-            const aRes = yield db.query("select id, name, artikelnummer from artikel where id = ANY($1)", [artikelIds]);
+            const aRes = yield db.query("select id, name, beschreibung, artikelnummer, verpackungseinheit from artikel where id = ANY($1)", [artikelIds]);
             artikelRows = aRes.rows || [];
         }
         const artikelMap = {};
@@ -2607,7 +2734,7 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
         const to = String(supplierEmail || "").trim() || String(fallbackTo || "").trim();
         const { artikelHtml, artikelText } = buildArtikelListeForMail(bestellung.positionen || [], artikelMap);
         const replacements = {
-            "{{bestellnummer}}": String((_58 = bestellung.bestellnummer) !== null && _58 !== void 0 ? _58 : ""),
+            "{{bestellnummer}}": String((_62 = bestellung.bestellnummer) !== null && _62 !== void 0 ? _62 : ""),
             "{{datum}}": new Date(bestellung.bestellDatum).toLocaleDateString("de-DE"),
             "{{lieferant}}": lieferantName,
             "{{kundennummer}}": lieferantKundenNummer,
@@ -2616,7 +2743,7 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
         };
         let subject = subjTemplate;
         let html = bodyTemplate;
-        let text = `Nachfassen Bestellung ${(_59 = bestellung.bestellnummer) !== null && _59 !== void 0 ? _59 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
+        let text = `Nachfassen Bestellung ${(_63 = bestellung.bestellnummer) !== null && _63 !== void 0 ? _63 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
         for (const key of Object.keys(replacements)) {
             const val = replacements[key];
             const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
@@ -2624,6 +2751,7 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
             html = html.replace(re, val);
             text = text.replace(re, val);
         }
+        ({ html, text } = ensureArtikelDetailsInDraft(html, text, bodyTemplate, artikelHtml, artikelText));
         if (lieferantKundenNummer && !subject.toLowerCase().includes("kundennummer")) {
             subject = `${subject} (Kundennummer: ${lieferantKundenNummer})`;
         }
@@ -2639,8 +2767,8 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
             lieferantName,
             lieferantEmail: supplierEmail,
             fallbackTo,
-            bestellnummer: (_60 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.bestellnummer) !== null && _60 !== void 0 ? _60 : null,
-            status: (_61 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.status) !== null && _61 !== void 0 ? _61 : null,
+            bestellnummer: (_64 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.bestellnummer) !== null && _64 !== void 0 ? _64 : null,
+            status: (_65 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.status) !== null && _65 !== void 0 ? _65 : null,
         });
     }
     catch (e) {

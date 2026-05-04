@@ -450,6 +450,8 @@ body::before {
   justify-content: flex-end;
   flex: 1 1 auto;
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .filter-bar input[type="search"],
@@ -1107,6 +1109,15 @@ body::before {
 
 .position-row > * {
   min-width: 0;
+}
+
+/* Bestell-Modal: schmale Breite — Positionszeilen stapeln statt 7-Spalten-Grid */
+#bestellungModal .position-row {
+  grid-template-columns: 1fr;
+}
+
+#bestellungModal .position-list {
+  overflow-x: hidden;
 }
 
 /* Mail-Modals: Editor + Vorschau ohne feste Mindestbreiten (Mobile/Tablet) */

@@ -21,13 +21,19 @@
   function createTour() {
     if (!window.Shepherd) return null;
 
+    const ua = (navigator && navigator.userAgent) || "";
+    const isIOS = /iP(hone|ad|od)/i.test(ua);
+
     const tour = new window.Shepherd.Tour({
       defaultStepOptions: {
         cancelIcon: { enabled: true },
         scrollTo: { behavior: "smooth", block: "center" },
         classes: "bw-tour-step",
       },
-      useModalOverlay: true,
+      // iOS/Safari: Shepherd Modal-Overlay rendert teils über dem Highlight
+      // und kann nach Abschluss Layout/Fixed-Positioning “verschieben”.
+      // Daher auf iOS deaktivieren (Tooltip + Highlight bleiben).
+      useModalOverlay: !isIOS,
     });
 
     const path = (window.location.pathname || "").replace(/\/+$/, "") || "/";
@@ -49,6 +55,12 @@
           .forEach((el) => el.classList.remove(HIGHLIGHT_CLASS));
       } catch {}
     };
+
+    // Sicherstellen, dass nach Abbruch/Ende nie ein Highlight “hängen bleibt”.
+    try {
+      tour.on("complete", clearHighlight);
+      tour.on("cancel", clearHighlight);
+    } catch {}
 
     const withHighlight = (selector, opts) => {
       if (!selector) return opts;
@@ -94,6 +106,7 @@
     const doneBtn = {
       text: "Fertig",
       action: () => {
+        clearHighlight();
         markTourSeen();
         tour.complete();
       },

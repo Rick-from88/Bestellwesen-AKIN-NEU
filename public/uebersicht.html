@@ -196,8 +196,17 @@
         if (status === "geliefert") {
           return "pill pill--mint";
         }
+        if (status === "teilgeliefert") {
+          return "pill pill--amber";
+        }
+        if (status === "teilstorniert") {
+          return "pill pill--rose";
+        }
         if (status === "storniert") {
           return "pill pill--rose";
+        }
+        if (status === "bestellt") {
+          return "pill pill--blue";
         }
         return "pill pill--amber";
       };
@@ -301,7 +310,7 @@
 
           const status = document.createElement("span");
           status.className = statusClass(bestellung.status);
-          status.textContent = bestellung.status;
+          status.textContent = (bestellung.status || "offen").toUpperCase();
 
           row.appendChild(leftDiv);
           row.appendChild(status);
@@ -403,13 +412,13 @@
           const ts = new Date(b.bestellDatum).getTime();
           if (!Number.isFinite(ts)) return;
           if (ts < fromTs || ts > toTs) return;
-          if (String(b?.status || "offen") !== "bestellt") return;
+          if (String(b?.status || "offen") === "offen") return;
           sum += computeOrderSum(b, artikelPreisMapCache);
           count += 1;
         });
 
         zeitraumSummeValue.textContent = formatCurrency(sum);
-        zeitraumSummeTrend.textContent = `${count} bestellte Bestellungen im Zeitraum`;
+        zeitraumSummeTrend.textContent = `${count} Bestellungen im Zeitraum (ohne offen)`;
       };
 
       const loadBestellungenAndArtikelForSum = async () => {

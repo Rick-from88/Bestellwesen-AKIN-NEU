@@ -58,8 +58,8 @@
             <select id="bestellungenSort">
               <option value="date-desc">Datum neueste zuerst</option>
               <option value="date-asc">Datum älteste zuerst</option>
-              <option value="nr-asc">Bestellnummer aufsteigend</option>
-              <option value="nr-desc">Bestellnummer absteigend</option>
+              <option value="lieferant-asc">Lieferant A–Z</option>
+              <option value="lieferant-desc">Lieferant Z–A</option>
             </select>
           </div>
         </div>
@@ -1055,11 +1055,6 @@
           const leftDiv = document.createElement("div");
           const title = document.createElement("div");
           title.className = "list__title";
-          title.textContent = `Bestellung #${bestellung.bestellnummer ?? bestellung.id}`;
-
-          const meta = document.createElement("div");
-          meta.className = "list__meta";
-          const datum = formatDate(bestellung.bestellDatum);
           const positionen = Array.isArray(bestellung.positionen)
             ? bestellung.positionen
             : [];
@@ -1067,6 +1062,11 @@
             ? lieferantMap[positionen[0].lieferantId] ||
               `Lieferant #${positionen[0].lieferantId}`
             : "Unbekannt";
+          title.textContent = lieferantName;
+
+          const meta = document.createElement("div");
+          meta.className = "list__meta";
+          const datum = formatDate(bestellung.bestellDatum);
 
           const artikelNamen = positionen.map((position) => {
             const artikelInfo = artikelMap[position.artikelId];
@@ -1086,7 +1086,24 @@
             return sum + preis * menge;
           }, 0);
 
-          meta.innerHTML = `Datum: ${datum} | Erfasst von: ${createdBy} | AB: ${bestellung.auftragsBestaetigt ? "JA" : "NEIN"} | Lieferant: ${lieferantName} | Artikel: ${artikelSummary} | Gesamt: <span class="order-total">${formatCurrency(totalBestellung)}</span>`;
+          const bestellNr = bestellung.bestellnummer ?? bestellung.id;
+          meta.appendChild(
+            document.createTextNode(
+              `Bestellung #${bestellNr} | Datum: ${datum} | Erfasst von: ${createdBy} | `,
+            ),
+          );
+          const abStrong = document.createElement("strong");
+          abStrong.textContent = bestellung.auftragsBestaetigt
+            ? "AB: JA"
+            : "AB: NEIN";
+          meta.appendChild(abStrong);
+          meta.appendChild(
+            document.createTextNode(` | Artikel: ${artikelSummary} | Gesamt: `),
+          );
+          const totalSpan = document.createElement("span");
+          totalSpan.className = "order-total";
+          totalSpan.textContent = formatCurrency(totalBestellung);
+          meta.appendChild(totalSpan);
 
           leftDiv.appendChild(title);
           leftDiv.appendChild(meta);
@@ -1208,6 +1225,15 @@
         });
       };
 
+      const primaryLieferantName = (bestellung, lieferantMap) => {
+        const positionen = Array.isArray(bestellung?.positionen)
+          ? bestellung.positionen
+          : [];
+        if (!positionen.length) return "";
+        const lid = positionen[0].lieferantId;
+        return String(lieferantMap[lid] || "").trim();
+      };
+
       const applyBestellungenFilterAndSort = () => {
         const artikelMap = artikelMapGlobal;
         const lieferantMap = lieferantMapGlobal;
@@ -1290,15 +1316,19 @@
         list.sort((a, b) => {
           const dateA = new Date(a.bestellDatum || 0).getTime();
           const dateB = new Date(b.bestellDatum || 0).getTime();
-          const nrA = Number(a.bestellnummer ?? a.id ?? 0);
-          const nrB = Number(b.bestellnummer ?? b.id ?? 0);
+          const nameA = primaryLieferantName(a, lieferantMap);
+          const nameB = primaryLieferantName(b, lieferantMap);
           switch (sort) {
             case "date-asc":
               return dateA - dateB;
-            case "nr-asc":
-              return nrA - nrB;
-            case "nr-desc":
-              return nrB - nrA;
+            case "lieferant-asc":
+              return nameA.localeCompare(nameB, "de", {
+                sensitivity: "base",
+              });
+            case "lieferant-desc":
+              return nameB.localeCompare(nameA, "de", {
+                sensitivity: "base",
+              });
             default:
               return dateB - dateA;
           }

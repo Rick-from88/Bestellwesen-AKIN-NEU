@@ -447,6 +447,9 @@
 
       let artikelByLieferantGlobal = {};
 
+      /** Einheitliche Map-Keys (API kann id als Zahl oder String liefern). */
+      const lieferantKey = (id) => String(id ?? "");
+
       const renderArtikel = (lieferanten, artikelByLieferant) => {
         artikelList.innerHTML = "";
 
@@ -489,7 +492,7 @@
           rightDiv.style.textAlign = "right";
           const countMeta = document.createElement("div");
           countMeta.className = "list__meta";
-          const items = artikelByLieferant[lieferant.id] || [];
+          const items = artikelByLieferant[lieferantKey(lieferant.id)] || [];
           countMeta.textContent = `${items.length} Artikel`;
           rightDiv.appendChild(countMeta);
 
@@ -606,10 +609,10 @@
         const artikelByLieferant = {};
 
         lieferanten.forEach((l) => {
-          if (filterLieferantId && String(l.id) !== filterLieferantId) {
+          if (filterLieferantId && lieferantKey(l.id) !== filterLieferantId) {
             return;
           }
-          const items = [...(artikelByLieferantGlobal[l.id] || [])];
+          const items = [...(artikelByLieferantGlobal[lieferantKey(l.id)] || [])];
 
           let filtered = items;
           if (tokens.length) {
@@ -649,12 +652,12 @@
             }
           });
 
-          artikelByLieferant[l.id] = filtered;
+          artikelByLieferant[lieferantKey(l.id)] = filtered;
         });
 
         renderArtikel(
           filterLieferantId
-            ? lieferanten.filter((l) => String(l.id) === filterLieferantId)
+            ? lieferanten.filter((l) => lieferantKey(l.id) === filterLieferantId)
             : lieferanten,
           artikelByLieferant,
         );
@@ -666,7 +669,10 @@
           const lieferantenResponse = await response.json();
           const lieferanten = normalizeList(lieferantenResponse);
           lieferantenData = lieferanten;
-          // Lieferanten-Filter befüllen
+          // Lieferanten-Filter befüllen (Auswahl beibehalten, falls Lieferant noch existiert)
+          const prevLieferantFilter = artikelLieferantFilter
+            ? String(artikelLieferantFilter.value || "")
+            : "";
           if (artikelLieferantFilter) {
             artikelLieferantFilter.innerHTML = "";
             const allOpt = document.createElement("option");
@@ -675,10 +681,18 @@
             artikelLieferantFilter.appendChild(allOpt);
             lieferanten.forEach((l) => {
               const opt = document.createElement("option");
-              opt.value = String(l.id);
+              opt.value = lieferantKey(l.id);
               opt.textContent = l.name;
               artikelLieferantFilter.appendChild(opt);
             });
+            if (
+              prevLieferantFilter &&
+              [...artikelLieferantFilter.options].some(
+                (o) => o.value === prevLieferantFilter,
+              )
+            ) {
+              artikelLieferantFilter.value = prevLieferantFilter;
+            }
           }
 
           const artikelRequests = lieferanten.map((lieferant) =>
@@ -690,7 +704,8 @@
           const artikelResults = await Promise.all(artikelRequests);
           const artikelByLieferant = {};
           artikelResults.forEach((items, index) => {
-            artikelByLieferant[lieferanten[index].id] = normalizeList(items);
+            artikelByLieferant[lieferantKey(lieferanten[index].id)] =
+              normalizeList(items);
           });
 
           artikelByLieferantGlobal = artikelByLieferant;
@@ -852,9 +867,14 @@
           "change",
           applyArtikelFilterAndSort,
         );
+        artikelLieferantFilter.addEventListener(
+          "input",
+          applyArtikelFilterAndSort,
+        );
       }
       if (artikelSort) {
         artikelSort.addEventListener("change", applyArtikelFilterAndSort);
+        artikelSort.addEventListener("input", applyArtikelFilterAndSort);
       }
       loadArtikel();
     </script>
