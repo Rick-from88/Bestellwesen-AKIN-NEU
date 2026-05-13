@@ -28,6 +28,11 @@ import {
   updateArtikel,
 } from "./repositories/artikel";
 import { ensureSchema } from "./db";
+import { sendPushNotification } from "./services/push";
+import {
+  upsertPushToken,
+  deletePushToken,
+} from "./repositories/pushTokens";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -979,19 +984,77 @@ app.use("/api", (req: any, res: any, next: any) => {
           p === "/artikel" ||
           p === "/dashboard/notes" ||
           p === "/dashboard/chat" ||
+          p === "/me/push-config" ||
           p === "/settings" ||
           p === "/settings/effective")) ||
       (m === "POST" &&
         (p === "/bestellungen" ||
           p === "/lieferanten" ||
           p === "/artikel" ||
-          p === "/dashboard/chat")) ||
+          p === "/dashboard/chat" ||
+          p === "/me/push-token")) ||
+      (m === "DELETE" && p === "/me/push-token") ||
       (m === "PUT" &&
         (p === "/dashboard/notes" || /^\/lieferanten\/\d+$/.test(p)));
 
     if (allow) return next();
     return res.status(403).json({ error: "forbidden for role produktion" });
   });
+});
+
+app.get("/api/me/push-config", async (_req, res) => {
+  const vapidPublicKey = String(process.env.FCM_VAPID_PUBLIC_KEY || "").trim();
+  res.json({ vapidPublicKey });
+});
+
+app.post("/api/me/push-token", express.json(), async (req, res) => {
+  const token =
+    typeof req.body?.token === "string" ? req.body.token.trim() : "";
+  if (!token || token.length < 80) {
+    res.status(400).json({ error: "token ungueltig" });
+    return;
+  }
+  const user = (req as AuthedRequest).firebaseUser;
+  if (!user?.uid) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  const role = getUserRole(user);
+  try {
+    await upsertPushToken({
+      firebaseUid: user.uid,
+      fcmToken: token,
+      appRole: role,
+      userAgent: req.get("user-agent"),
+    });
+    res.status(204).send();
+  } catch (e) {
+    console.error("push token upsert", e);
+    res.status(500).json({ error: "Konnte Token nicht speichern" });
+  }
+});
+
+app.delete("/api/me/push-token", express.json(), async (req, res) => {
+  const token =
+    typeof req.body?.token === "string"
+      ? req.body.token.trim()
+      : String(req.query?.token || "").trim();
+  if (!token) {
+    res.status(400).json({ error: "token fehlt" });
+    return;
+  }
+  const user = (req as AuthedRequest).firebaseUser;
+  if (!user?.uid) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  try {
+    await deletePushToken({ firebaseUid: user.uid, fcmToken: token });
+    res.status(204).send();
+  } catch (e) {
+    console.error("push token delete", e);
+    res.status(500).json({ error: "Konnte Token nicht loeschen" });
+  }
 });
 
 app.get("/api/bestellungen", async (req, res) => {
@@ -1047,6 +1110,32 @@ app.post("/api/bestellungen", async (req, res) => {
       });
       bestellungen.push(bestellung);
     }
+
+    void (async () => {
+      try {
+        const exclude = actorProfile.uid || undefined;
+        const n = bestellungen.length;
+        const first = bestellungen[0] as any;
+        const title = "Neue Bestellung";
+        const body =
+          n > 1
+            ? `${n} neue Bestellungen (${bestellungen
+                .map((b: any) => `#${b.bestellnummer ?? b.id}`)
+                .join(", ")})`.slice(0, 500)
+            : String(
+                `Bestellung #${first?.bestellnummer ?? first?.id ?? ""}`,
+              ).slice(0, 500);
+        await sendPushNotification({
+          audience: "order_subscribers",
+          excludeUid: exclude,
+          title,
+          body,
+          data: { type: "new_order" },
+        });
+      } catch (e) {
+        console.error("[push] new order", e);
+      }
+    })();
 
     res.status(201).json(bestellungen);
   } catch (error) {
@@ -1800,6 +1889,9 @@ app.put("/api/dashboard/notes", express.json(), async (req, res) => {
 
     if (typeof req.body?.note === "string" && req.body.note.trim()) {
       const noteText = req.body.note.trim();
+      const actor = await resolveActorProfile(
+        (req as AuthedRequest).firebaseUser,
+      );
       const existingRaw = await settingsRepo.getSetting("dashboard_notes");
       let notesArr: any[] = [];
       if (existingRaw) {
@@ -1819,6 +1911,13 @@ app.put("/api/dashboard/notes", express.json(), async (req, res) => {
         "dashboard_notes",
         JSON.stringify(notesArr),
       );
+      void sendPushNotification({
+        audience: "dashboard_subscribers",
+        excludeUid: actor.uid || undefined,
+        title: "Neue Dashboard-Notiz",
+        body: noteText.slice(0, 200),
+        data: { type: "dashboard_note" },
+      }).catch((e) => console.error("[push] note", e));
       res.status(201).json(newNote);
       return;
     }
@@ -1886,6 +1985,13 @@ app.post("/api/dashboard/chat", express.json(), async (req, res) => {
     if (messages.length > 200) messages = messages.slice(0, 200);
 
     await settingsRepo.setSetting("dashboard_chat", JSON.stringify(messages));
+    void sendPushNotification({
+      audience: "dashboard_subscribers",
+      excludeUid: msg.authorUid || undefined,
+      title: "Dashboard-Chat",
+      body: `${msg.author}: ${msg.text}`.slice(0, 200),
+      data: { type: "dashboard_chat" },
+    }).catch((e) => console.error("[push] chat", e));
     res.status(201).json(msg);
   } catch (err) {
     console.error("Error saving dashboard chat", err);

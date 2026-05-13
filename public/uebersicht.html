@@ -76,6 +76,22 @@
         </article>
       </section>
 
+      <section class="panel" style="margin-top: 16px">
+        <div class="panel__header">
+          <h2>Benachrichtigungen</h2>
+        </div>
+        <p style="color: var(--ink-soft); font-size: 0.9rem; margin: 0 0 10px">
+          Push auf diesem Geraet fuer neue Bestellungen, Dashboard-Notizen und Chat
+          (Chrome/Edge/Firefox; auf iOS eingeschraenkt).
+        </p>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+          <button type="button" class="btn btn--ghost" id="pushNotifyBtn">
+            Push aktivieren
+          </button>
+          <span id="pushNotifyStatus" style="color: var(--ink-soft); font-size: 0.9rem"></span>
+        </div>
+      </section>
+
       <section class="split">
         <div class="panel">
           <div class="panel__header">
@@ -887,6 +903,7 @@
         });
       }
     </script>
+    <script type="module" src="/push-notifications.js"></script>
     <script src="/auth-guard.js"></script>
     <script src="/profile-widget.js"></script>
     <script src="/mobile-nav.js"></script>

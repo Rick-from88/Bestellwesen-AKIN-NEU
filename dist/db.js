@@ -92,5 +92,18 @@ const ensureSchema = () => __awaiter(void 0, void 0, void 0, function* () {
     yield (0, exports.query)("alter table artikel add column if not exists foto_url text");
     yield (0, exports.query)("alter table artikel drop column if exists lagerbestand");
     yield (0, exports.query)("alter table artikel drop column if exists min_bestand");
+    yield (0, exports.query)(`
+    create table if not exists user_push_tokens (
+      id serial primary key,
+      firebase_uid text not null,
+      fcm_token text not null unique,
+      app_role text not null,
+      user_agent text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+    yield (0, exports.query)("create index if not exists user_push_tokens_uid_idx on user_push_tokens(firebase_uid)");
+    yield (0, exports.query)("create index if not exists user_push_tokens_role_idx on user_push_tokens(app_role)");
 });
 exports.ensureSchema = ensureSchema;

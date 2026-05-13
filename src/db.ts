@@ -117,4 +117,21 @@ export const ensureSchema = async () => {
   await query("alter table artikel add column if not exists foto_url text");
   await query("alter table artikel drop column if exists lagerbestand");
   await query("alter table artikel drop column if exists min_bestand");
+  await query(`
+    create table if not exists user_push_tokens (
+      id serial primary key,
+      firebase_uid text not null,
+      fcm_token text not null unique,
+      app_role text not null,
+      user_agent text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+  await query(
+    "create index if not exists user_push_tokens_uid_idx on user_push_tokens(firebase_uid)",
+  );
+  await query(
+    "create index if not exists user_push_tokens_role_idx on user_push_tokens(app_role)",
+  );
 };
