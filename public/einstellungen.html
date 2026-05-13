@@ -172,7 +172,7 @@
             </div>
           </a>
         </div>
-        <section class="panel" style="margin-top: 18px">
+        <section class="panel" id="push-notifications" style="margin-top: 18px">
           <div class="panel__header">
             <h2>Push-Benachrichtigungen</h2>
           </div>
@@ -1417,6 +1417,18 @@
       }
 
       initUserMgmt();
+
+      if (location.hash === "#push-notifications") {
+        requestAnimationFrame(() => {
+          const el = document.getElementById("push-notifications");
+          if (!el) return;
+          try {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch {
+            el.scrollIntoView();
+          }
+        });
+      }
     </script>
     <script type="module" src="/push-notifications.js"></script>
     <script src="/auth-guard.js"></script>

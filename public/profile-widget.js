@@ -67,6 +67,7 @@
       <div class="profile-popover__meta"><strong>E-Mail:</strong> ${me.email || "-"}<br><strong>Rolle:</strong> ${roleLabel(me.role)}</div>
       <div class="profile-popover__actions">
         <a class="btn btn--ghost btn--small" href="/einstellungen">Einstellungen</a>
+        <a class="btn btn--ghost btn--small" href="/einstellungen#push-notifications">Push</a>
         <button class="btn btn--ghost btn--small" id="profileTourBtn" type="button">Tour starten</button>
         <button class="btn btn--danger btn--small" id="profileLogoutBtn" type="button">Logout</button>
       </div>
