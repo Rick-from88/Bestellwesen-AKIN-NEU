@@ -30,6 +30,14 @@ const gacRaw =
   String(process.env.FIREBASE_HOSTING_SA_PATH || "").trim();
 const gacPath = gacRaw ? resolveCredentialPath(gacRaw) : "";
 
+if (gacRaw && !fs.existsSync(gacPath)) {
+  console.error(
+    `[deploy-hosting] Datei fuer GOOGLE_APPLICATION_CREDENTIALS nicht gefunden:\n  ${gacPath}\n` +
+      "  Pfad pruefen (Leerzeichen, Laufwerk).",
+  );
+  process.exit(1);
+}
+
 const useAdc = gacPath && fs.existsSync(gacPath);
 
 if (!useAdc && !token) {
