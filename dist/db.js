@@ -105,5 +105,34 @@ const ensureSchema = () => __awaiter(void 0, void 0, void 0, function* () {
   `);
     yield (0, exports.query)("create index if not exists user_push_tokens_uid_idx on user_push_tokens(firebase_uid)");
     yield (0, exports.query)("create index if not exists user_push_tokens_role_idx on user_push_tokens(app_role)");
+    yield (0, exports.query)("alter table bestellpositionen add column if not exists einzelpreis numeric(10, 2)");
+    yield (0, exports.query)("alter table bestellungen add column if not exists einzelpreis numeric(10, 2)");
+    yield (0, exports.query)(`
+    update bestellpositionen p
+       set einzelpreis = a.preis
+      from artikel a
+     where p.artikel_id = a.id
+       and p.einzelpreis is null`);
+    yield (0, exports.query)(`
+    update bestellungen b
+       set einzelpreis = a.preis
+      from artikel a
+     where b.artikel_id = a.id
+       and b.einzelpreis is null`);
+    yield (0, exports.query)("update bestellpositionen set einzelpreis = 0 where einzelpreis is null");
+    yield (0, exports.query)("update bestellungen set einzelpreis = 0 where einzelpreis is null");
+    yield (0, exports.query)("alter table bestellpositionen alter column einzelpreis set default 0");
+    yield (0, exports.query)("alter table bestellpositionen alter column einzelpreis set not null");
+    yield (0, exports.query)("alter table bestellungen alter column einzelpreis set default 0");
+    yield (0, exports.query)("alter table bestellungen alter column einzelpreis set not null");
+    yield (0, exports.query)(`
+    create table if not exists artikel_preis_historie (
+      id serial primary key,
+      artikel_id integer not null references artikel (id) on delete cascade,
+      preis_alt numeric(10, 2),
+      preis_neu numeric(10, 2) not null,
+      geaendert_am timestamptz not null default now()
+    )`);
+    yield (0, exports.query)("create index if not exists idx_artikel_preis_historie_artikel on artikel_preis_historie (artikel_id)");
 });
 exports.ensureSchema = ensureSchema;

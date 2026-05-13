@@ -66,58 +66,58 @@ async function seed() {
     // Bestellungen (bestellungen + bestellpositionen)
     // Bestellung 1
     await client.query(
-      `INSERT INTO bestellungen (id, artikel_id, lieferant_id, menge, status, bestell_datum) VALUES
-      ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO bestellungen (id, artikel_id, lieferant_id, menge, einzelpreis, status, bestell_datum) VALUES
+      ($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT (id) DO NOTHING`,
-      [1, 1, 1, 5, 'offen', '2026-01-10T08:00:00Z']
+      [1, 1, 1, 5, 149.9, 'offen', '2026-01-10T08:00:00Z']
     );
     await client.query(
-      `INSERT INTO bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) VALUES
-      ($1,$2,$3,$4)
+      `INSERT INTO bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, einzelpreis) VALUES
+      ($1,$2,$3,$4,$5)
       ON CONFLICT DO NOTHING`,
-      [1, 1, 1, 5]
+      [1, 1, 1, 5, 149.9]
     );
 
     // Bestellung 2
     await client.query(
-      `INSERT INTO bestellungen (id, artikel_id, lieferant_id, menge, status, bestell_datum) VALUES
-      ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO bestellungen (id, artikel_id, lieferant_id, menge, einzelpreis, status, bestell_datum) VALUES
+      ($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT (id) DO NOTHING`,
-      [2, 2, 2, 3, 'offen', '2026-01-20T10:30:00Z']
+      [2, 2, 2, 3, 249.0, 'offen', '2026-01-20T10:30:00Z']
     );
     await client.query(
-      `INSERT INTO bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) VALUES
-      ($1,$2,$3,$4),($5,$6,$7,$8)
+      `INSERT INTO bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, einzelpreis) VALUES
+      ($1,$2,$3,$4,$5),($6,$7,$8,$9,$10)
       ON CONFLICT DO NOTHING`,
-      [2, 2, 2, 3, 2, 1, 1, 2]
+      [2, 2, 2, 3, 249.0, 2, 1, 1, 2, 149.9]
     );
 
     // Bestellung 3
     await client.query(
-      `INSERT INTO bestellungen (id, artikel_id, lieferant_id, menge, status, bestell_datum) VALUES
-      ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO bestellungen (id, artikel_id, lieferant_id, menge, einzelpreis, status, bestell_datum) VALUES
+      ($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT (id) DO NOTHING`,
-      [3, 3, 3, 10, 'geliefert', '2026-01-05T14:15:00Z']
+      [3, 3, 3, 10, 19.5, 'geliefert', '2026-01-05T14:15:00Z']
     );
     await client.query(
-      `INSERT INTO bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) VALUES
-      ($1,$2,$3,$4)
+      `INSERT INTO bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, einzelpreis) VALUES
+      ($1,$2,$3,$4,$5)
       ON CONFLICT DO NOTHING`,
-      [3, 3, 3, 10]
+      [3, 3, 3, 10, 19.5]
     );
 
     // Bestellung 4
     await client.query(
-      `INSERT INTO bestellungen (id, artikel_id, lieferant_id, menge, status, bestell_datum) VALUES
-      ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO bestellungen (id, artikel_id, lieferant_id, menge, einzelpreis, status, bestell_datum) VALUES
+      ($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT (id) DO NOTHING`,
-      [4, 4, 4, 1, 'storniert', '2026-02-01T09:45:00Z']
+      [4, 4, 4, 1, 89.95, 'storniert', '2026-02-01T09:45:00Z']
     );
     await client.query(
-      `INSERT INTO bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge) VALUES
-      ($1,$2,$3,$4),($5,$6,$7,$8),($9,$10,$11,$12)
+      `INSERT INTO bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, einzelpreis) VALUES
+      ($1,$2,$3,$4,$5),($6,$7,$8,$9,$10),($11,$12,$13,$14,$15)
       ON CONFLICT DO NOTHING`,
-      [4, 4, 4, 1, 4, 1, 1, 4, 4, 3, 3, 6]
+      [4, 4, 4, 1, 89.95, 4, 1, 1, 4, 149.9, 4, 3, 3, 6, 19.5]
     );
 
     await client.query("COMMIT");

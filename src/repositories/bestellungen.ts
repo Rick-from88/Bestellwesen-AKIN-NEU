@@ -36,6 +36,46 @@ export interface UpdateBestellungInput {
   positionen: BestellungPositionInput[];
 }
 
+async function loadArtikelPreisMap(
+  client: { query: (t: string, p?: unknown[]) => Promise<{ rows: any[] }> },
+  artikelIds: number[],
+): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  const ids = [...new Set(artikelIds.filter((id) => Number.isFinite(id) && id > 0))];
+  if (!ids.length) return map;
+  const res = await client.query("select id, preis from artikel where id = any($1::int[])", [
+    ids,
+  ]);
+  for (const row of res.rows || []) {
+    map.set(Number(row.id), Number(row.preis) || 0);
+  }
+  return map;
+}
+
+/** Aktualisiert gespeicherte Einzelpreise aller Positionen (und Legacy-Zeile) aus dem Katalog. */
+export const snapshotEinzelpreiseFromArtikelForOrders = async (
+  orderIds: number[],
+): Promise<void> => {
+  const ids = [...new Set(orderIds.filter((id) => Number.isFinite(id) && id > 0))];
+  if (!ids.length) return;
+  await query(
+    `update bestellpositionen p
+        set einzelpreis = a.preis
+       from artikel a
+      where p.artikel_id = a.id
+        and p.bestellung_id = any($1::int[])`,
+    [ids],
+  );
+  await query(
+    `update bestellungen b
+        set einzelpreis = a.preis
+       from artikel a
+      where b.artikel_id = a.id
+        and b.id = any($1::int[])`,
+    [ids],
+  );
+};
+
 export const listBestellungen = async (): Promise<Bestellung[]> => {
   const result = await query(
     `select b.id,
@@ -51,7 +91,8 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
                     p.menge,
                     p.geliefert_menge as "geliefertMenge",
                     p.storniert_menge as "storniertMenge",
-                    p.notiz
+                    p.notiz,
+                    p.einzelpreis as "einzelpreis"
                  from bestellungen b
                  join bestellpositionen p on p.bestellung_id = b.id
                 union all
@@ -68,7 +109,8 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
                     b.menge,
                     0::int as "geliefertMenge",
                     0::int as "storniertMenge",
-                    null::text as notiz
+                    null::text as notiz,
+                    b.einzelpreis as "einzelpreis"
                  from bestellungen b
                 where not exists (
                     select 1 from bestellpositionen p where p.bestellung_id = b.id
@@ -96,14 +138,18 @@ export const listBestellungen = async (): Promise<Bestellung[]> => {
       });
     }
 
-      if (row.artikelId && row.lieferantId && row.menge) {
+    if (row.artikelId && row.lieferantId && row.menge) {
       const position: BestellungPosition = {
         artikelId: row.artikelId,
         lieferantId: row.lieferantId,
         menge: row.menge,
         notiz: row.notiz ?? undefined,
-          geliefertMenge: row.geliefertMenge ?? 0,
-          storniertMenge: row.storniertMenge ?? 0,
+        geliefertMenge: row.geliefertMenge ?? 0,
+        storniertMenge: row.storniertMenge ?? 0,
+        einzelpreis:
+          row.einzelpreis !== null && row.einzelpreis !== undefined
+            ? Number(row.einzelpreis)
+            : undefined,
       };
       bestellungen.get(id)?.positionen.push(position);
     }
@@ -177,6 +223,11 @@ export const createBestellung = async (
     await client.query("begin");
 
     const firstPosition = input.positionen[0];
+    const preisMap = await loadArtikelPreisMap(
+      client,
+      input.positionen.map((p) => p.artikelId),
+    );
+    const firstEinzelpreis = preisMap.get(firstPosition.artikelId) ?? 0;
 
     // compute bestellnummer: format YY + 3-digit sequence (YY * 1000 + seq)
     // determine next bestellnummer using shared logic (reads settings)
@@ -210,7 +261,7 @@ export const createBestellung = async (
     }
 
     const bestellungResult = await client.query(
-      'insert into bestellungen (bestellnummer, created_by_uid, created_by_name, created_by_email, artikel_id, lieferant_id, menge, auftrags_bestaetigt, status, bestell_datum) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, coalesce($10::timestamp, now())) returning id, bestellnummer, created_by_uid as "createdByUid", created_by_name as "createdByName", created_by_email as "createdByEmail", status, auftrags_bestaetigt as "auftragsBestaetigt", bestell_datum as "bestellDatum"',
+      'insert into bestellungen (bestellnummer, created_by_uid, created_by_name, created_by_email, artikel_id, lieferant_id, menge, einzelpreis, auftrags_bestaetigt, status, bestell_datum) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, coalesce($11::timestamp, now())) returning id, bestellnummer, created_by_uid as "createdByUid", created_by_name as "createdByName", created_by_email as "createdByEmail", status, auftrags_bestaetigt as "auftragsBestaetigt", bestell_datum as "bestellDatum"',
       [
         nextNr,
         input.createdByUid ?? null,
@@ -219,6 +270,7 @@ export const createBestellung = async (
         firstPosition.artikelId,
         firstPosition.lieferantId,
         firstPosition.menge,
+        firstEinzelpreis,
         input.auftragsBestaetigt ?? false,
         input.status ?? "offen",
         input.bestellDatum ?? null,
@@ -228,8 +280,9 @@ export const createBestellung = async (
     const bestellung = bestellungResult.rows[0];
 
     for (const position of input.positionen) {
+      const einzelpreis = preisMap.get(position.artikelId) ?? 0;
       await client.query(
-        "insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz) values ($1, $2, $3, $4, $5, $6, $7)",
+        "insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz, einzelpreis) values ($1, $2, $3, $4, $5, $6, $7, $8)",
         [
           bestellung.id,
           position.artikelId,
@@ -238,6 +291,7 @@ export const createBestellung = async (
           position.geliefertMenge ?? 0,
           position.storniertMenge ?? 0,
           position.notiz ?? null,
+          einzelpreis,
         ],
       );
     }
@@ -253,7 +307,10 @@ export const createBestellung = async (
       status: bestellung.status as BestellungStatus,
       auftragsBestaetigt: bestellung.auftragsBestaetigt ?? false,
       bestellDatum: bestellung.bestellDatum,
-      positionen: input.positionen,
+      positionen: input.positionen.map((p) => ({
+        ...p,
+        einzelpreis: preisMap.get(p.artikelId) ?? 0,
+      })),
     };
   } catch (error) {
     await client.query("rollback");
@@ -273,20 +330,28 @@ export const updateBestellung = async (
     await client.query("begin");
 
     const firstPosition = input.positionen[0];
+    const preisMap = await loadArtikelPreisMap(
+      client,
+      input.positionen.map((p) => p.artikelId),
+    );
+    const firstEinzelpreis = preisMap.get(firstPosition.artikelId) ?? 0;
+
     const bestellungResult = await client.query(
       `update bestellungen
          set artikel_id = $1,
              lieferant_id = $2,
              menge = $3,
-             auftrags_bestaetigt = coalesce($4::boolean, auftrags_bestaetigt),
-             status = $5,
-             bestell_datum = coalesce($6::timestamp, bestell_datum)
-       where id = $7
+             einzelpreis = $4,
+             auftrags_bestaetigt = coalesce($5::boolean, auftrags_bestaetigt),
+             status = $6,
+             bestell_datum = coalesce($7::timestamp, bestell_datum)
+       where id = $8
        returning id, status, auftrags_bestaetigt as "auftragsBestaetigt", bestell_datum as "bestellDatum"`,
       [
         firstPosition.artikelId,
         firstPosition.lieferantId,
         firstPosition.menge,
+        firstEinzelpreis,
         input.auftragsBestaetigt ?? null,
         input.status ?? "offen",
         input.bestellDatum ?? null,
@@ -301,8 +366,9 @@ export const updateBestellung = async (
     await client.query("delete from bestellpositionen where bestellung_id = $1", [id]);
 
     for (const position of input.positionen) {
+      const einzelpreis = preisMap.get(position.artikelId) ?? 0;
       await client.query(
-        "insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz) values ($1, $2, $3, $4, $5, $6, $7)",
+        "insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz, einzelpreis) values ($1, $2, $3, $4, $5, $6, $7, $8)",
         [
           id,
           position.artikelId,
@@ -311,6 +377,7 @@ export const updateBestellung = async (
           position.geliefertMenge ?? 0,
           position.storniertMenge ?? 0,
           position.notiz ?? null,
+          einzelpreis,
         ],
       );
     }
@@ -332,7 +399,10 @@ export const updateBestellung = async (
       status: bestellung.status as BestellungStatus,
       auftragsBestaetigt: bestellung.auftragsBestaetigt ?? false,
       bestellDatum: bestellung.bestellDatum,
-      positionen: input.positionen,
+      positionen: input.positionen.map((p) => ({
+        ...p,
+        einzelpreis: preisMap.get(p.artikelId) ?? 0,
+      })),
     };
   } catch (error) {
     await client.query("rollback");
@@ -363,7 +433,8 @@ export const getBestellungById = async (
                 p.menge,
                 p.geliefert_menge as "geliefertMenge",
                 p.storniert_menge as "storniertMenge",
-                p.notiz
+                p.notiz,
+                p.einzelpreis as "einzelpreis"
              from bestellungen b
              left join bestellpositionen p on p.bestellung_id = b.id
              where b.id = $1`,
@@ -383,7 +454,7 @@ export const getBestellungById = async (
         createdByName: row.createdByName ?? undefined,
         createdByEmail: row.createdByEmail ?? undefined,
         status: row.status as BestellungStatus,
-          auftragsBestaetigt: row.auftragsBestaetigt ?? false,
+        auftragsBestaetigt: row.auftragsBestaetigt ?? false,
         bestellDatum: row.bestellDatum,
         positionen: [],
       });
@@ -393,9 +464,13 @@ export const getBestellungById = async (
         artikelId: row.artikelId,
         lieferantId: row.lieferantId,
         menge: row.menge,
-          geliefertMenge: row.geliefertMenge ?? 0,
-          storniertMenge: row.storniertMenge ?? 0,
+        geliefertMenge: row.geliefertMenge ?? 0,
+        storniertMenge: row.storniertMenge ?? 0,
         notiz: row.notiz ?? undefined,
+        einzelpreis:
+          row.einzelpreis !== null && row.einzelpreis !== undefined
+            ? Number(row.einzelpreis)
+            : undefined,
       });
     }
   });

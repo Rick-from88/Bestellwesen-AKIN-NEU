@@ -373,11 +373,20 @@
 
       const computeOrderSum = (bestellung, artikelPreisMap) => {
         const pos = Array.isArray(bestellung?.positionen) ? bestellung.positionen : [];
+        const st = String(bestellung?.status || "offen");
         let total = 0;
         pos.forEach((p) => {
-          const preis = artikelPreisMap?.[p.artikelId];
           const menge = Number(p.menge);
           if (!Number.isFinite(menge) || menge <= 0) return;
+          let preis;
+          if (st === "offen") {
+            preis = artikelPreisMap?.[p.artikelId];
+          } else {
+            const snap = Number(p.einzelpreis);
+            preis = Number.isFinite(snap)
+              ? snap
+              : artikelPreisMap?.[p.artikelId];
+          }
           if (!Number.isFinite(preis)) return;
           total += menge * preis;
         });

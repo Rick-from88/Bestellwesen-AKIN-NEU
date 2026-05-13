@@ -38,6 +38,7 @@ create table if not exists bestellungen (
     artikel_id integer not null references artikel(id) on delete restrict,
     lieferant_id integer not null references lieferanten(id) on delete restrict,
     menge integer not null,
+    einzelpreis numeric(10, 2) not null default 0,
     status text not null check (status in ('offen', 'bestellt', 'teilgeliefert', 'geliefert', 'teilstorniert', 'storniert')),
     bestell_datum timestamp not null default now()
 );
@@ -50,7 +51,8 @@ create table if not exists bestellpositionen (
     menge integer not null,
     geliefert_menge integer not null default 0,
     storniert_menge integer not null default 0,
-    notiz text
+    notiz text,
+    einzelpreis numeric(10, 2) not null default 0
 );
 
 create index if not exists idx_bestellungen_status on bestellungen(status);
@@ -109,3 +111,20 @@ alter table bestellpositionen
     add column if not exists geliefert_menge integer not null default 0;
 alter table bestellpositionen
     add column if not exists storniert_menge integer not null default 0;
+
+-- Preis-Snapshots (siehe db/alter_preis_snapshots.sql)
+alter table bestellpositionen
+    add column if not exists einzelpreis numeric(10, 2);
+alter table bestellungen
+    add column if not exists einzelpreis numeric(10, 2);
+
+create table if not exists artikel_preis_historie (
+    id serial primary key,
+    artikel_id integer not null references artikel (id) on delete cascade,
+    preis_alt numeric(10, 2),
+    preis_neu numeric(10, 2) not null,
+    geaendert_am timestamptz not null default now()
+);
+
+create index if not exists idx_artikel_preis_historie_artikel
+    on artikel_preis_historie (artikel_id);

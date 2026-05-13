@@ -11,7 +11,8 @@
     "build": "node ./node_modules/typescript/bin/tsc",
     "test": "jest",
     "import-local": "node scripts/import-local.js",
-    "deploy:hosting": "node scripts/deploy-hosting.js"
+    "deploy:hosting": "node scripts/deploy-hosting.js",
+    "deploy:cloud-run": "node scripts/deploy-cloud-run.js"
   },
   "dependencies": {
     "@types/cookie-parser": "^1.4.10",

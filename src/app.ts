@@ -9,6 +9,7 @@ import {
   listBestellungen,
   updateBestellung,
   deleteBestellung,
+  snapshotEinzelpreiseFromArtikelForOrders,
   BestellungStatus,
 } from "./repositories/bestellungen";
 import {
@@ -982,6 +983,7 @@ app.use("/api", (req: any, res: any, next: any) => {
           /^\/lieferanten\/\d+\/artikel$/.test(p) ||
           /^\/lieferanten\/\d+\/bestellungen$/.test(p) ||
           p === "/artikel" ||
+          /^\/artikel\/\d+\/preis-historie$/.test(p) ||
           p === "/dashboard/notes" ||
           p === "/dashboard/chat" ||
           p === "/me/push-config" ||
@@ -1347,6 +1349,9 @@ app.put("/api/bestellungen/:id/status", express.json(), async (req, res) => {
         id,
       ]);
     }
+    if (curStatus === "offen" && status !== "offen") {
+      await snapshotEinzelpreiseFromArtikelForOrders([id]);
+    }
     res.status(204).send();
   } catch (error) {
     console.error(error);
@@ -1615,6 +1620,24 @@ app.get("/api/artikel", async (req, res) => {
   } catch (error) {
     console.error("Fehler beim Laden der Artikel", error);
     res.status(500).json({ error: "Artikel konnten nicht geladen werden." });
+  }
+});
+
+app.get("/api/artikel/:id/preis-historie", async (req, res) => {
+  const artikelId = parseInteger(req.params.id);
+  if (!artikelId) {
+    res.status(400).json({ error: "Ungueltige Artikel-ID." });
+    return;
+  }
+  try {
+    const { listArtikelPreisHistorie } = await Promise.resolve(
+      require("./repositories/artikel_preis_historie"),
+    );
+    const rows = await listArtikelPreisHistorie(artikelId);
+    res.json(rows);
+  } catch (error) {
+    console.error("Fehler beim Laden der Preishistorie", error);
+    res.status(500).json({ error: "Preishistorie konnte nicht geladen werden." });
   }
 });
 
@@ -2371,6 +2394,8 @@ const upsertArtikelForLieferant = async (
 
   if (existing.rows[0]?.id) {
     const id = Number(existing.rows[0].id);
+    const prevRow = await db.query("select preis from artikel where id = $1", [id]);
+    const prevPreis = Number(prevRow.rows[0]?.preis);
     const updated = await db.query(
       `update artikel
           set name = $2,
@@ -2394,6 +2419,20 @@ const upsertArtikelForLieferant = async (
         preisNum,
       ],
     );
+    if (
+      (updated.rowCount ?? 0) > 0 &&
+      Number.isFinite(prevPreis) &&
+      prevPreis !== preisNum
+    ) {
+      const { insertArtikelPreisHistorie } = await Promise.resolve(
+        require("./repositories/artikel_preis_historie"),
+      );
+      await insertArtikelPreisHistorie({
+        artikelId: id,
+        preisAlt: prevPreis,
+        preisNeu: preisNum,
+      });
+    }
     return {
       id,
       action: (updated.rowCount ?? 0) > 0 ? "updated" : "skipped",
@@ -2558,14 +2597,27 @@ app.post("/api/backup/restore", requireAdminApi, express.json(), async (req, res
           if (!newLid && p?.lieferantName) {
             newLid = Number(lieferantenNameMap.get(normText(p.lieferantName)) || 0);
           }
+          const einzelRaw = Number(p?.einzelpreis);
           return {
             artikelId: newAid,
             lieferantId: newLid,
             menge: Number(p?.menge || 0),
+            geliefertMenge: Number(p?.geliefertMenge ?? p?.geliefert_menge ?? 0) || 0,
+            storniertMenge: Number(p?.storniertMenge ?? p?.storniert_menge ?? 0) || 0,
             notiz: nonEmptyOrNull(p?.notiz),
+            einzelpreis: Number.isFinite(einzelRaw) ? einzelRaw : NaN,
           };
         })
         .filter((p: any) => p.artikelId && p.lieferantId && p.menge > 0);
+
+      for (const p of mappedPos) {
+        if (!Number.isFinite(p.einzelpreis)) {
+          const pr = await db.query("select preis from artikel where id = $1", [
+            p.artikelId,
+          ]);
+          p.einzelpreis = Number(pr.rows[0]?.preis) || 0;
+        }
+      }
 
       if (!mappedPos.length) {
         ordersSkipped++;
@@ -2586,6 +2638,7 @@ app.post("/api/backup/restore", requireAdminApi, express.json(), async (req, res
         "artikel_id",
         "lieferant_id",
         "menge",
+        "einzelpreis",
         "status",
         "bestell_datum",
       ];
@@ -2594,6 +2647,7 @@ app.post("/api/backup/restore", requireAdminApi, express.json(), async (req, res
         first.artikelId,
         first.lieferantId,
         first.menge,
+        first.einzelpreis,
         status,
         b?.bestellDatum || null,
       ];
@@ -2621,9 +2675,18 @@ app.post("/api/backup/restore", requireAdminApi, express.json(), async (req, res
       const newId = Number(inserted.rows[0].id);
       for (const p of mappedPos) {
         await db.query(
-          `insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, notiz)
-           values ($1,$2,$3,$4,$5)`,
-          [newId, p.artikelId, p.lieferantId, p.menge, p.notiz],
+          `insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz, einzelpreis)
+           values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            newId,
+            p.artikelId,
+            p.lieferantId,
+            p.menge,
+            p.geliefertMenge,
+            p.storniertMenge,
+            p.notiz,
+            p.einzelpreis,
+          ],
         );
       }
       ordersCreated++;
@@ -3137,7 +3200,8 @@ app.post("/api/bestellungen/sammel/send", express.json(), async (req, res) => {
           "update bestellungen set status = 'bestellt', auftrags_bestaetigt = false where id = ANY($1::int[]) and status = 'offen'",
           [ids],
         );
-        ids.forEach((id) => sentOrderIds.add(id));
+        await snapshotEinzelpreiseFromArtikelForOrders(ids);
+        ids.forEach((oid) => sentOrderIds.add(oid));
       }
       sentGroupNames.push(g.lieferantName);
     }
@@ -3211,6 +3275,7 @@ app.put("/api/bestellungen/:id/send", express.json(), async (req, res) => {
       "update bestellungen set status = $1, auftrags_bestaetigt = false where id = $2",
       ["bestellt", id],
     );
+    await snapshotEinzelpreiseFromArtikelForOrders([id]);
 
     res.json({ success: true });
   } catch (error) {

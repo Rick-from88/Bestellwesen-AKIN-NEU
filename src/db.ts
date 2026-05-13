@@ -134,4 +134,51 @@ export const ensureSchema = async () => {
   await query(
     "create index if not exists user_push_tokens_role_idx on user_push_tokens(app_role)",
   );
+
+  await query(
+    "alter table bestellpositionen add column if not exists einzelpreis numeric(10, 2)",
+  );
+  await query(
+    "alter table bestellungen add column if not exists einzelpreis numeric(10, 2)",
+  );
+  await query(`
+    update bestellpositionen p
+       set einzelpreis = a.preis
+      from artikel a
+     where p.artikel_id = a.id
+       and p.einzelpreis is null`);
+  await query(`
+    update bestellungen b
+       set einzelpreis = a.preis
+      from artikel a
+     where b.artikel_id = a.id
+       and b.einzelpreis is null`);
+  await query(
+    "update bestellpositionen set einzelpreis = 0 where einzelpreis is null",
+  );
+  await query("update bestellungen set einzelpreis = 0 where einzelpreis is null");
+  await query(
+    "alter table bestellpositionen alter column einzelpreis set default 0",
+  );
+  await query(
+    "alter table bestellpositionen alter column einzelpreis set not null",
+  );
+  await query(
+    "alter table bestellungen alter column einzelpreis set default 0",
+  );
+  await query(
+    "alter table bestellungen alter column einzelpreis set not null",
+  );
+
+  await query(`
+    create table if not exists artikel_preis_historie (
+      id serial primary key,
+      artikel_id integer not null references artikel (id) on delete cascade,
+      preis_alt numeric(10, 2),
+      preis_neu numeric(10, 2) not null,
+      geaendert_am timestamptz not null default now()
+    )`);
+  await query(
+    "create index if not exists idx_artikel_preis_historie_artikel on artikel_preis_historie (artikel_id)",
+  );
 };

@@ -1032,6 +1032,14 @@
         });
 
       const renderBestellungen = (bestellungen, artikelMap, lieferantMap) => {
+        const unitPreisForPosition = (bestellung, position) => {
+          const st = String(bestellung?.status || "offen");
+          const live = Number(artikelMap[position.artikelId]?.preis ?? 0);
+          if (st === "offen") return live;
+          const snap = Number(position?.einzelpreis);
+          return Number.isFinite(snap) ? snap : live;
+        };
+
         bestellungenList.innerHTML = "";
         bestellungenCount.textContent = `${bestellungen.length} Bestellungen`;
 
@@ -1080,8 +1088,7 @@
 
           // Gesamtpreis aller Positionen der Bestellung berechnen
           const totalBestellung = positionen.reduce((sum, pos) => {
-            const a = artikelMap[pos.artikelId];
-            const preis = a?.preis ?? 0;
+            const preis = unitPreisForPosition(bestellung, pos);
             const menge = Number(pos.menge) || 0;
             return sum + preis * menge;
           }, 0);
@@ -1176,7 +1183,7 @@
 
               const posMeta = document.createElement("div");
               posMeta.className = "list__meta";
-              const preis = artikelInfo?.preis ?? 0;
+              const preis = unitPreisForPosition(bestellung, position);
               const menge = Number(position.menge) || 0;
               const geliefertMenge = Number(position.geliefertMenge) || 0;
               const storniertMenge = Number(position.storniertMenge) || 0;

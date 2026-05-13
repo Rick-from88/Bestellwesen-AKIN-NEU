@@ -11,6 +11,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteArtikel = exports.updateArtikel = exports.createArtikel = exports.listArtikel = void 0;
 const db_1 = require("../db");
+const artikel_preis_historie_1 = require("./artikel_preis_historie");
 const listArtikel = () => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield (0, db_1.query)('select id, lieferant_id as "lieferantId", name, beschreibung, artikelnummer, einheit, verpackungseinheit, standard_bestellwert as "standardBestellwert", foto_url as "fotoUrl", preis from artikel order by name');
     return result.rows;
@@ -33,25 +34,42 @@ const createArtikel = (input) => __awaiter(void 0, void 0, void 0, function* () 
 });
 exports.createArtikel = createArtikel;
 const updateArtikel = (id, input) => __awaiter(void 0, void 0, void 0, function* () {
-    var _g, _h, _j, _k, _l, _m, _o;
+    var _g, _h, _j, _k, _l, _m, _o, _p;
+    const prev = yield (0, db_1.query)("select preis from artikel where id = $1", [id]);
+    const oldPreisRaw = (_g = prev.rows[0]) === null || _g === void 0 ? void 0 : _g.preis;
+    const oldPreis = oldPreisRaw !== undefined && oldPreisRaw !== null
+        ? Number(oldPreisRaw)
+        : null;
     const result = yield (0, db_1.query)('update artikel set lieferant_id = $1, name = $2, beschreibung = $3, artikelnummer = $4, einheit = $5, verpackungseinheit = $6, standard_bestellwert = $7, foto_url = $8, preis = $9 where id = $10 returning id, lieferant_id as "lieferantId", name, beschreibung, artikelnummer, einheit, verpackungseinheit, standard_bestellwert as "standardBestellwert", foto_url as "fotoUrl", preis', [
         input.lieferantId,
         input.name,
-        (_g = input.beschreibung) !== null && _g !== void 0 ? _g : null,
-        (_h = input.artikelnummer) !== null && _h !== void 0 ? _h : null,
-        (_j = input.einheit) !== null && _j !== void 0 ? _j : null,
-        (_k = input.verpackungseinheit) !== null && _k !== void 0 ? _k : null,
-        (_l = input.standardBestellwert) !== null && _l !== void 0 ? _l : null,
-        (_m = input.fotoUrl) !== null && _m !== void 0 ? _m : null,
+        (_h = input.beschreibung) !== null && _h !== void 0 ? _h : null,
+        (_j = input.artikelnummer) !== null && _j !== void 0 ? _j : null,
+        (_k = input.einheit) !== null && _k !== void 0 ? _k : null,
+        (_l = input.verpackungseinheit) !== null && _l !== void 0 ? _l : null,
+        (_m = input.standardBestellwert) !== null && _m !== void 0 ? _m : null,
+        (_o = input.fotoUrl) !== null && _o !== void 0 ? _o : null,
         input.preis,
         id,
     ]);
-    return (_o = result.rows[0]) !== null && _o !== void 0 ? _o : null;
+    const row = (_p = result.rows[0]) !== null && _p !== void 0 ? _p : null;
+    if (row &&
+        oldPreis !== null &&
+        Number.isFinite(oldPreis) &&
+        Number.isFinite(input.preis) &&
+        oldPreis !== Number(input.preis)) {
+        yield (0, artikel_preis_historie_1.insertArtikelPreisHistorie)({
+            artikelId: id,
+            preisAlt: oldPreis,
+            preisNeu: Number(input.preis),
+        });
+    }
+    return row;
 });
 exports.updateArtikel = updateArtikel;
 const deleteArtikel = (id) => __awaiter(void 0, void 0, void 0, function* () {
-    var _p;
+    var _q;
     const result = yield (0, db_1.query)("delete from artikel where id = $1", [id]);
-    return ((_p = result.rowCount) !== null && _p !== void 0 ? _p : 0) > 0;
+    return ((_q = result.rowCount) !== null && _q !== void 0 ? _q : 0) > 0;
 });
 exports.deleteArtikel = deleteArtikel;

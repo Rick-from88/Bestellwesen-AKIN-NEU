@@ -823,6 +823,7 @@ app.use("/api", (req, res, next) => {
                 /^\/lieferanten\/\d+\/artikel$/.test(p) ||
                 /^\/lieferanten\/\d+\/bestellungen$/.test(p) ||
                 p === "/artikel" ||
+                /^\/artikel\/\d+\/preis-historie$/.test(p) ||
                 p === "/dashboard/notes" ||
                 p === "/dashboard/chat" ||
                 p === "/me/push-config" ||
@@ -1135,6 +1136,9 @@ app.put("/api/bestellungen/:id/status", express_1.default.json(), (req, res) => 
                 id,
             ]);
         }
+        if (curStatus === "offen" && status !== "offen") {
+            yield (0, bestellungen_1.snapshotEinzelpreiseFromArtikelForOrders)([id]);
+        }
         res.status(204).send();
     }
     catch (error) {
@@ -1383,6 +1387,22 @@ app.get("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, function
     catch (error) {
         console.error("Fehler beim Laden der Artikel", error);
         res.status(500).json({ error: "Artikel konnten nicht geladen werden." });
+    }
+}));
+app.get("/api/artikel/:id/preis-historie", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const artikelId = parseInteger(req.params.id);
+    if (!artikelId) {
+        res.status(400).json({ error: "Ungueltige Artikel-ID." });
+        return;
+    }
+    try {
+        const { listArtikelPreisHistorie } = yield Promise.resolve(require("./repositories/artikel_preis_historie"));
+        const rows = yield listArtikelPreisHistorie(artikelId);
+        res.json(rows);
+    }
+    catch (error) {
+        console.error("Fehler beim Laden der Preishistorie", error);
+        res.status(500).json({ error: "Preishistorie konnte nicht geladen werden." });
     }
 }));
 app.post("/api/artikel", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -1969,7 +1989,7 @@ const upsertLieferantByName = (db, item) => __awaiter(void 0, void 0, void 0, fu
     return { id: Number(inserted.rows[0].id), action: "created" };
 });
 const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, void 0, void 0, function* () {
-    var _27, _28, _29, _30;
+    var _27, _28, _29, _30, _31, _32;
     const name = nonEmptyOrNull(item === null || item === void 0 ? void 0 : item.name);
     const preisNum = Number(item === null || item === void 0 ? void 0 : item.preis);
     if (!lieferantId || !name || !Number.isFinite(preisNum)) {
@@ -1999,6 +2019,8 @@ const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, v
     const fotoUrl = nonEmptyOrNull((_28 = item === null || item === void 0 ? void 0 : item.fotoUrl) !== null && _28 !== void 0 ? _28 : item === null || item === void 0 ? void 0 : item.foto_url);
     if ((_29 = existing.rows[0]) === null || _29 === void 0 ? void 0 : _29.id) {
         const id = Number(existing.rows[0].id);
+        const prevRow = yield db.query("select preis from artikel where id = $1", [id]);
+        const prevPreis = Number((_30 = prevRow.rows[0]) === null || _30 === void 0 ? void 0 : _30.preis);
         const updated = yield db.query(`update artikel
           set name = $2,
               beschreibung = coalesce($3, beschreibung),
@@ -2019,9 +2041,19 @@ const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, v
             fotoUrl,
             preisNum,
         ]);
+        if (((_31 = updated.rowCount) !== null && _31 !== void 0 ? _31 : 0) > 0 &&
+            Number.isFinite(prevPreis) &&
+            prevPreis !== preisNum) {
+            const { insertArtikelPreisHistorie } = yield Promise.resolve(require("./repositories/artikel_preis_historie"));
+            yield insertArtikelPreisHistorie({
+                artikelId: id,
+                preisAlt: prevPreis,
+                preisNeu: preisNum,
+            });
+        }
         return {
             id,
-            action: ((_30 = updated.rowCount) !== null && _30 !== void 0 ? _30 : 0) > 0 ? "updated" : "skipped",
+            action: ((_32 = updated.rowCount) !== null && _32 !== void 0 ? _32 : 0) > 0 ? "updated" : "skipped",
         };
     }
     const inserted = yield db.query(`insert into artikel
@@ -2041,13 +2073,13 @@ const upsertArtikelForLieferant = (db, lieferantId, item) => __awaiter(void 0, v
     return { id: Number(inserted.rows[0].id), action: "created" };
 });
 app.post("/api/import/catalog", requireAdminApi, express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _31, _32, _33, _34;
+    var _33, _34, _35, _36;
     try {
         const db = yield Promise.resolve(require("./db"));
-        const lieferanten = Array.isArray((_31 = req.body) === null || _31 === void 0 ? void 0 : _31.lieferanten)
+        const lieferanten = Array.isArray((_33 = req.body) === null || _33 === void 0 ? void 0 : _33.lieferanten)
             ? req.body.lieferanten
             : [];
-        const artikel = Array.isArray((_32 = req.body) === null || _32 === void 0 ? void 0 : _32.artikel) ? req.body.artikel : [];
+        const artikel = Array.isArray((_34 = req.body) === null || _34 === void 0 ? void 0 : _34.artikel) ? req.body.artikel : [];
         const lieferantenStats = { created: 0, updated: 0, skipped: 0 };
         const lieferantenIdMap = new Map();
         const lieferantenNameMap = new Map();
@@ -2068,7 +2100,7 @@ app.post("/api/import/catalog", requireAdminApi, express_1.default.json(), (req,
         }
         const artikelStats = { created: 0, updated: 0, skipped: 0 };
         for (const a of artikel) {
-            let lid = Number((_34 = (_33 = a === null || a === void 0 ? void 0 : a.lieferantId) !== null && _33 !== void 0 ? _33 : a === null || a === void 0 ? void 0 : a.lieferant_id) !== null && _34 !== void 0 ? _34 : 0);
+            let lid = Number((_36 = (_35 = a === null || a === void 0 ? void 0 : a.lieferantId) !== null && _35 !== void 0 ? _35 : a === null || a === void 0 ? void 0 : a.lieferant_id) !== null && _36 !== void 0 ? _36 : 0);
             if (lieferantenIdMap.has(lid))
                 lid = Number(lieferantenIdMap.get(lid));
             if (!lid && (a === null || a === void 0 ? void 0 : a.lieferantName)) {
@@ -2090,7 +2122,7 @@ app.post("/api/import/catalog", requireAdminApi, express_1.default.json(), (req,
     }
 }));
 app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _35, _36, _37, _38;
+    var _37, _38, _39, _40, _41;
     try {
         const backup = req.body || {};
         const db = yield Promise.resolve(require("./db"));
@@ -2123,7 +2155,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
         const artikelIdMap = new Map();
         const artikelStats = { created: 0, updated: 0, skipped: 0 };
         for (const a of artikel) {
-            let lid = Number((_36 = (_35 = a === null || a === void 0 ? void 0 : a.lieferantId) !== null && _35 !== void 0 ? _35 : a === null || a === void 0 ? void 0 : a.lieferant_id) !== null && _36 !== void 0 ? _36 : 0);
+            let lid = Number((_38 = (_37 = a === null || a === void 0 ? void 0 : a.lieferantId) !== null && _37 !== void 0 ? _37 : a === null || a === void 0 ? void 0 : a.lieferant_id) !== null && _38 !== void 0 ? _38 : 0);
             if (lieferantenIdMap.has(lid))
                 lid = Number(lieferantenIdMap.get(lid));
             if (!lid && (a === null || a === void 0 ? void 0 : a.lieferantName)) {
@@ -2167,12 +2199,13 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
                     continue;
                 }
                 const exists = yield db.query("select id from bestellungen where bestellnummer = $1 limit 1", [bestellnummer]);
-                if ((_37 = exists.rows[0]) === null || _37 === void 0 ? void 0 : _37.id) {
+                if ((_39 = exists.rows[0]) === null || _39 === void 0 ? void 0 : _39.id) {
                     ordersSkipped++;
                     continue;
                 }
                 const mappedPos = positionenRaw
                     .map((p) => {
+                    var _a, _b, _c, _d;
                     const oldAid = Number(p === null || p === void 0 ? void 0 : p.artikelId);
                     const oldLid = Number(p === null || p === void 0 ? void 0 : p.lieferantId);
                     let newAid = Number(artikelIdMap.get(oldAid) || oldAid);
@@ -2180,14 +2213,26 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
                     if (!newLid && (p === null || p === void 0 ? void 0 : p.lieferantName)) {
                         newLid = Number(lieferantenNameMap.get(normText(p.lieferantName)) || 0);
                     }
+                    const einzelRaw = Number(p === null || p === void 0 ? void 0 : p.einzelpreis);
                     return {
                         artikelId: newAid,
                         lieferantId: newLid,
                         menge: Number((p === null || p === void 0 ? void 0 : p.menge) || 0),
+                        geliefertMenge: Number((_b = (_a = p === null || p === void 0 ? void 0 : p.geliefertMenge) !== null && _a !== void 0 ? _a : p === null || p === void 0 ? void 0 : p.geliefert_menge) !== null && _b !== void 0 ? _b : 0) || 0,
+                        storniertMenge: Number((_d = (_c = p === null || p === void 0 ? void 0 : p.storniertMenge) !== null && _c !== void 0 ? _c : p === null || p === void 0 ? void 0 : p.storniert_menge) !== null && _d !== void 0 ? _d : 0) || 0,
                         notiz: nonEmptyOrNull(p === null || p === void 0 ? void 0 : p.notiz),
+                        einzelpreis: Number.isFinite(einzelRaw) ? einzelRaw : NaN,
                     };
                 })
                     .filter((p) => p.artikelId && p.lieferantId && p.menge > 0);
+                for (const p of mappedPos) {
+                    if (!Number.isFinite(p.einzelpreis)) {
+                        const pr = yield db.query("select preis from artikel where id = $1", [
+                            p.artikelId,
+                        ]);
+                        p.einzelpreis = Number((_40 = pr.rows[0]) === null || _40 === void 0 ? void 0 : _40.preis) || 0;
+                    }
+                }
                 if (!mappedPos.length) {
                     ordersSkipped++;
                     continue;
@@ -2205,6 +2250,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
                     "artikel_id",
                     "lieferant_id",
                     "menge",
+                    "einzelpreis",
                     "status",
                     "bestell_datum",
                 ];
@@ -2213,6 +2259,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
                     first.artikelId,
                     first.lieferantId,
                     first.menge,
+                    first.einzelpreis,
                     status,
                     (b === null || b === void 0 ? void 0 : b.bestellDatum) || null,
                 ];
@@ -2236,8 +2283,17 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
          returning id`, insertVals);
                 const newId = Number(inserted.rows[0].id);
                 for (const p of mappedPos) {
-                    yield db.query(`insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, notiz)
-           values ($1,$2,$3,$4,$5)`, [newId, p.artikelId, p.lieferantId, p.menge, p.notiz]);
+                    yield db.query(`insert into bestellpositionen (bestellung_id, artikel_id, lieferant_id, menge, geliefert_menge, storniert_menge, notiz, einzelpreis)
+           values ($1,$2,$3,$4,$5,$6,$7,$8)`, [
+                        newId,
+                        p.artikelId,
+                        p.lieferantId,
+                        p.menge,
+                        p.geliefertMenge,
+                        p.storniertMenge,
+                        p.notiz,
+                        p.einzelpreis,
+                    ]);
                 }
                 ordersCreated++;
             }
@@ -2249,7 +2305,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
         const settingsRepo = yield Promise.resolve(require("./repositories/settings"));
         const settingKeys = Object.keys(settings || {});
         for (const key of settingKeys) {
-            yield settingsRepo.setSetting(key, String((_38 = settings[key]) !== null && _38 !== void 0 ? _38 : ""));
+            yield settingsRepo.setSetting(key, String((_41 = settings[key]) !== null && _41 !== void 0 ? _41 : ""));
         }
         res.json({
             success: true,
@@ -2268,7 +2324,7 @@ app.post("/api/backup/restore", requireAdminApi, express_1.default.json(), (req,
 }));
 // Send order by email and set status to 'bestellt'
 const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* () {
-    var _39, _40, _41, _42, _43, _44, _45;
+    var _42, _43, _44, _45, _46, _47, _48;
     const { listBestellungen } = yield Promise.resolve(require("./repositories/bestellungen"));
     const db = yield Promise.resolve(require("./db"));
     const allBestellungen = yield listBestellungen();
@@ -2307,7 +2363,7 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
     const groups = new Map();
     for (const b of offene) {
         const orderId = Number(b.id);
-        const nr = String((_40 = (_39 = b.bestellnummer) !== null && _39 !== void 0 ? _39 : b.id) !== null && _40 !== void 0 ? _40 : "");
+        const nr = String((_43 = (_42 = b.bestellnummer) !== null && _42 !== void 0 ? _42 : b.id) !== null && _43 !== void 0 ? _43 : "");
         const pos = Array.isArray(b.positionen) ? b.positionen : [];
         for (const p of pos) {
             const lid = Number(p.lieferantId);
@@ -2316,9 +2372,9 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
             const group = groups.get(lid) ||
                 {
                     lieferantId: lid,
-                    lieferantName: ((_41 = lieferantMap[lid]) === null || _41 === void 0 ? void 0 : _41.name) || `Lieferant #${lid}`,
-                    lieferantEmail: String(((_42 = lieferantMap[lid]) === null || _42 === void 0 ? void 0 : _42.email) || "").trim(),
-                    lieferantKundennummer: String(((_43 = lieferantMap[lid]) === null || _43 === void 0 ? void 0 : _43.kundennummer) || "").trim(),
+                    lieferantName: ((_44 = lieferantMap[lid]) === null || _44 === void 0 ? void 0 : _44.name) || `Lieferant #${lid}`,
+                    lieferantEmail: String(((_45 = lieferantMap[lid]) === null || _45 === void 0 ? void 0 : _45.email) || "").trim(),
+                    lieferantKundennummer: String(((_46 = lieferantMap[lid]) === null || _46 === void 0 ? void 0 : _46.kundennummer) || "").trim(),
                     orderIds: new Set(),
                     bestellnummern: new Set(),
                     positionen: [],
@@ -2342,8 +2398,8 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
                 menge,
                 preis,
                 notiz: p.notiz ? String(p.notiz) : undefined,
-                bestellDatum: (_44 = orderMetaById.get(orderId)) === null || _44 === void 0 ? void 0 : _44.bestellDatum,
-                createdByName: (_45 = orderMetaById.get(orderId)) === null || _45 === void 0 ? void 0 : _45.createdByName,
+                bestellDatum: (_47 = orderMetaById.get(orderId)) === null || _47 === void 0 ? void 0 : _47.bestellDatum,
+                createdByName: (_48 = orderMetaById.get(orderId)) === null || _48 === void 0 ? void 0 : _48.createdByName,
             });
             group.gesamt += menge * preis;
             groups.set(lid, group);
@@ -2352,7 +2408,7 @@ const buildOpenOrderGroups = () => __awaiter(void 0, void 0, void 0, function* (
     return Array.from(groups.values()).sort((a, b) => a.lieferantName.localeCompare(b.lieferantName, "de"));
 });
 const buildSammelDraftForGroup = (settingsRepo, group, baseTo) => __awaiter(void 0, void 0, void 0, function* () {
-    var _46, _47;
+    var _49, _50;
     const subjTemplate = (yield settingsRepo.getSetting("email_subject")) ||
         "Sammelbestellung {{lieferant}}";
     const bodyTemplate = (yield settingsRepo.getSetting("email_body")) ||
@@ -2369,7 +2425,7 @@ const buildSammelDraftForGroup = (settingsRepo, group, baseTo) => __awaiter(void
     artikelHtml += "</tbody></table>";
     const replacements = {
         "{{bestellnummer}}": Array.from(group.bestellnummern || []).join(", "),
-        "{{datum}}": String(((_47 = (_46 = group.positionen) === null || _46 === void 0 ? void 0 : _46[0]) === null || _47 === void 0 ? void 0 : _47.bestellDatum) || "")
+        "{{datum}}": String(((_50 = (_49 = group.positionen) === null || _49 === void 0 ? void 0 : _49[0]) === null || _50 === void 0 ? void 0 : _50.bestellDatum) || "")
             .replace("T", " ")
             .slice(0, 10) || new Date().toLocaleDateString("de-DE"),
         "{{lieferant}}": String(group.lieferantName || ""),
@@ -2454,14 +2510,14 @@ app.get("/api/bestellungen/sammel/preview", (req, res) => __awaiter(void 0, void
     }
 }));
 app.post("/api/bestellungen/sammel/send/preview", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _48;
+    var _51;
     try {
         const role = getUserRole(req.firebaseUser);
         if (!(role === "admin" || role === "buero")) {
             res.status(403).json({ error: "forbidden" });
             return;
         }
-        const requestedOrderIdsRaw = Array.isArray((_48 = req.body) === null || _48 === void 0 ? void 0 : _48.orderIds)
+        const requestedOrderIdsRaw = Array.isArray((_51 = req.body) === null || _51 === void 0 ? void 0 : _51.orderIds)
             ? req.body.orderIds
             : [];
         const requestedOrderIds = new Set(requestedOrderIdsRaw
@@ -2507,14 +2563,14 @@ app.post("/api/bestellungen/sammel/send/preview", express_1.default.json(), (req
     }
 }));
 app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _49, _50;
+    var _52, _53;
     try {
         const role = getUserRole(req.firebaseUser);
         if (!(role === "admin" || role === "buero")) {
             res.status(403).json({ error: "forbidden" });
             return;
         }
-        const requestedOrderIdsRaw = Array.isArray((_49 = req.body) === null || _49 === void 0 ? void 0 : _49.orderIds)
+        const requestedOrderIdsRaw = Array.isArray((_52 = req.body) === null || _52 === void 0 ? void 0 : _52.orderIds)
             ? req.body.orderIds
             : [];
         const requestedOrderIds = new Set(requestedOrderIdsRaw
@@ -2541,7 +2597,7 @@ app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) =
             res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
             return;
         }
-        const overridesRaw = Array.isArray((_50 = req.body) === null || _50 === void 0 ? void 0 : _50.overrides) ? req.body.overrides : [];
+        const overridesRaw = Array.isArray((_53 = req.body) === null || _53 === void 0 ? void 0 : _53.overrides) ? req.body.overrides : [];
         const overridesByLieferantId = new Map();
         overridesRaw.forEach((o) => {
             const lid = Number(o === null || o === void 0 ? void 0 : o.lieferantId);
@@ -2570,7 +2626,8 @@ app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) =
             const ids = Array.from(g.orderIds);
             if (ids.length) {
                 yield db.query("update bestellungen set status = 'bestellt', auftrags_bestaetigt = false where id = ANY($1::int[]) and status = 'offen'", [ids]);
-                ids.forEach((id) => sentOrderIds.add(id));
+                yield (0, bestellungen_1.snapshotEinzelpreiseFromArtikelForOrders)(ids);
+                ids.forEach((oid) => sentOrderIds.add(oid));
             }
             sentGroupNames.push(g.lieferantName);
         }
@@ -2590,7 +2647,7 @@ app.post("/api/bestellungen/sammel/send", express_1.default.json(), (req, res) =
     }
 }));
 app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _51, _52, _53, _54, _55;
+    var _54, _55, _56, _57, _58;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2604,10 +2661,10 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
         }
         const draft = yield buildOrderMailDraft(id);
         const settingsRepo = draft.settingsRepo;
-        const to = parseString((_51 = req.body) === null || _51 === void 0 ? void 0 : _51.to) || parseString((_52 = req.body) === null || _52 === void 0 ? void 0 : _52.recipient) || draft.to;
-        const subject = parseString((_53 = req.body) === null || _53 === void 0 ? void 0 : _53.subject) || draft.subject;
-        const html = parseString((_54 = req.body) === null || _54 === void 0 ? void 0 : _54.html) || draft.html;
-        const text = parseString((_55 = req.body) === null || _55 === void 0 ? void 0 : _55.text) ||
+        const to = parseString((_54 = req.body) === null || _54 === void 0 ? void 0 : _54.to) || parseString((_55 = req.body) === null || _55 === void 0 ? void 0 : _55.recipient) || draft.to;
+        const subject = parseString((_56 = req.body) === null || _56 === void 0 ? void 0 : _56.subject) || draft.subject;
+        const html = parseString((_57 = req.body) === null || _57 === void 0 ? void 0 : _57.html) || draft.html;
+        const text = parseString((_58 = req.body) === null || _58 === void 0 ? void 0 : _58.text) ||
             (html ? stripHtmlToText(html) : "") ||
             draft.text;
         if (!to) {
@@ -2630,6 +2687,7 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
         // mark as bestellt
         const db = yield Promise.resolve(require("./db"));
         yield db.query("update bestellungen set status = $1, auftrags_bestaetigt = false where id = $2", ["bestellt", id]);
+        yield (0, bestellungen_1.snapshotEinzelpreiseFromArtikelForOrders)([id]);
         res.json({ success: true });
     }
     catch (error) {
@@ -2638,7 +2696,7 @@ app.put("/api/bestellungen/:id/send", express_1.default.json(), (req, res) => __
     }
 }));
 app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _56, _57, _58, _59;
+    var _59, _60, _61, _62;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2659,8 +2717,8 @@ app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, vo
             lieferantName: draft.lieferantName,
             lieferantEmail: draft.lieferantEmail,
             fallbackTo: draft.fallbackTo,
-            bestellnummer: (_57 = (_56 = draft.bestellung) === null || _56 === void 0 ? void 0 : _56.bestellnummer) !== null && _57 !== void 0 ? _57 : null,
-            status: (_59 = (_58 = draft.bestellung) === null || _58 === void 0 ? void 0 : _58.status) !== null && _59 !== void 0 ? _59 : null,
+            bestellnummer: (_60 = (_59 = draft.bestellung) === null || _59 === void 0 ? void 0 : _59.bestellnummer) !== null && _60 !== void 0 ? _60 : null,
+            status: (_62 = (_61 = draft.bestellung) === null || _61 === void 0 ? void 0 : _61.status) !== null && _62 !== void 0 ? _62 : null,
         });
     }
     catch (e) {
@@ -2670,7 +2728,7 @@ app.get("/api/bestellungen/:id/send/preview", (req, res) => __awaiter(void 0, vo
 }));
 // Send reminder mail to supplier for a given order (no status change)
 app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _60, _61, _62, _63, _64, _65, _66;
+    var _63, _64, _65, _66, _67, _68, _69;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2732,19 +2790,19 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
         }
         const { artikelHtml, artikelText } = buildArtikelListeForMail(bestellung.positionen || [], artikelMap);
         const replacements = {
-            "{{bestellnummer}}": String((_60 = bestellung.bestellnummer) !== null && _60 !== void 0 ? _60 : ""),
+            "{{bestellnummer}}": String((_63 = bestellung.bestellnummer) !== null && _63 !== void 0 ? _63 : ""),
             "{{datum}}": new Date(bestellung.bestellDatum).toLocaleDateString("de-DE"),
             "{{lieferant}}": lieferantName,
             "{{kundennummer}}": lieferantKundenNummer,
             "{{artikel_liste}}": artikelHtml,
             "{{artikel_text}}": artikelText,
         };
-        let subject = parseString((_61 = req.body) === null || _61 === void 0 ? void 0 : _61.subject) || subjTemplate;
-        const rawHtmlTemplate = parseString((_62 = req.body) === null || _62 === void 0 ? void 0 : _62.html) || bodyTemplate;
+        let subject = parseString((_64 = req.body) === null || _64 === void 0 ? void 0 : _64.subject) || subjTemplate;
+        const rawHtmlTemplate = parseString((_65 = req.body) === null || _65 === void 0 ? void 0 : _65.html) || bodyTemplate;
         let html = rawHtmlTemplate;
-        let text = parseString((_63 = req.body) === null || _63 === void 0 ? void 0 : _63.text) ||
+        let text = parseString((_66 = req.body) === null || _66 === void 0 ? void 0 : _66.text) ||
             (html ? stripHtmlToText(html) : "") ||
-            `Nachfassen Bestellung ${(_64 = bestellung.bestellnummer) !== null && _64 !== void 0 ? _64 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
+            `Nachfassen Bestellung ${(_67 = bestellung.bestellnummer) !== null && _67 !== void 0 ? _67 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
         for (const key of Object.keys(replacements)) {
             const val = replacements[key];
             const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
@@ -2761,7 +2819,7 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
             html += `<div>${signature}</div>`;
             text += `\n${signature}`;
         }
-        const toOverride = parseString((_65 = req.body) === null || _65 === void 0 ? void 0 : _65.to) || parseString((_66 = req.body) === null || _66 === void 0 ? void 0 : _66.recipient) || to;
+        const toOverride = parseString((_68 = req.body) === null || _68 === void 0 ? void 0 : _68.to) || parseString((_69 = req.body) === null || _69 === void 0 ? void 0 : _69.recipient) || to;
         if (!toOverride) {
             res.status(400).json({ error: "Kein E-Mail-Empfaenger konfiguriert." });
             return;
@@ -2778,7 +2836,7 @@ app.post("/api/bestellungen/:id/reminder/send", express_1.default.json(), (req, 
     }
 }));
 app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _67, _68, _69, _70;
+    var _70, _71, _72, _73;
     const id = parseInteger(req.params.id);
     if (!id) {
         res.status(400).json({ error: "ungueltige id" });
@@ -2832,7 +2890,7 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
         const to = String(supplierEmail || "").trim() || String(fallbackTo || "").trim();
         const { artikelHtml, artikelText } = buildArtikelListeForMail(bestellung.positionen || [], artikelMap);
         const replacements = {
-            "{{bestellnummer}}": String((_67 = bestellung.bestellnummer) !== null && _67 !== void 0 ? _67 : ""),
+            "{{bestellnummer}}": String((_70 = bestellung.bestellnummer) !== null && _70 !== void 0 ? _70 : ""),
             "{{datum}}": new Date(bestellung.bestellDatum).toLocaleDateString("de-DE"),
             "{{lieferant}}": lieferantName,
             "{{kundennummer}}": lieferantKundenNummer,
@@ -2841,7 +2899,7 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
         };
         let subject = subjTemplate;
         let html = bodyTemplate;
-        let text = `Nachfassen Bestellung ${(_68 = bestellung.bestellnummer) !== null && _68 !== void 0 ? _68 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
+        let text = `Nachfassen Bestellung ${(_71 = bestellung.bestellnummer) !== null && _71 !== void 0 ? _71 : ""}\nDatum: ${replacements["{{datum}}"]}\n\n${artikelText}`;
         for (const key of Object.keys(replacements)) {
             const val = replacements[key];
             const re = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
@@ -2865,8 +2923,8 @@ app.get("/api/bestellungen/:id/reminder/send/preview", (req, res) => __awaiter(v
             lieferantName,
             lieferantEmail: supplierEmail,
             fallbackTo,
-            bestellnummer: (_69 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.bestellnummer) !== null && _69 !== void 0 ? _69 : null,
-            status: (_70 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.status) !== null && _70 !== void 0 ? _70 : null,
+            bestellnummer: (_72 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.bestellnummer) !== null && _72 !== void 0 ? _72 : null,
+            status: (_73 = bestellung === null || bestellung === void 0 ? void 0 : bestellung.status) !== null && _73 !== void 0 ? _73 : null,
         });
     }
     catch (e) {

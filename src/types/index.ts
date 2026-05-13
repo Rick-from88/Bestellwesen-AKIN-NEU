@@ -23,6 +23,8 @@ export interface BestellungPosition {
   geliefertMenge?: number;
   storniertMenge?: number;
   notiz?: string;
+  /** Gespeicherter Einzelpreis zum Zeitpunkt der Fixierung (nicht-offene Bestellungen). */
+  einzelpreis?: number;
 }
 
 export interface Artikel {
