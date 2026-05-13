@@ -5,4 +5,6 @@ server.log
 .env.local
 .DS_Store
 Thumbs.db
+firebase-hosting-ci-sa.json
+*-hosting-deploy-sa.json
 
