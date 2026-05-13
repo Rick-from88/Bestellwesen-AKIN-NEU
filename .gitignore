@@ -7,4 +7,6 @@ server.log
 Thumbs.db
 firebase-hosting-ci-sa.json
 *-hosting-deploy-sa.json
+# GCP: heruntergeladene Dienstkonto-JSON (typ. project-id-hash.json)
+akin-bestellwesen-*.json
 
