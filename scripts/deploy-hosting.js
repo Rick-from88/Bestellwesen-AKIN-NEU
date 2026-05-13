@@ -7,6 +7,9 @@
  *             eines Dienstkontos mit Rolle "Firebase Hosting Admin" (GCP IAM).
  *
  * Laedt .env und .env.local aus dem Projektroot (nicht committen).
+ *
+ * TLS-Inspektion (Zscaler): optional BW_TLS_INSECURE_FIREBASE_DEPLOY=1
+ * oder NODE_EXTRA_CA_CERTS (empfohlen).
  */
 const path = require("path");
 const fs = require("fs");
@@ -14,6 +17,14 @@ const { spawnSync } = require("child_process");
 
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 require("dotenv").config({ path: path.join(__dirname, "..", ".env.local") });
+
+if (String(process.env.BW_TLS_INSECURE_FIREBASE_DEPLOY || "").trim() === "1") {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  console.warn(
+    "[deploy-hosting] WARNUNG: NODE_TLS_REJECT_UNAUTHORIZED=0 (BW_TLS_INSECURE_FIREBASE_DEPLOY=1). " +
+      "Nur bei TLS-Inspektion (Zscaler & Co.). Besser: NODE_EXTRA_CA_CERTS auf Firmen-Root-Zertifikat setzen.",
+  );
+}
 
 const root = path.join(__dirname, "..");
 
