@@ -10,7 +10,8 @@
     "db:seed": "docker compose exec -T db psql -U postgres -d bestellwesen -f /docker-entrypoint-initdb.d/02_seed_cloud.sql",
     "build": "node ./node_modules/typescript/bin/tsc",
     "test": "jest",
-    "import-local": "node scripts/import-local.js"
+    "import-local": "node scripts/import-local.js",
+    "deploy:hosting": "node scripts/deploy-hosting.js"
   },
   "dependencies": {
     "@types/cookie-parser": "^1.4.10",
